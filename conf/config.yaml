@@ -1,0 +1,15 @@
+defaults:
+  - base_config
+  - graph: small30
+  - scenario: moderate
+  - experiment: smoke
+  - budget: eval300
+  - _self_
+
+root_seed: 42
+
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}

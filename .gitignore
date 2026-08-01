@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tests / tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Hydra run outputs — every run is reproducible from its config,
+# so the artefacts themselves are not tracked.
+outputs/
+multirun/
+
+# Experiment artefacts
+*.parquet
+*.png
+*.pdf
+!docs/**/*.png
+!docs/**/*.pdf
+
+# Optuna
+*.db
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
