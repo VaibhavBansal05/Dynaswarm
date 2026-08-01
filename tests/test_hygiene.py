@@ -29,6 +29,12 @@ PYGAME_ALLOWED_UNDER = "viz"
 #: while doing less science.
 MAX_SRC_LINES = 3000
 
+#: Names under ``np.random`` that merely *refer to* a type rather than
+#: producing randomness.  Annotating a parameter as
+#: ``np.random.Generator`` is exactly the discipline this module is
+#: enforcing, so banning it outright would punish the correct pattern.
+RNG_TYPE_NAMES = {"Generator", "SeedSequence", "BitGenerator"}
+
 
 def _python_files() -> list[Path]:
     return sorted(SRC.rglob("*.py"))
@@ -54,11 +60,11 @@ def test_no_global_rng(path: Path):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 assert alias.name.split(".")[0] != "random", (
-                    f"{_rel(path)} imports `random`; use dpo.core.rng.stream()"
+                    f"{_rel(path)} imports `random`; use dynaswarm.core.rng.stream()"
                 )
         elif isinstance(node, ast.ImportFrom):
             assert (node.module or "").split(".")[0] != "random", (
-                f"{_rel(path)} imports from `random`; use dpo.core.rng.stream()"
+                f"{_rel(path)} imports from `random`; use dynaswarm.core.rng.stream()"
             )
         elif (
             # np.random.seed / np.random.default_rng / np.random.rand ...
@@ -67,9 +73,11 @@ def test_no_global_rng(path: Path):
             and node.value.attr == "random"
             and isinstance(node.value.value, ast.Name)
             and node.value.value.id in {"np", "numpy"}
+            and node.attr not in RNG_TYPE_NAMES
         ):
             pytest.fail(
-                f"{_rel(path)} touches np.random.{node.attr}; use dpo.core.rng.stream()"
+                f"{_rel(path)} touches np.random.{node.attr}; "
+                "use dynaswarm.core.rng.stream()"
             )
 
 

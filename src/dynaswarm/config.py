@@ -169,12 +169,17 @@ def register() -> ConfigStore:
     )
     cs.store(group="graph", name="grid20", node=GraphCfg(model="grid", n_nodes=400))
 
-    # Churn values chosen so the four scenarios span a usable range of
-    # disruption at N=30; validated empirically in M4.
+    # Churn calibrated against measured volatility at N=30 (|E| ~= 147).
+    # Expected events per step is churn * |E|, so the fraction of steps
+    # carrying an event is 1 - exp(-churn * |E|), which saturates fast:
+    # measured 0.95 at churn=0.015 and 1.00 at 0.05.  Beyond ~0.02 the
+    # volatility signal cannot tell scenarios apart even though the edge
+    # ratio keeps climbing, so the tiers stay in the range where *both*
+    # signals still discriminate.
     cs.store(group="scenario", name="static", node=ScenarioCfg(name="static", churn=0.0))
-    cs.store(group="scenario", name="low", node=ScenarioCfg(name="low", churn=0.004))
-    cs.store(group="scenario", name="moderate", node=ScenarioCfg(name="moderate", churn=0.015))
-    cs.store(group="scenario", name="high", node=ScenarioCfg(name="high", churn=0.05))
+    cs.store(group="scenario", name="low", node=ScenarioCfg(name="low", churn=0.002))
+    cs.store(group="scenario", name="moderate", node=ScenarioCfg(name="moderate", churn=0.006))
+    cs.store(group="scenario", name="high", node=ScenarioCfg(name="high", churn=0.015))
 
     cs.store(group="experiment", name="smoke", node=ExperimentCfg(name="smoke", n_trials=2))
     cs.store(
