@@ -1,8 +1,9 @@
 """Structural guards.
 
-These tests encode constraints that the previous codebase violated and
-that no amount of review reliably catches by eye.  They are deliberately
-blunt: each one fails the build rather than merely warning.
+These tests encode constraints that code review does not reliably catch
+by eye — an unused import, a stray global, a module that quietly doubles
+in size.  They are deliberately blunt: each fails the build rather than
+warning.
 """
 
 from __future__ import annotations
@@ -17,16 +18,17 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "dynaswarm"
 #: Only this module may construct a random generator.
 RNG_OWNER = "core/rng.py"
 
-#: Heavyweight UI stacks.  The previous codebase spent ~2,600 lines on a
-#: Tkinter launcher, a FastAPI dashboard and a report generator, none of
-#: which contributed to a single result.
+#: Heavyweight UI stacks.  Interfaces are where research code grows
+#: fastest and contributes least; keeping them out of ``src`` entirely is
+#: easier than policing how much of one is justified.
 FORBIDDEN_IMPORTS = {"tkinter", "fastapi", "uvicorn", "flask", "starlette"}
 
 #: pygame is legitimate, but only for the replay viewer.
 PYGAME_ALLOWED_UNDER = "viz"
 
-#: Ceiling on non-test source.  The prior codebase reached 13,300 lines
-#: while doing less science.
+#: Ceiling on non-test source.  Chosen to be comfortably above what the
+#: planned scope needs, so breaching it signals scope drift rather than
+#: normal growth.
 MAX_SRC_LINES = 3000
 
 #: Names under ``np.random`` that merely *refer to* a type rather than
@@ -107,8 +109,8 @@ def test_line_budget():
     """Total source stays under the ceiling.
 
     A crude proxy for scope discipline, but the failure it guards against
-    was itself crude: the prior codebase grew to 13,300 lines while its
-    central mechanism never ran.
+    is itself crude: a codebase can grow large enough that nobody notices
+    its central mechanism is not running.
     """
     total = sum(len(p.read_text().splitlines()) for p in _python_files())
     assert total < MAX_SRC_LINES, f"src/ is {total} lines, ceiling is {MAX_SRC_LINES}"

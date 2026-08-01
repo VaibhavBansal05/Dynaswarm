@@ -1,9 +1,9 @@
 """Environment invariants: graph, events, timeline, oracle.
 
-The tests that matter most here are the ones guarding the two failures
-that silently invalidated the previous project: a sensing signal that
-could not span its own threshold range, and a benchmark in which the
-algorithms never actually experienced a dynamic event.
+The tests that matter most here guard two failures that would silently
+invalidate every downstream result: a sensing signal that cannot span the
+range it is thresholded against, and a "dynamic" scenario in which the
+optimum never actually moves.
 """
 
 from __future__ import annotations
@@ -163,12 +163,12 @@ def test_events_actually_change_the_state():
 
 @pytest.mark.parametrize("churn", [0.006, 0.015])
 def test_optimum_varies_under_churn(churn: float):
-    """The single assertion that makes the previous failure impossible.
+    """A scenario labelled dynamic must actually move the optimum.
 
-    Before, every algorithm returned an identical cost in the static,
-    moderate and highly-dynamic scenarios, because the graph was mutated
-    only after they had run.  If the optimum itself does not move, the
-    scenario is not dynamic and nothing downstream can be trusted.
+    Everything downstream — excess over the moving optimum, recovery
+    time, the case for adaptation at all — presumes the target is in
+    motion.  If it is not, each scenario silently degenerates into the
+    static one while still reporting plausible-looking numbers.
     """
     tl, source, target = timeline(GraphCfg(), churn=churn, steps=60)
     optima = {
@@ -198,12 +198,12 @@ def test_connectivity_is_preserved():
 def test_edge_ratio_tracks_churn_at_any_graph_size(cfg: GraphCfg):
     """The edge-ratio signal must mean the same thing at every scale.
 
-    The previous implementation changed exactly one edge per timestep, so
-    this ratio was ``1/|E|`` — 0.007 on a 143-edge graph — against
-    regime thresholds of 0.15 and 0.40.  The controller never left its
-    lowest regime in any scenario.  Driving events at a *fraction* of
-    ``|E|`` is what makes the signal comparable across sizes, and this
-    test is what stops it regressing.
+    Driving a fixed number of events per timestep would make this ratio
+    ``k/|E|`` — 0.007 for a single event on a 150-edge graph, and smaller
+    still as the graph grows.  A controller thresholding such a signal at
+    any natural value would never leave its lowest regime.  Driving
+    events at a *fraction* of ``|E|`` is what keeps the signal
+    comparable across sizes; this test is what stops it regressing.
     """
     churn = 0.015
     ratios = []

@@ -24,19 +24,22 @@ Not *what parameters to use*, but *how much of your budget to give the explorer 
 
 **Supporting question:** what should the system actually *sense* to make that decision? We compare **external** signals (how much did the world change?) against **internal** signals (has my colony stagnated?), a choice the literature makes largely arbitrarily.
 
-## Why the design looks the way it does
+## Design commitments
 
-This codebase replaces an earlier implementation whose central mechanism, it turned out, never ran. The specifics shaped almost every decision here:
+Comparative studies of stochastic algorithms fail quietly. The result still looks like a number, so a broken comparison is indistinguishable from a real one unless the design makes the failure impossible or a test makes it loud. Five commitments, each enforced by a test rather than by discipline:
 
-| What went wrong before | What prevents it here |
+| Commitment | How it is enforced |
 |---|---|
-| The sensing signal `changed_edges / total_edges` maxed at 0.007 against a 0.15 threshold — the controller sat in one regime 100% of the time | Churn is a *fraction of edges*, so the signal is scale-comparable; three signals are implemented and their dynamic range is **asserted by test** |
-| Four of ten "tuned" parameters were silently inert | `PARAM_SPEC` binding is total; a test proves every parameter changes behaviour |
-| Baseline algorithms ran *before* the graph was mutated, so all scenarios returned identical costs | The event schedule is materialised up front; every arm provably sees the same graph state |
-| Compute was equalised by *iterations*, so bigger populations bought more CPU | Budget is denominated in candidate-path constructions and metered by the harness |
-| Global RNG seeding let arms perturb each other | Streams are content-addressed; adding an arm cannot move another's bits |
+| **A sensing signal must span the range it is thresholded against.** A signal bounded far below its own decision boundary pins the controller in one regime forever. | Churn is a *fraction of edges*, so the edge-ratio signal means the same thing at any graph size. Every signal's dynamic range is asserted per scenario. |
+| **Every tunable parameter must demonstrably change behaviour.** A parameter written to a registry but never read is indistinguishable from a tuned one in the logs. | `PARAM_SPEC` binding is total: a test sets each parameter to both bounds and requires the trajectories to differ. |
+| **Every arm must see the identical world.** If one arm is evaluated before a disruption and another after, the comparison measures the schedule, not the algorithms. | The event schedule is materialised before any optimizer exists; `state_at(t)` is pure, and arms are checked to receive byte-identical states. |
+| **Equal budget must mean equal work.** Equalising *iterations* lets an algorithm with a larger population buy itself CPU — and if population size is controller-tuned, the controller buys its own advantage. | Budget is denominated in candidate-path constructions and metered by the harness, not self-reported. |
+| **An arm's randomness must depend only on itself.** Otherwise adding an arm silently rewrites another's results. | Streams are content-addressed by name; a test adds a third arm and requires the first two to be bit-identical. |
 
-Each row has a corresponding test in `tests/`.
+## Related work this builds on
+
+- Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
+- Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
 ## Status
 
@@ -81,7 +84,7 @@ conf/          graph/ scenario/ experiment/ budget/ ...
 tests/
 ```
 
-Source is capped at 3000 lines by a test. The previous implementation reached 13,300 while doing less.
+Source is capped at 3000 lines by a test. Research code accretes interfaces and reporting faster than it accretes science; the cap is a crude but honest brake.
 
 ## References
 

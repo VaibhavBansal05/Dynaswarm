@@ -6,12 +6,11 @@ dataclass *is* the schema: a key that no component reads cannot exist,
 and a mistyped key fails at compose time rather than being silently
 ignored at run time.
 
-The previous codebase carried two config systems that disagreed — a
-dataclass tree used by the controller and a YAML tree whose
-``controller`` section described algorithm-switching behaviour that was
-never implemented.  Anyone reading the YAML to understand the system was
-misled.  One schema, mechanically bound to constructor arguments, makes
-that failure inexpressible.
+Two parallel config systems — say a dataclass tree the code reads and a
+YAML tree humans read — will drift, and the YAML will end up describing
+behaviour nobody implemented.  Anyone consulting it to understand the
+system is then actively misled, and nothing fails.  One schema,
+mechanically bound to constructor arguments, makes that inexpressible.
 """
 
 from __future__ import annotations
@@ -65,12 +64,13 @@ class ScenarioCfg:
         churn: Expected fraction of edges disturbed per timestep.  Event
             count per step is ``Poisson(churn * |E|)``.
 
-            Expressing churn as a *fraction* rather than a count is what
-            makes the edge-ratio signal comparable across graph sizes.
-            In the previous codebase exactly one edge changed per step,
-            so on a 143-edge graph the edge-ratio signal could not exceed
-            0.007 while the controller's thresholds sat at 0.15 and 0.40
-            — it never left the lowest regime in any scenario.
+            Expressing churn as a *fraction* rather than an absolute
+            count is what makes the edge-ratio signal comparable across
+            graph sizes.  A fixed count of ``k`` events per step would
+            make that signal ``k/|E|``, which on a 150-edge graph reads
+            as 0.007 for a single event and shrinks as the graph grows —
+            far below any threshold one would naturally choose, and not
+            transferable between sizes.
 
             Note that no single churn value makes *all* signals span a
             wide range: volatility (fraction of steps carrying an event)

@@ -2,9 +2,8 @@
 
 The guard that matters here is compositional: every group option must
 instantiate its typed schema.  A key describing a component nobody built
-— the previous codebase's ``controller.patience`` and
-``controller.confidence_threshold``, which no code ever read — cannot
-survive, because the dataclass fields *are* the constructor arguments.
+— a ``controller.patience`` that no code reads, say — cannot survive,
+because the dataclass fields *are* the constructor arguments.
 """
 
 from __future__ import annotations
@@ -61,9 +60,9 @@ def test_unknown_key_is_rejected():
 def test_tune_and_eval_seeds_are_disjoint():
     """Tuning on evaluation seeds inflates the baseline it is meant to test.
 
-    The previous project's parameter sweep selected the best of 50
-    candidates on the same seeds it then reported, so its headline
-    "best per-regime" figure was a maximum over noise.
+    Selecting the best of many candidates on the same seeds it is then
+    reported on turns the headline figure into a maximum over noise
+    rather than an estimate of performance.
     """
     cfg = ExperimentCfg()
     assert not (set(cfg.tune_seeds) & set(cfg.eval_seeds))

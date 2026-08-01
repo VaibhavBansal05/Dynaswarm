@@ -10,8 +10,8 @@ Edge-addition events need somewhere to add edges *to*.  Allowing
 arbitrary additions would mean the adjacency structure changes shape
 every timestep, which forces every optimizer holding edge-indexed state
 (pheromone, most obviously) to rebuild that state from scratch on each
-change.  The previous implementation did exactly this, rebuilding a
-``dict[(u, v), float]`` on every mutation.
+change — an O(|E|) dictionary rebuild per mutation, and a decision about
+what value newly-seen edges should start at.
 
 Instead the superset — base edges plus a bounded pool of candidate edges
 that additions may draw from — is allocated up front.  Edges are then

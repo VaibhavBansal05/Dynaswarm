@@ -2,13 +2,12 @@
 
 This module exists to make one class of bug inexpressible.
 
-In the previous implementation the benchmark generated events *inside*
-the loop that also ran the algorithms.  The static algorithms happened to
-execute before the graph was mutated, so they never experienced a single
-dynamic event — and every algorithm returned an identical cost in the
-static, moderate and highly-dynamic scenarios.  The defect was invisible
-because nothing in the design distinguished "the world at time t" from
-"whatever the loop had done so far".
+If events are generated *inside* the loop that also runs the algorithms,
+then "the world at time t" and "whatever the loop has done so far" are
+the same object, and which disruptions an arm experiences depends on
+where it sits in the iteration order.  An arm evaluated before a closure
+and one evaluated after it are not being compared on the same problem —
+but both still return a number, so the defect is invisible in the output.
 
 Here the entire event sequence is built **before any optimizer exists**,
 and :meth:`GraphTimeline.state_at` is a pure function of that frozen
@@ -41,11 +40,12 @@ def build_schedule(
     """Materialise the whole event sequence up front.
 
     Event count per timestep is ``Poisson(churn * |E|)``.  Expressing
-    churn as a *fraction of edges* rather than a count is what makes the
-    edge-ratio signal comparable across graph sizes: the previous design
-    changed exactly one edge per step, so on a 143-edge graph that signal
-    could not exceed 0.007 while the controller's thresholds sat at 0.15
-    and 0.40, and it never left the lowest regime.
+    churn as a *fraction of edges* rather than an absolute count is what
+    makes the edge-ratio signal comparable across graph sizes.  Driving a
+    fixed number of events per step instead would make that signal
+    ``k/|E|`` — on a 150-edge graph, a single event reads as 0.007, which
+    is two orders of magnitude below any threshold one would naturally
+    write down, and shrinks further as the graph grows.
 
     Args:
         base: Initial state.
