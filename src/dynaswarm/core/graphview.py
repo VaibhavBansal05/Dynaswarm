@@ -45,6 +45,14 @@ class Topology:
         indices: Destination node of each slot, length ``2 * n_edges``.
         rev: Slot index of the reverse arc.
         base_active: Which slots are active in the initial state.
+        base_weight: Free-flow weight of each slot — the cost with no
+            congestion.  Traffic may raise an edge's weight above this
+            but never below it, which is both the physically sensible
+            model and what keeps the A* heuristic admissible: the
+            heuristic assumes a floor of ``distance * weight_scale`` on
+            the cost of covering ground, and an edge cheaper than its
+            free-flow cost would break that assumption and let A* return
+            a suboptimal path.
         pos: Optional node coordinates, used by geometric/grid graphs to
             give A* an admissible heuristic.
         weight_scale: Cost per unit Euclidean distance, or ``0.0`` when
@@ -69,6 +77,7 @@ class Topology:
     indices: np.ndarray
     rev: np.ndarray
     base_active: np.ndarray
+    base_weight: np.ndarray
     pos: np.ndarray | None = None
     weight_scale: float = 0.0
     metric: str = "euclidean"

@@ -194,12 +194,14 @@ def _to_csr(
     slot_of = {arc: i for i, arc in enumerate(arcs)}
     rev = np.array([slot_of[(v, u)] for u, v in arcs], dtype=np.int32)
 
+    metric = "manhattan" if cfg.model == "grid" else "euclidean"
+
     weight = np.empty(len(arcs), dtype=np.float64)
     active = np.zeros(len(arcs), dtype=bool)
     for (u, v), slot in slot_of.items():
         if u > v:
             continue  # assign once per undirected edge
-        w = _weight_for(u, v, pos, cfg, rng)
+        w = _weight_for(u, v, pos, metric, cfg, rng)
         weight[slot] = w
         weight[rev[slot]] = w
         present = (min(u, v), max(u, v)) in edges
@@ -212,6 +214,7 @@ def _to_csr(
         indices=freeze(indices),
         rev=freeze(rev),
         base_active=freeze(active),
+        base_weight=freeze(weight),
         pos=None if pos is None else freeze(pos),
         weight_scale=0.0 if pos is None else cfg.weight_max - cfg.weight_min,
         metric="manhattan" if cfg.model == "grid" else "euclidean",
@@ -220,16 +223,38 @@ def _to_csr(
 
 
 def _weight_for(
-    u: int, v: int, pos: np.ndarray | None, cfg: GraphCfg, rng: np.random.Generator
+    u: int,
+    v: int,
+    pos: np.ndarray | None,
+    metric: str,
+    cfg: GraphCfg,
+    rng: np.random.Generator,
 ) -> float:
     """Weight for one undirected edge.
 
-    Geometric and grid models use Euclidean distance so the metric is
-    consistent and A* has an admissible heuristic.
+    Weights must be derived under the **same metric** the heuristic uses.
+    Pricing edges by Euclidean distance while the heuristic reasons in
+    Manhattan makes the heuristic overestimate — Manhattan dominates
+    Euclidean — and an inadmissible heuristic silently returns
+    suboptimal paths.  On a 4-connected grid this is invisible for the
+    lattice edges, where the two metrics agree, and only surfaces once
+    an addition event introduces a diagonal shortcut.
+
+    Args:
+        u: One endpoint.
+        v: The other endpoint.
+        pos: Node coordinates, or ``None`` for non-spatial models.
+        metric: ``"euclidean"`` or ``"manhattan"``.
+        cfg: Graph configuration.
+        rng: Stream, for non-spatial weights.
+
+    Returns:
+        The edge weight.
     """
     if pos is None:
         return float(rng.uniform(cfg.weight_min, cfg.weight_max))
-    dist = float(np.linalg.norm(pos[u] - pos[v]))
+    delta = np.abs(pos[u] - pos[v])
+    dist = float(delta.sum()) if metric == "manhattan" else float(np.sqrt((delta**2).sum()))
     scale = cfg.weight_max - cfg.weight_min
     return cfg.weight_min + dist * scale
 

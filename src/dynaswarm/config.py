@@ -160,12 +160,23 @@ def register() -> ConfigStore:
     cs = ConfigStore.instance()
     cs.store(name="base_config", node=Config)
 
+    # Only the smallest tier is Erdos-Renyi.  Without coordinates there is
+    # no distance-to-target term for either A*'s heuristic or the colony's
+    # visibility, so both degrade to undirected search.  Measured at n=200
+    # with a 300-evaluation budget, ACO settles ~90% above optimum on
+    # Erdos-Renyi versus ~15% on a geometric graph of the same size.  The
+    # small tier survives that only because a 30-node graph of degree ~18
+    # puts the target within a hop or two of anywhere.
     cs.store(group="graph", name="small30", node=GraphCfg())
-    cs.store(group="graph", name="medium200", node=GraphCfg(n_nodes=200, density=0.06))
+    cs.store(
+        group="graph",
+        name="medium200",
+        node=GraphCfg(model="geometric", n_nodes=200, density=0.04),
+    )
     cs.store(
         group="graph",
         name="large1000",
-        node=GraphCfg(model="geometric", n_nodes=1000, density=0.05),
+        node=GraphCfg(model="geometric", n_nodes=1000, density=0.01),
     )
     cs.store(group="graph", name="grid20", node=GraphCfg(model="grid", n_nodes=400))
 

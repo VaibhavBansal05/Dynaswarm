@@ -126,20 +126,41 @@ def _draw(
         u = int(np.searchsorted(topology.indptr, slot, side="right") - 1)
         v = int(topology.indices[slot])
         old = float(weight[slot])
-        new = _new_weight(kind, old, cfg, kinds_rng)
+        free_flow = float(topology.base_weight[slot])
+        new = _new_weight(kind, old, free_flow, cfg, kinds_rng)
         return Event(kind=kind, slot=slot, u=u, v=v, old_weight=old, new_weight=new)
     return None
 
 
 def _new_weight(
-    kind: str, old: float, cfg: ScenarioCfg, rng: np.random.Generator
+    kind: str, old: float, free_flow: float, cfg: ScenarioCfg, rng: np.random.Generator
 ) -> float:
+    """Weight after an event, never below the edge's free-flow cost.
+
+    Congestion clearing can restore a road to free-flow but cannot make
+    it faster than it is when empty.  Enforcing that floor also preserves
+    A*'s heuristic: the heuristic assumes covering ground costs at least
+    ``distance * weight_scale``, and an edge priced below free-flow would
+    violate it and let A* return a suboptimal path.
+
+    Args:
+        kind: Event kind.
+        old: Current weight.
+        free_flow: The edge's uncongested weight.
+        cfg: Scenario parameters.
+        rng: Stream, for reopen/add weights.
+
+    Returns:
+        The new weight.
+    """
     if kind == "traffic_up":
         return old * cfg.traffic_factor
     if kind == "traffic_down":
-        return old / cfg.traffic_factor
+        return max(old / cfg.traffic_factor, free_flow)
     if kind in ("reopen", "add"):
-        return float(rng.uniform(1.0, max(2.0, old if old > 0 else 2.0)))
+        # A restored road reopens somewhere between free-flow and mild
+        # residual congestion.
+        return float(free_flow * rng.uniform(1.0, cfg.traffic_factor))
     return old
 
 
