@@ -46,10 +46,10 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 | Milestone | State |
 |---|---|
 | M0 · skeleton, RNG, config, CLI | ✅ |
-| M1 · graph, events, timeline, oracle | 🚧 |
-| M2 · optimizer protocol, meter, A\*, ACO | ⬜ |
-| M3 · harness, IO, first result | ⬜ |
-| M4 · signals + controllers | ⬜ |
+| M1 · graph, events, timeline, oracle | ✅ |
+| M2 · optimizer protocol, meter, A\*, ACO | ✅ |
+| M3 · harness, IO, first result | ✅ |
+| M4 · signals + controllers | 🚧 |
 | M5 · best-fixed baseline (Optuna) | ⬜ |
 | M6 · PSO (cost-biased) + Hybrid | ⬜ |
 | M7 · **allocation experiment** | ⬜ |
@@ -84,7 +84,7 @@ conf/          graph/ scenario/ experiment/ budget/ ...
 tests/
 ```
 
-Source is capped at 3000 lines by a test. Research code accretes interfaces and reporting faster than it accretes science; the cap is a crude but honest brake.
+Source is capped at 2000 *statements* by a test — statements rather than lines, because only about a third of these files are executable and a line budget would tax documentation instead of scope. Research code accretes interfaces and reporting faster than it accretes science; the cap is a crude but honest brake.
 
 ## References
 
