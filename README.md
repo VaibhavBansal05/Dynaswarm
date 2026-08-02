@@ -3,7 +3,7 @@
 **Volatility-driven compute allocation in hybrid swarm metaheuristics for dynamic path optimization.**
 
 Minor project · School of Computer Engineering, MIT Manipal (MAHE)
-Rudra Rajpurohit · Vaibhav Krishna Bansal · Kartikey Goyal · Pavit Agrawal
+Vaibhav Krishna Bansal · Rudra Rajpurohit · Kartikey Goyal · Pavit Agrawal
 Mentor: Mrs. Vidhya V
 
 ---
