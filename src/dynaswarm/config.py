@@ -207,6 +207,8 @@ class TuningCfg:
         enabled: Run the search instead of an experiment.
         candidates: Parameter vectors to try.
         trials: Instances each candidate is averaged over.
+        arm: Which arm to tune.  Its own ``PARAM_SPEC`` is searched, so
+            tuning a hybrid covers both components and the budget split.
         params_file: A vector produced by an earlier search, applied as
             the starting point for every arm.  Supplying one is what
             turns the comparison into adaptive-versus-tuned; without it
@@ -215,6 +217,7 @@ class TuningCfg:
     """
 
     enabled: bool = False
+    arm: str = "aco"
     candidates: int = 60
     trials: int = 6
     params_file: str | None = None

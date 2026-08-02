@@ -143,3 +143,32 @@ def test_unknown_tuned_parameter_is_ignored_not_fatal():
     cfg = make_cfg(fixed_params={"rho": 0.2, "inertia": 0.9})
     outcome = run_trial(cfg, 0, ["aco", "astar"])
     assert any(r.params.get("rho") == pytest.approx(0.2) for r in outcome.steps)
+
+
+def test_the_tuner_searches_the_arm_s_own_parameters():
+    """A hybrid must be tuned over its own twelve, not a colony's five.
+
+    Reading the spec from the arm rather than hardcoding one optimizer's
+    is what stops a tuner returning a confident vector for the wrong
+    parameter set while leaving the rest of the arm at its defaults.
+    """
+    from dynaswarm.tuning.best_fixed import param_spec_for
+
+    cfg = make_cfg()
+    assert set(param_spec_for("aco", cfg)) == set(ACO.PARAM_SPEC)
+    assert param_spec_for("astar", cfg) == {}, "an exact method has nothing to tune"
+
+    hybrid = param_spec_for("hybrid", cfg)
+    assert "aco_fraction" in hybrid, "the budget split must be tunable"
+    assert {"aco_rho", "pso_inertia"} <= set(hybrid), "both components must be covered"
+    assert len(hybrid) > len(ACO.PARAM_SPEC)
+
+
+@pytest.mark.slow
+def test_a_hybrid_can_actually_be_tuned(tmp_path):
+    cfg = make_cfg()
+    best = tune_best_fixed(
+        cfg, n_candidates=4, n_trials=2, output=tmp_path / "h.json", arm="hybrid"
+    )
+    assert "aco_fraction" in best
+    assert json.loads((tmp_path / "h.json").read_text())["arm"] == "hybrid"

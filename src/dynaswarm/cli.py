@@ -41,6 +41,7 @@ def main(cfg: DictConfig) -> None:
             n_candidates=resolved.tuning.candidates,
             n_trials=resolved.tuning.trials,
             output=directory / "best_fixed.json",
+            arm=resolved.tuning.arm,
         )
         log.info("tuned parameters: %s", best)
         return

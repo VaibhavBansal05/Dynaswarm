@@ -33,12 +33,37 @@ from joblib import Parallel, delayed
 
 from dynaswarm.config import Config
 from dynaswarm.harness.trial import run_trial
-from dynaswarm.optimizers.aco import ACO
 from dynaswarm.optimizers.spec import ParamSpec
 
 log = logging.getLogger("dynaswarm.tuning")
 
 __all__ = ["tune_best_fixed", "load_params", "objective_value"]
+
+
+def param_spec_for(arm: str, cfg: Config) -> dict[str, ParamSpec]:
+    """The tunable parameters of whichever optimizer ``arm`` builds.
+
+    Read from the arm rather than hardcoded, so tuning a hybrid searches
+    its own twelve parameters — both components plus the budget split —
+    instead of silently searching a colony's five and leaving the rest at
+    their defaults.  A tuner that optimises the wrong parameter set still
+    returns a confident-looking vector, which is the kind of quiet wrong
+    answer this codebase is built to avoid.
+
+    Args:
+        arm: A key of ``ARM_BUILDERS``.
+        cfg: Supplies the graph the probe instance is built on.
+
+    Returns:
+        The arm's ``PARAM_SPEC``; empty for parameter-free methods.
+    """
+    from dynaswarm.core.generate import build
+    from dynaswarm.core.rng import stream
+    from dynaswarm.harness.arm import build_arms
+
+    view, source, target = build(cfg.graph, stream(0, "spec_probe"))
+    probe = build_arms([arm], view, source, target, 0, 0, cfg.control)[0]
+    return dict(probe.optimizer.PARAM_SPEC)
 
 
 def _suggest(trial: optuna.Trial, name: str, spec: ParamSpec) -> float:
@@ -130,17 +155,17 @@ def tune_best_fixed(
         sampler=optuna.samplers.TPESampler(seed=cfg.root_seed),
     )
 
+    spec_table = param_spec_for(arm, cfg)
+
     def objective(trial: optuna.Trial) -> float:
-        params = {
-            name: _suggest(trial, name, spec) for name, spec in ACO.PARAM_SPEC.items()
-        }
+        params = {name: _suggest(trial, name, spec) for name, spec in spec_table.items()}
         return objective_value(
             cfg, params, cfg.experiment.tune_seeds, n_trials, arm=arm
         )
 
     log.info(
-        "tuning %s: %d candidates x %d instances on %d tuning seeds",
-        arm, n_candidates, n_trials, len(cfg.experiment.tune_seeds),
+        "tuning %s: %d parameters, %d candidates x %d instances on %d tuning seeds",
+        arm, len(spec_table), n_candidates, n_trials, len(cfg.experiment.tune_seeds),
     )
     study.optimize(objective, n_trials=n_candidates, show_progress_bar=False)
 
@@ -153,6 +178,7 @@ def tune_best_fixed(
         path.write_text(
             json.dumps(
                 {
+                    "arm": arm,
                     "params": best,
                     "tuning_excess": study.best_value,
                     "n_candidates": n_candidates,

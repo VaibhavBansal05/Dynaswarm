@@ -166,6 +166,10 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M9 · scale study | 🔬 ready to run |
 | M10 · Pygame replay | ✅ |
 
+## Running it
+
+See **[RUNBOOK.md](RUNBOOK.md)** for the full sequence: setup, the test suite, seven experiments with runtimes and acceptance checks, and what is still unfinished.
+
 ## Quick start
 
 ```bash

@@ -12,7 +12,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dynaswarm.analysis.plots import arm_comparison, excess_over_time, recovery_profile, save
+from dynaswarm.analysis.plots import (
+    arm_comparison,
+    excess_over_time,
+    recovery_profile,
+    save,
+    scaling,
+)
 from dynaswarm.analysis.recovery import (
     disruptions,
     per_trial_recovery,
@@ -225,3 +231,57 @@ def test_figures_render_and_write(tmp_path):
     per_trial = frame.groupby(["scenario", "arm", "trial"], as_index=False).excess.mean()
     per_trial = per_trial.rename(columns={"excess": "mean_excess"})
     assert save(arm_comparison(per_trial), tmp_path / "arms.png").exists()
+
+
+def test_scaling_figure_renders_across_sizes(tmp_path):
+    """The figure that decides whether the cost premise holds.
+
+    A* is exact, so it can only be beaten on cost; if its cost does not
+    grow with graph size there is nothing for a metaheuristic to win, and
+    this is where that shows.
+    """
+    from dynaswarm.config import GraphCfg
+
+    frames = []
+    for graph in (
+        GraphCfg(n_nodes=30, density=0.3),
+        GraphCfg(model="geometric", n_nodes=120, density=0.05),
+    ):
+        cfg = Config(
+            graph=graph,
+            scenario=ScenarioCfg(name="t", events_per_step=0.3, timesteps=12),
+            experiment=ExperimentCfg(n_trials=1),
+            budget=BudgetCfg(evaluations=150),
+        )
+        rows = run_trial(cfg, 0, ["astar", "aco"]).steps
+        frames.append(pd.DataFrame([r.__dict__ for r in rows]))
+
+    frame = pd.concat(frames, ignore_index=True)
+    assert frame.n_nodes.nunique() == 2
+    assert save(scaling(frame), tmp_path / "scaling.png").exists()
+
+
+def test_replay_reads_what_it_needs_from_results(tmp_path):
+    """The viewer must be able to reconstruct a run from stored rows alone.
+
+    It deliberately imports nothing from the harness, so the only way it
+    can go stale is if a column it depends on stops being recorded.  This
+    checks those columns rather than opening a window.
+    """
+    from dynaswarm.analysis.load import load_events, load_steps
+    from dynaswarm.io.writer import ResultWriter
+
+    cfg = Config(
+        scenario=ScenarioCfg(name="t", events_per_step=0.8, timesteps=10),
+        experiment=ExperimentCfg(n_trials=1),
+        budget=BudgetCfg(evaluations=150),
+    )
+    with ResultWriter(tmp_path, run_id="replay") as writer:
+        writer.write(run_trial(cfg, 0, ["astar"]))
+
+    steps, events = load_steps(tmp_path), load_events(tmp_path)
+    required = {"best_path", "n_nodes", "seed", "timestep", "num_events",
+                "optimum", "best_cost", "excess", "scenario", "trial", "arm"}
+    assert required <= set(steps.columns)
+    assert {"timestep", "u", "v"} <= set(events.columns)
+    assert len(list(steps.best_path.iloc[0])) >= 2, "a route needs at least two nodes"
