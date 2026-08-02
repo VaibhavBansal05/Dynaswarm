@@ -63,8 +63,19 @@ def expand_maps(frame: pd.DataFrame, column: str, prefix: str | None = None) -> 
     return pd.concat([frame.drop(columns=[column]), widened], axis=1)
 
 
+#: Columns that together identify one trial of one condition.
+#:
+#: ``run_id`` and the control settings belong here even though they feel
+#: redundant.  A sweep writes several runs into one tree, and trial
+#: indices restart in each: grouping on ``(scenario, arm, trial)`` alone
+#: would silently average trial 0 of the ``edge_ratio`` run together with
+#: trial 0 of the ``volatility`` run, yielding a number belonging to
+#: neither condition and looking entirely reasonable.
+TRIAL_KEYS = ["run_id", "scenario", "signal_kind", "controller_kind", "arm", "trial"]
+
+
 def per_trial_excess(frame: pd.DataFrame) -> pd.DataFrame:
-    """Reduce steps to one excess figure per ``(arm, trial)``.
+    """Reduce steps to one excess figure per trial of each condition.
 
     Paired tests operate on trials, not timesteps: successive timesteps
     within a trial share a graph and an event sequence and are strongly
@@ -75,11 +86,12 @@ def per_trial_excess(frame: pd.DataFrame) -> pd.DataFrame:
         frame: Step rows.
 
     Returns:
-        Columns ``scenario, arm, trial, mean_excess, final_excess,
-        availability``.
+        One row per :data:`TRIAL_KEYS` combination, with ``mean_excess``,
+        ``final_excess``, ``availability``, ``evaluations`` and
+        ``wall_ms``.
     """
-    grouped = frame.groupby(["scenario", "arm", "trial"], as_index=False)
-    return grouped.agg(
+    keys = [k for k in TRIAL_KEYS if k in frame.columns]
+    return frame.groupby(keys, as_index=False).agg(
         mean_excess=("excess", "mean"),
         final_excess=("excess", "last"),
         availability=("path_valid", "mean"),

@@ -4,6 +4,7 @@ defaults:
   - scenario: moderate
   - experiment: smoke
   - budget: eval300
+  - control: default
   - _self_
 
 root_seed: 42

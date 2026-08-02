@@ -41,6 +41,35 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 - Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
 - Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
+## First findings
+
+Adapting evaporation alone, driven by each of the three signals, against its own frozen twin — paired by trial, n=16:
+
+| signal | scenario | frozen | adaptive | delta | Wilcoxon |
+|---|---|---|---|---|---|
+| edge_ratio | moderate | 6.81% | 6.82% | +0.00% | 0.674 |
+| edge_ratio | high | 6.18% | 6.02% | −0.16% | 0.929 |
+| volatility | moderate | 6.81% | 6.88% | +0.07% | 0.499 |
+| volatility | high | 6.18% | 6.73% | +0.55% | 0.059 |
+| lambda_branch | moderate | 6.81% | 6.92% | +0.11% | 0.594 |
+| lambda_branch | high | 6.18% | 6.29% | +0.11% | 0.875 |
+
+No signal beats freezing. The parameter did move — `rho` drifts from 0.100 to as low as 0.043 over a trial — so this is not an inert controller; it is adaptation that makes no difference. That is consistent with Stützle et al.
+
+**This study is underpowered for small effects.** Trial-to-trial variance in excess is 5–12%, so detecting a 0.5% difference would need on the order of a thousand trials. n=16 rules out large effects only.
+
+**The signals behave very differently.** Measured across scenarios:
+
+| signal | static | low | moderate | high | separation |
+|---|---|---|---|---|---|
+| edge_ratio | 0.0000 | 0.0022 | 0.0066 | 0.0152 | 50% of range |
+| volatility | 0.0000 | 0.262 | 0.561 | 0.861 | 86% of range |
+| lambda_branch | 7.30 | 7.38 | 7.14 | 7.24 | 4% of range |
+
+The two external signals track disruption cleanly. λ-branching does not — and should not: it measures whether the *colony* has stagnated, not what the world is doing. It clears p < 0.05 purely on sample size, which is why the gate requires a separation large enough to act on rather than a p-value alone.
+
+Under a 300-evaluation budget with per-timestep disruption the colony never stagnates — λ *rises* from 7.6 to 9.1 over a trial — so the stagnation signal only ever pushes one way and behaves as a one-directional drift rather than feedback.
+
 ## Status
 
 | Milestone | State |
@@ -49,8 +78,8 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 | M1 · graph, events, timeline, oracle | ✅ |
 | M2 · optimizer protocol, meter, A\*, ACO | ✅ |
 | M3 · harness, IO, first result | ✅ |
-| M4 · signals + controllers | 🚧 |
-| M5 · best-fixed baseline (Optuna) | ⬜ |
+| M4 · signals + controllers | ✅ |
+| M5 · best-fixed baseline (Optuna) | 🚧 |
 | M6 · PSO (cost-biased) + Hybrid | ⬜ |
 | M7 · **allocation experiment** | ⬜ |
 | M8 · statistics + figures | ⬜ |

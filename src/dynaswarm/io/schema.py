@@ -45,6 +45,10 @@ STEP_SCHEMA = pa.schema(
         pa.field("evaluations_spent", pa.int32()),
         pa.field("wall_ms", pa.float64()),
         pa.field("astar_expansions", pa.float64(), nullable=True),
+        # what was sensed, and what responded to it
+        pa.field("signal_kind", pa.string()),
+        pa.field("controller_kind", pa.string()),
+        pa.field("signal_value", pa.float64(), nullable=True),
         # internals
         pa.field("params", pa.map_(pa.string(), pa.float64())),
         pa.field("probe", pa.map_(pa.string(), pa.float64())),

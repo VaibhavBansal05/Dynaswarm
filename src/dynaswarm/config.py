@@ -75,8 +75,8 @@ class ScenarioCfg:
             Note that no single churn value makes *all* signals span a
             wide range: volatility (fraction of steps carrying an event)
             saturates once ``churn * |E| >> 1``, while the edge ratio
-            stays near ``churn``.  That asymmetry is real and is measured
-            in M4 rather than assumed away.
+            stays near ``churn``.  That asymmetry is real and is
+            measured rather than assumed away.
         timesteps: Steps per trial.
         p_*: Relative probabilities of each event kind; normalised on use.
         traffic_factor: Multiplier applied by traffic events.
@@ -105,13 +105,17 @@ class ExperimentCfg:
 
     Attributes:
         name: Label used in results.
+        arms: Which competitors to run.  Nested under the experiment
+            rather than at the top level because Hydra reads a bare
+            top-level list key as a config-group override; a dotted key
+            is unambiguously a value.  It also belongs here: which arms
+            are compared is part of what defines the experiment.
         n_trials: Independent trials per scenario.
         tune_seeds: Seeds the tuner may see.
         eval_seeds: Seeds reported on.  **Must be disjoint from
-            ``tune_seeds``** — tuning and evaluating on the same seeds
-            reproduces the optimistic bias that made the previous
-            project's parameter sweep untrustworthy.  A test asserts the
-            disjointness.
+            ``tune_seeds``** — selecting a configuration on the same
+            seeds it is then reported on turns the headline figure into a
+            maximum over noise.  A test asserts the disjointness.
         parallel_jobs: joblib workers over trials.  Parallelism is over
             trials only; parallelising within a trial would make arm
             ordering nondeterministic and break reproducibility.
@@ -119,6 +123,7 @@ class ExperimentCfg:
     """
 
     name: str = "smoke"
+    arms: list[str] = field(default_factory=lambda: ["astar", "aco"])
     n_trials: int = 2
     tune_seeds: list[int] = field(default_factory=lambda: list(range(9000, 9016)))
     eval_seeds: list[int] = field(default_factory=lambda: list(range(1000, 1032)))
@@ -141,6 +146,36 @@ class BudgetCfg:
 
 
 @dataclass
+class ControlCfg:
+    """Sensing and adaptation settings.
+
+    Attributes:
+        signal: Overrides each arm's default signal, so one sweep can run
+            the same ablation across ``edge_ratio``, ``volatility`` and
+            ``lambda_branch``.  ``None`` keeps each arm's own choice.
+        window: Rolling-window length for the signal.
+        targets: Parameters the incremental controller adapts.  One at a
+            time by default: moving several together makes it impossible
+            to attribute an effect to any of them.
+        sigma: Step size per adaptation cycle.  Small by design — a large
+            step discards accumulated search state on the strength of one
+            noisy reading.
+        deadband: Pressure magnitude below which nothing moves.
+        baseline_alpha: Weight of the newest reading in the running
+            baseline the signal is compared against.
+        adapt_every: Timesteps between adaptation cycles.
+    """
+
+    signal: str | None = None
+    window: int = 10
+    targets: list[str] = field(default_factory=lambda: ["rho"])
+    sigma: float = 0.001
+    deadband: float = 0.0
+    baseline_alpha: float = 0.05
+    adapt_every: int = 1
+
+
+@dataclass
 class Config:
     """Top-level composition root."""
 
@@ -149,6 +184,7 @@ class Config:
     scenario: ScenarioCfg = field(default_factory=ScenarioCfg)
     experiment: ExperimentCfg = field(default_factory=ExperimentCfg)
     budget: BudgetCfg = field(default_factory=BudgetCfg)
+    control: ControlCfg = field(default_factory=ControlCfg)
 
 
 def register() -> ConfigStore:
@@ -198,6 +234,10 @@ def register() -> ConfigStore:
         name="main",
         node=ExperimentCfg(name="main", n_trials=30, parallel_jobs=11),
     )
+
+    for kind in ("edge_ratio", "volatility", "lambda_branch"):
+        cs.store(group="control", name=kind, node=ControlCfg(signal=kind))
+    cs.store(group="control", name="default", node=ControlCfg())
 
     cs.store(group="budget", name="eval300", node=BudgetCfg(evaluations=300))
     cs.store(group="budget", name="eval2000", node=BudgetCfg(evaluations=2000))

@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 
 from dynaswarm.config import Config
+from dynaswarm.control.signals import StepObservation
 from dynaswarm.core.generate import build
 from dynaswarm.core.meter import EvaluationMeter
 from dynaswarm.core.oracle import shortest_path
@@ -64,6 +65,9 @@ class StepRow:
     evaluations_spent: int
     wall_ms: float
     astar_expansions: float | None
+    signal_kind: str
+    controller_kind: str
+    signal_value: float | None
     params: dict[str, float]
     probe: dict[str, float]
 
@@ -120,7 +124,9 @@ def run_trial(
         preserve_connectivity=preserve_connectivity,
     )
     timeline = GraphTimeline(view, schedule)
-    arms = build_arms(arm_names, view, source, target, cfg.root_seed, trial)
+    arms = build_arms(
+        arm_names, view, source, target, cfg.root_seed, trial, cfg.control
+    )
 
     outcome = TrialOutcome()
     previous_path: dict[str, tuple[int, ...]] = {}
@@ -172,6 +178,26 @@ def run_trial(
                     "the cost model and the oracle disagree"
                 )
 
+            # Sense, then adapt.  Both happen after the arm has searched,
+            # so a controller reacts to what this timestep revealed rather
+            # than to a state that no longer holds.
+            signal_value: float | None = None
+            if arm.signal is not None:
+                arm.signal.observe(
+                    StepObservation(
+                        t=t,
+                        n_events=len(timeline.events_at(t)),
+                        n_edges=n_edges,
+                        best_cost=cost,
+                        probe=probe,
+                    )
+                )
+                signal_value = arm.signal.value()
+                if arm.controller is not None:
+                    arm.optimizer.apply(
+                        arm.controller.propose(arm.signal, arm.optimizer.params(), t)
+                    )
+
             path = solution.path if solution is not None else ()
             outcome.steps.append(
                 StepRow(
@@ -195,6 +221,9 @@ def run_trial(
                     evaluations_spent=meter.spent,
                     wall_ms=wall_ms,
                     astar_expansions=probe.get("expansions"),
+                    signal_kind=arm.signal.name if arm.signal else "",
+                    controller_kind=arm.controller.name if arm.controller else "",
+                    signal_value=signal_value,
                     params=dict(arm.optimizer.params()),
                     probe=dict(probe),
                 )

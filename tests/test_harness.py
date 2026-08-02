@@ -247,3 +247,25 @@ def test_per_trial_excess_reduces_to_one_row_per_arm_trial(tmp_path):
     summary = per_trial_excess(load_steps(tmp_path))
     assert len(summary) == 3 * 2
     assert (summary[summary.arm == "astar"].mean_excess == 0.0).all()
+
+
+def test_conditions_from_one_sweep_are_not_merged(tmp_path):
+    """Trials of different conditions must not be averaged together.
+
+    A sweep writes several runs beneath one tree and trial indices
+    restart in each, so a grouping that omits the run identity or the
+    control settings silently pools trial 0 of one condition with trial 0
+    of another.  The result is a number belonging to neither, and it
+    looks perfectly ordinary.
+    """
+    for signal in ("edge_ratio", "volatility"):
+        cfg = make_cfg(churn=0.02, timesteps=10)
+        cfg.control.signal = signal
+        directory = tmp_path / signal
+        with ResultWriter(directory, run_id=signal) as writer:
+            for trial in range(2):
+                writer.write(run_trial(cfg, trial=trial, arm_names=["aco_adaptive"]))
+
+    summary = per_trial_excess(load_steps(tmp_path))
+    assert len(summary) == 2 * 2, "conditions were pooled instead of kept apart"
+    assert set(summary.signal_kind) == {"edge_ratio", "volatility"}

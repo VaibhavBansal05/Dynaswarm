@@ -22,9 +22,6 @@ log = logging.getLogger("dynaswarm")
 
 register()
 
-#: Arms compared when the caller does not say otherwise.
-DEFAULT_ARMS = ["astar", "aco"]
-
 
 @hydra.main(version_base=None, config_path="../../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
@@ -38,8 +35,7 @@ def main(cfg: DictConfig) -> None:
     log.info("run %s -> %s", run_id, directory)
     write_manifest(directory, run_id, OmegaConf.to_container(cfg, resolve=True))
 
-    arms = list(cfg.get("arms", DEFAULT_ARMS))
-    summary = run_experiment(resolved, arms, directory, run_id)
+    summary = run_experiment(resolved, list(resolved.experiment.arms), directory, run_id)
 
     log.info("%-10s %12s %12s %8s %10s", "arm", "mean excess", "final", "avail", "evals")
     for arm, metrics in summary.items():
