@@ -25,7 +25,7 @@ def make_cfg(**control) -> Config:
     return Config(
         root_seed=7,
         graph=GraphCfg(n_nodes=30, density=0.3),
-        scenario=ScenarioCfg(name="test", churn=0.015, timesteps=15),
+        scenario=ScenarioCfg(name="test", events_per_step=0.8, timesteps=15),
         experiment=ExperimentCfg(
             n_trials=2,
             tune_seeds=[9000, 9001, 9002],

@@ -36,7 +36,7 @@ DEMO_GRAPH = GraphCfg(model="erdos_renyi", n_nodes=30, density=0.3)
 def excess_per_trial(graph: GraphCfg, params: dict[str, float], n: int = 8) -> np.ndarray:
     cfg = Config(
         graph=graph,
-        scenario=ScenarioCfg(name="probe", churn=0.015, timesteps=35),
+        scenario=ScenarioCfg(name="probe", events_per_step=0.8, timesteps=35),
         experiment=ExperimentCfg(n_trials=n),
         budget=BudgetCfg(evaluations=300),
         control=ControlCfg(fixed_params=params),

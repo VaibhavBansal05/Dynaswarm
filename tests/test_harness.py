@@ -21,11 +21,11 @@ from dynaswarm.harness.trial import run_trial
 from dynaswarm.io.writer import ResultWriter
 
 
-def make_cfg(churn: float = 0.015, timesteps: int = 20, n_trials: int = 2) -> Config:
+def make_cfg(events_per_step: float = 0.3, timesteps: int = 20, n_trials: int = 2) -> Config:
     return Config(
         root_seed=42,
         graph=GraphCfg(n_nodes=30, density=0.3),
-        scenario=ScenarioCfg(name="test", churn=churn, timesteps=timesteps),
+        scenario=ScenarioCfg(name="test", events_per_step=events_per_step, timesteps=timesteps),
         experiment=ExperimentCfg(n_trials=n_trials),
         budget=BudgetCfg(evaluations=200),
     )
@@ -48,7 +48,7 @@ def test_one_row_per_arm_per_timestep():
 
 
 def test_events_are_recorded_against_their_timestep():
-    cfg = make_cfg(churn=0.02, timesteps=25)
+    cfg = make_cfg(events_per_step=0.8, timesteps=25)
     outcome = run_trial(cfg, trial=0, arm_names=["aco"])
     assert outcome.events, "a dynamic scenario must record events"
     for row in outcome.steps:
@@ -71,7 +71,7 @@ def test_duplicate_and_unknown_arms_are_rejected():
 
 def test_all_arms_are_scored_against_the_same_optimum():
     """Per timestep there is one world, so one optimum for everyone."""
-    cfg = make_cfg(churn=0.02, timesteps=20)
+    cfg = make_cfg(events_per_step=0.8, timesteps=20)
     outcome = run_trial(cfg, trial=0, arm_names=["astar", "aco"])
     by_step: dict[int, set] = {}
     for row in outcome.steps:
@@ -88,17 +88,30 @@ def test_astar_is_exactly_the_optimum():
     excess figure in the table is then measuring that discrepancy rather
     than search quality.
     """
-    cfg = make_cfg(churn=0.02, timesteps=25)
+    cfg = make_cfg(events_per_step=0.8, timesteps=25)
     outcome = run_trial(cfg, trial=0, arm_names=["astar", "aco"])
     for row in rows_for(outcome, "astar"):
         assert row.best_cost == row.optimum
         assert row.excess == 0.0
 
 
-def test_optimum_moves_within_the_trial():
-    cfg = make_cfg(churn=0.02, timesteps=40)
-    outcome = run_trial(cfg, trial=0, arm_names=["astar"])
-    assert len({r.optimum for r in outcome.steps}) > 1
+def test_optimum_moves_across_trials():
+    """A dynamic scenario must move the optimum — but not on every seed.
+
+    Once disruption is an absolute rate rather than a fraction of the
+    edge set, most events land on edges the incumbent route never uses,
+    which is realistic: a closure across town does not change your
+    journey.  On a small graph a whole trial can therefore pass with the
+    optimum untouched, so this is a property of the scenario and is
+    checked across seeds rather than within one.
+    """
+    cfg = make_cfg(events_per_step=0.8, timesteps=40)
+    moved = 0
+    for trial in range(6):
+        outcome = run_trial(cfg, trial=trial, arm_names=["astar"])
+        if len({r.optimum for r in outcome.steps}) > 1:
+            moved += 1
+    assert moved >= 3, f"optimum moved in only {moved}/6 trials; scenario is too quiet"
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +146,7 @@ def test_adding_an_arm_does_not_disturb_the_others():
     shift the randomness of the first two and silently invalidate every
     number already collected for them.
     """
-    cfg = make_cfg(churn=0.02, timesteps=20)
+    cfg = make_cfg(events_per_step=0.8, timesteps=20)
     alone = run_trial(cfg, trial=0, arm_names=["aco"])
     together = run_trial(cfg, trial=0, arm_names=["astar", "aco"])
 
@@ -143,7 +156,7 @@ def test_adding_an_arm_does_not_disturb_the_others():
 
 
 def test_arm_order_does_not_matter():
-    cfg = make_cfg(churn=0.02, timesteps=15)
+    cfg = make_cfg(events_per_step=0.8, timesteps=15)
     forward = run_trial(cfg, trial=0, arm_names=["astar", "aco"])
     reverse = run_trial(cfg, trial=0, arm_names=["aco", "astar"])
     assert [(r.timestep, r.best_cost) for r in rows_for(forward, "aco")] == [
@@ -188,7 +201,7 @@ def _comparable(row) -> tuple:
 
 def test_trials_reproduce_exactly():
     """Every recorded quantity except timing must be bit-reproducible."""
-    cfg = make_cfg(churn=0.02, timesteps=20)
+    cfg = make_cfg(events_per_step=0.8, timesteps=20)
     first = run_trial(cfg, trial=1, arm_names=["astar", "aco"])
     second = run_trial(cfg, trial=1, arm_names=["astar", "aco"])
     assert [_comparable(r) for r in first.steps] == [_comparable(r) for r in second.steps]
@@ -198,7 +211,7 @@ def test_trials_reproduce_exactly():
 
 
 def test_different_trials_differ():
-    cfg = make_cfg(churn=0.02, timesteps=20)
+    cfg = make_cfg(events_per_step=0.8, timesteps=20)
     a = run_trial(cfg, trial=0, arm_names=["aco"])
     b = run_trial(cfg, trial=1, arm_names=["aco"])
     assert [r.best_cost for r in a.steps] != [r.best_cost for r in b.steps]
@@ -212,7 +225,7 @@ def test_seeds_are_entropy_not_labels():
     *same* graphs and event sequences — and the separation that is
     supposed to keep a tuned baseline honest would be decorative.
     """
-    cfg = make_cfg(churn=0.02, timesteps=12)
+    cfg = make_cfg(events_per_step=0.8, timesteps=12)
     tuning = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[9000, 9001])
     evaluation = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[1000, 1001])
 
@@ -225,7 +238,7 @@ def test_seeds_are_entropy_not_labels():
 
 def test_the_same_seed_reproduces_regardless_of_trial_index():
     """Entropy follows the seed, so the same seed is the same instance."""
-    cfg = make_cfg(churn=0.02, timesteps=12)
+    cfg = make_cfg(events_per_step=0.8, timesteps=12)
     first = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[4242])
     second = run_trial(cfg, trial=3, arm_names=["aco"], seeds=[4242])
     assert [r.optimum for r in first.steps] == [r.optimum for r in second.steps]
@@ -242,7 +255,7 @@ def test_empty_seed_pool_is_rejected():
 
 
 def test_parquet_round_trip_preserves_results(tmp_path):
-    cfg = make_cfg(churn=0.02, timesteps=15)
+    cfg = make_cfg(events_per_step=0.8, timesteps=15)
     outcome = run_trial(cfg, trial=0, arm_names=["astar", "aco"])
 
     with ResultWriter(tmp_path, run_id="test") as writer:
@@ -291,7 +304,7 @@ def test_conditions_from_one_sweep_are_not_merged(tmp_path):
     looks perfectly ordinary.
     """
     for signal in ("edge_ratio", "volatility"):
-        cfg = make_cfg(churn=0.02, timesteps=10)
+        cfg = make_cfg(events_per_step=0.8, timesteps=10)
         cfg.control.signal = signal
         directory = tmp_path / signal
         with ResultWriter(directory, run_id=signal) as writer:

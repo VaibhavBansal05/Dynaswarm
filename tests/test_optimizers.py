@@ -214,7 +214,7 @@ def test_astar_is_exact_at_every_timestep(cfg: GraphCfg, seed: int):
 
     view, source, target = build(cfg, stream(seed, "graph"))
     sched = build_schedule(
-        view, ScenarioCfg(churn=0.02, timesteps=25), stream(seed, "events"), source, target
+        view, ScenarioCfg(events_per_step=0.8, timesteps=25), stream(seed, "events"), source, target
     )
     tl = GraphTimeline(view, sched)
     astar = AStar(view, source, target)

@@ -101,11 +101,11 @@ class _Windowed:
 class EdgeRatioSignal(_Windowed):
     """Fraction of edges disturbed per timestep, averaged over a window.
 
-    This is the intuitive reading of "how much is the world changing",
-    and it is scale-comparable only because events are driven at a
-    fraction of ``|E|``: were a fixed number of edges changed per step,
-    this would report ``k/|E|`` and shrink toward zero as graphs grow,
-    while any threshold written against it stayed put.
+    The intuitive reading of "how much is the world changing".  Note
+    that it divides by ``|E|``, so with disruption driven at an absolute
+    rate the same event load reads smaller on a larger graph.  That is a
+    real property of the signal rather than a flaw to engineer away, and
+    it means any threshold written against it is graph-specific.
     """
 
     name = "edge_ratio"
@@ -124,12 +124,11 @@ class VolatilitySignal(_Windowed):
     event count per step exceeds one or two, and beyond that cannot tell
     a busy world from a chaotic one.
 
-    Because events are driven at a *fraction* of ``|E|``, that count
-    grows with the graph, so the usable range shrinks as graphs get
-    larger.  Measured: at n=30 (|E| ~ 150) the scenario tiers read 0.00,
-    0.26, 0.56 and 0.86; at n=200 (|E| ~ 1200) even the moderate tier
-    delivers about seven events per step and the signal pins at 1.000
-    everywhere.  A pinned signal has no gradient, and a controller driven
+    With disruption driven at an absolute rate the usable range no
+    longer depends on graph size, but it still depends on the rate: the
+    fraction of disturbed steps is ``1 - exp(-rate)``, which is already
+    0.86 at two events per step and indistinguishable from one beyond
+    about four.  A pinned signal has no gradient, and a controller driven
     by one cannot move at all.
     """
 

@@ -46,7 +46,7 @@ class StepRow:
     """One arm's result at one timestep."""
 
     scenario: str
-    churn: float
+    events_per_step: float
     graph_model: str
     n_nodes: int
     n_edges: int
@@ -213,7 +213,7 @@ def run_trial(
             outcome.steps.append(
                 StepRow(
                     scenario=cfg.scenario.name,
-                    churn=cfg.scenario.churn,
+                    events_per_step=cfg.scenario.events_per_step,
                     graph_model=cfg.graph.model,
                     n_nodes=view.n_nodes,
                     n_edges=n_edges,

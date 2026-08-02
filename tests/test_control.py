@@ -30,25 +30,26 @@ from dynaswarm.control.signals import (
 )
 from dynaswarm.harness.trial import run_trial
 
-SCENARIO_CHURN = {"static": 0.0, "low": 0.002, "moderate": 0.006, "high": 0.015}
+#: Scenario tiers, as absolute disruptions per timestep.
+SCENARIO_RATES = {"static": 0.0, "low": 0.1, "moderate": 0.3, "high": 0.8}
 
 
-def make_cfg(churn: float, signal: str, timesteps: int = 40) -> Config:
+def make_cfg(events_per_step: float, signal: str, timesteps: int = 40) -> Config:
     return Config(
         root_seed=42,
         graph=GraphCfg(n_nodes=30, density=0.3),
-        scenario=ScenarioCfg(name="test", churn=churn, timesteps=timesteps),
+        scenario=ScenarioCfg(name="test", events_per_step=events_per_step, timesteps=timesteps),
         experiment=ExperimentCfg(n_trials=1),
         budget=BudgetCfg(evaluations=200),
         control=ControlCfg(signal=signal),
     )
 
 
-def observe_sequence(signal_kind: str, churn: float, trials: int = 4) -> list[float]:
+def observe_sequence(signal_kind: str, events_per_step: float, trials: int = 4) -> list[float]:
     """Collect signal readings across several trials of one scenario."""
     readings: list[float] = []
     for trial in range(trials):
-        outcome = run_trial(make_cfg(churn, signal_kind), trial, ["aco_adaptive"])
+        outcome = run_trial(make_cfg(events_per_step, signal_kind), trial, ["aco_adaptive"])
         readings.extend(
             row.signal_value for row in outcome.steps if row.signal_value is not None
         )
@@ -137,36 +138,49 @@ def separation(groups: list[list[float]]) -> float:
     return (max(means) - min(means)) / span if span > 0 else 0.0
 
 
-def test_volatility_saturates_on_larger_graphs():
-    """Volatility is only usable while events per step stay near one.
+def test_volatility_saturates_above_a_few_events_per_step():
+    """Volatility has a working range, and the disruption rate sets it.
 
-    It asks "did anything change this step?", so it saturates once the
-    expected event count exceeds a couple.  Because events are driven at
-    a *fraction* of ``|E|``, that count grows with the graph: at n=30
-    (|E| ~ 150) the scenario tiers span 0.00 to 0.87, but at n=200
-    (|E| ~ 1200) even the moderate tier delivers about seven events per
-    step and the signal pins at 1.000 in every scenario.
+    It asks only "did anything change this step?", so the fraction of
+    disturbed steps is ``1 - exp(-rate)``: already 0.86 at two events per
+    step, and indistinguishable from one beyond about four.  Past that
+    the signal is pinned, has no gradient, and a controller driven by it
+    cannot move at all.
 
-    A pinned signal has no gradient, so a controller driven by it cannot
-    move — measured, the adaptive arm became bit-identical to its frozen
-    twin.  This is asserted so the limitation stays visible: volatility
-    is not a general-purpose signal, it is one with a working range, and
-    the range depends on graph size as well as churn.
+    Driving disruption at an absolute rate keeps every scenario tier
+    inside the usable range at any graph size.  Tying the rate to edge
+    count instead pushes larger graphs past saturation — at a few
+    hundred edges even a modest tier delivers enough events that no step
+    is ever quiet.
     """
-    big = GraphCfg(model="geometric", n_nodes=200, density=0.04)
     readings = []
-    for churn in (0.006, 0.015):
-        cfg = make_cfg(churn, "volatility", timesteps=25)
-        cfg.graph = big
+    for rate in (5.0, 8.0):
+        cfg = make_cfg(rate, "volatility", timesteps=25)
         outcome = run_trial(cfg, 0, ["aco_adaptive"])
         readings.extend(
             r.signal_value for r in outcome.steps if r.signal_value is not None
         )
+    assert min(readings) > 0.99, "volatility should be pinned at these rates"
 
-    assert min(readings) > 0.99, (
-        "volatility is no longer saturated at n=200; the tiers may have been "
-        "recalibrated, and the guidance about its working range needs revisiting"
-    )
+
+def test_scenario_tiers_leave_room_to_recover():
+    """Every dynamic tier must leave quiet stretches between disruptions.
+
+    Recovery is only observable if there is calm to recover *into*.  A
+    tier that disturbs every timestep produces no transient to measure,
+    and any claim about recovery made on it would be vacuous.
+    """
+    for name, rate in SCENARIO_RATES.items():
+        cfg = make_cfg(rate, "volatility", timesteps=60)
+        outcome = run_trial(cfg, 0, ["aco_adaptive"])
+        quiet = sum(1 for r in outcome.steps if r.num_events == 0) / len(outcome.steps)
+        if name == "static":
+            assert quiet == 1.0
+        else:
+            assert 0.2 < quiet < 0.98, (
+                f"{name} leaves {quiet:.0%} of steps quiet; a disruption needs "
+                "somewhere to decay to"
+            )
 
 
 @pytest.mark.parametrize("signal_kind", EXTERNAL_SIGNALS)
@@ -184,11 +198,11 @@ def test_external_signal_discriminates_scenarios(signal_kind: str):
     The right response to a failure is to report the signal as
     degenerate, not to keep using it.
     """
-    groups = [observe_sequence(signal_kind, churn) for churn in SCENARIO_CHURN.values()]
+    groups = [observe_sequence(signal_kind, rate) for rate in SCENARIO_RATES.values()]
     _, p_value = scipy_stats.kruskal(*groups)
     gap = separation(groups)
 
-    means = dict(zip(SCENARIO_CHURN, [f"{np.mean(g):.4f}" for g in groups], strict=True))
+    means = dict(zip(SCENARIO_RATES, [f"{np.mean(g):.4f}" for g in groups], strict=True))
     assert p_value < 0.05, f"{signal_kind} does not distinguish scenarios: {means}"
     assert gap >= MIN_SEPARATION, (
         f"{signal_kind} separates scenarios by only {gap:.1%} of its range: {means}"
@@ -200,7 +214,7 @@ def test_branching_does_not_proxy_for_volatility():
 
     Branching measures whether *the colony* has collapsed onto one route.
     A colony can stagnate in a calm world and stay diffuse in a chaotic
-    one, so there is no reason for it to track churn — and measured, it
+    one, so there is no reason for it to track the rate — and measured, it
     does not: scenario means sit within a few percent of one another even
     as the reading itself ranges over a factor of two within trials.
 
@@ -209,7 +223,7 @@ def test_branching_does_not_proxy_for_volatility():
     answers "should I explore *now*", not "how volatile is the world",
     and using it for the latter would be reading it wrongly.
     """
-    groups = [observe_sequence("lambda_branch", churn) for churn in SCENARIO_CHURN.values()]
+    groups = [observe_sequence("lambda_branch", rate) for rate in SCENARIO_RATES.values()]
     gap = separation(groups)
     assert gap < MIN_SEPARATION, (
         f"branching separated scenarios by {gap:.1%} of range; if it has become a "
@@ -218,15 +232,15 @@ def test_branching_does_not_proxy_for_volatility():
 
 
 @pytest.mark.parametrize("signal_kind", ["edge_ratio", "volatility"])
-def test_external_signals_are_ordered_by_churn(signal_kind: str):
+def test_external_signals_are_ordered_by_rate(signal_kind: str):
     """External signals should rise monotonically with disruption.
 
     Only the environment-facing signals are held to this.  Branching
     measures the search, and a colony can stagnate under any amount of
-    churn, so no ordering is expected of it.
+    the rate, so no ordering is expected of it.
     """
-    means = [float(np.mean(observe_sequence(signal_kind, c))) for c in SCENARIO_CHURN.values()]
-    assert means == sorted(means), f"{signal_kind} not monotone in churn: {means}"
+    means = [float(np.mean(observe_sequence(signal_kind, r))) for r in SCENARIO_RATES.values()]
+    assert means == sorted(means), f"{signal_kind} not monotone in rate: {means}"
 
 
 def test_static_scenario_produces_no_external_pressure():
@@ -344,7 +358,7 @@ def test_unknown_controller_is_rejected():
 
 def test_ablation_pair_starts_identical_and_diverges_only_by_control():
     """Fixed and adaptive share bits, so only the controller can separate them."""
-    cfg = make_cfg(churn=0.015, signal="volatility", timesteps=30)
+    cfg = make_cfg(events_per_step=0.8, signal="volatility", timesteps=30)
     outcome = run_trial(cfg, trial=0, arm_names=["aco_fixed", "aco_adaptive"])
 
     fixed = [r for r in outcome.steps if r.arm == "aco_fixed"]
@@ -360,7 +374,7 @@ def test_ablation_pair_starts_identical_and_diverges_only_by_control():
 
 
 def test_adaptation_stays_within_declared_bounds():
-    cfg = make_cfg(churn=0.015, signal="volatility", timesteps=60)
+    cfg = make_cfg(events_per_step=0.8, signal="volatility", timesteps=60)
     cfg.control.sigma = 0.5  # deliberately violent
     outcome = run_trial(cfg, trial=0, arm_names=["aco_adaptive"])
     from dynaswarm.optimizers.aco import ACO
@@ -373,7 +387,7 @@ def test_adaptation_stays_within_declared_bounds():
 @pytest.mark.parametrize("signal_kind", sorted(SIGNALS))
 def test_every_signal_drives_the_controller(signal_kind: str):
     """Each signal must be able to move a parameter, not merely be read."""
-    cfg = make_cfg(churn=0.015, signal=signal_kind, timesteps=40)
+    cfg = make_cfg(events_per_step=0.8, signal=signal_kind, timesteps=40)
     outcome = run_trial(cfg, trial=0, arm_names=["aco_adaptive"])
     values = {row.params["rho"] for row in outcome.steps}
     assert len(values) > 1, f"{signal_kind} never moved the parameter"

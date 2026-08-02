@@ -22,7 +22,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from dynaswarm.config import ScenarioCfg
-from dynaswarm.core.events import KINDS, Event, apply_event, candidate_slots
+from dynaswarm.core.events import (
+    KINDS,
+    Event,
+    apply_event,
+    candidate_slots,
+    cluster_slots,
+)
 from dynaswarm.core.graphview import GraphView, freeze
 from dynaswarm.core.oracle import dijkstra
 
@@ -39,13 +45,11 @@ def build_schedule(
 ) -> tuple[tuple[Event, ...], ...]:
     """Materialise the whole event sequence up front.
 
-    Event count per timestep is ``Poisson(churn * |E|)``.  Expressing
-    churn as a *fraction of edges* rather than an absolute count is what
-    makes the edge-ratio signal comparable across graph sizes.  Driving a
-    fixed number of events per step instead would make that signal
-    ``k/|E|`` — on a 150-edge graph, a single event reads as 0.007, which
-    is two orders of magnitude below any threshold one would naturally
-    write down, and shrinks further as the graph grows.
+    Event count per timestep is ``Poisson(events_per_step)`` — an
+    absolute rate.  Scaling it with ``|E|`` instead means larger graphs
+    are disrupted proportionally harder, and past a few hundred edges
+    every timestep carries an event, so the graph never settles and
+    recovery has nothing to decay toward.
 
     Args:
         base: Initial state.
@@ -80,38 +84,41 @@ def build_schedule(
     )
     probs = probs / probs.sum()
 
-    n_edges = base.n_active_edges
-    lam = cfg.churn * n_edges
+    lam = cfg.events_per_step
     schedule: list[tuple[Event, ...]] = []
 
     for _ in range(cfg.timesteps):
         step: list[Event] = []
         count = int(rng.poisson(lam)) if lam > 0 else 0
         for _ in range(count):
-            event = _draw(kinds_rng=rng, probs=probs, weight=weight, active=active,
-                          topology=topology, cfg=cfg)
-            if event is None:
-                continue
-            if preserve_connectivity and _would_disconnect(
-                event, weight, active, topology, source, target
+            for event in _draw_cluster(
+                rng, probs, weight, active, topology, cfg
             ):
-                continue
-            apply_event(event, weight, active, topology)
-            step.append(event)
+                if preserve_connectivity and _would_disconnect(
+                    event, weight, active, topology, source, target
+                ):
+                    continue
+                apply_event(event, weight, active, topology)
+                step.append(event)
         schedule.append(tuple(step))
 
     return tuple(schedule)
 
 
-def _draw(
+def _draw_cluster(
     kinds_rng: np.random.Generator,
     probs: np.ndarray,
     weight: np.ndarray,
     active: np.ndarray,
     topology,
     cfg: ScenarioCfg,
-) -> Event | None:
-    """Sample one applicable event, or ``None`` if no slot is eligible."""
+) -> list[Event]:
+    """Sample one disruption as a coherent group of edges.
+
+    Returns:
+        The affected edges, all of the same kind and centred on one node;
+        empty if no slot is eligible.
+    """
     order = kinds_rng.permutation(len(KINDS))
     chosen = int(kinds_rng.choice(len(KINDS), p=probs))
     # Try the sampled kind first, then others, so a scenario whose
@@ -122,14 +129,28 @@ def _draw(
         slots = candidate_slots(kind, active, topology)
         if slots.size == 0:
             continue
-        slot = int(kinds_rng.choice(slots))
-        u = int(np.searchsorted(topology.indptr, slot, side="right") - 1)
-        v = int(topology.indices[slot])
-        old = float(weight[slot])
-        free_flow = float(topology.base_weight[slot])
-        new = _new_weight(kind, old, free_flow, cfg, kinds_rng)
-        return Event(kind=kind, slot=slot, u=u, v=v, old_weight=old, new_weight=new)
-    return None
+        seed_slot = int(kinds_rng.choice(slots))
+        focus = int(topology.indices[seed_slot])
+        group = cluster_slots(slots, focus, cfg.cluster_size, topology, active)
+
+        events: list[Event] = []
+        for slot in group.tolist():
+            u = int(np.searchsorted(topology.indptr, slot, side="right") - 1)
+            v = int(topology.indices[slot])
+            old = float(weight[slot])
+            free_flow = float(topology.base_weight[slot])
+            events.append(
+                Event(
+                    kind=kind,
+                    slot=int(slot),
+                    u=u,
+                    v=v,
+                    old_weight=old,
+                    new_weight=_new_weight(kind, old, free_flow, cfg, kinds_rng),
+                )
+            )
+        return events
+    return []
 
 
 def _new_weight(

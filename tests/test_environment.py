@@ -30,9 +30,9 @@ def make(cfg: GraphCfg, seed: int = 0):
     return build(cfg, stream(seed, "graph"))
 
 
-def timeline(cfg: GraphCfg, churn: float, seed: int = 0, steps: int = 40):
+def timeline(cfg: GraphCfg, events_per_step: float, seed: int = 0, steps: int = 40):
     view, s, t = make(cfg, seed)
-    scen = ScenarioCfg(churn=churn, timesteps=steps)
+    scen = ScenarioCfg(events_per_step=events_per_step, timesteps=steps)
     sched = build_schedule(view, scen, stream(seed, "events"), s, t)
     return GraphTimeline(view, sched), s, t
 
@@ -134,21 +134,21 @@ def test_unreachable_target_reports_infinity():
 
 
 def test_state_at_is_pure_and_cached():
-    tl, _, _ = timeline(GraphCfg(), churn=0.015)
+    tl, _, _ = timeline(GraphCfg(), events_per_step=0.8)
     for t in (0, 5, 17):
         assert tl.state_at(t) is tl.state_at(t), "repeated calls must return one object"
     assert tl.state_at(9).state_hash() == tl.state_at(9).state_hash()
 
 
 def test_all_states_share_one_topology():
-    tl, _, _ = timeline(GraphCfg(), churn=0.015)
+    tl, _, _ = timeline(GraphCfg(), events_per_step=0.8)
     topo = tl.state_at(0).topology
     for t in range(tl.timesteps):
         assert tl.state_at(t).topology is topo
 
 
 def test_static_scenario_never_changes():
-    tl, _, _ = timeline(GraphCfg(), churn=0.0)
+    tl, _, _ = timeline(GraphCfg(), events_per_step=0.0)
     first = tl.state_at(0).state_hash()
     assert all(not step for step in tl.schedule)
     for t in range(tl.timesteps):
@@ -156,13 +156,13 @@ def test_static_scenario_never_changes():
 
 
 def test_events_actually_change_the_state():
-    tl, _, _ = timeline(GraphCfg(), churn=0.015)
+    tl, _, _ = timeline(GraphCfg(), events_per_step=0.8)
     hashes = [tl.state_at(t).state_hash() for t in range(tl.timesteps)]
     assert len(set(hashes)) > 1, "a dynamic scenario must move the world"
 
 
-@pytest.mark.parametrize("churn", [0.006, 0.015])
-def test_optimum_varies_under_churn(churn: float):
+@pytest.mark.parametrize("events_per_step", [0.3, 0.8])
+def test_optimum_varies_under_disruption(events_per_step: float):
     """A scenario labelled dynamic must actually move the optimum.
 
     Everything downstream — excess over the moving optimum, recovery
@@ -170,16 +170,16 @@ def test_optimum_varies_under_churn(churn: float):
     motion.  If it is not, each scenario silently degenerates into the
     static one while still reporting plausible-looking numbers.
     """
-    tl, source, target = timeline(GraphCfg(), churn=churn, steps=60)
+    tl, source, target = timeline(GraphCfg(), events_per_step, steps=60)
     optima = {
         round(shortest_path(tl.state_at(t), source, target)[0], 6)
         for t in range(tl.timesteps)
     }
-    assert len(optima) > 1, f"optimum never moved at churn={churn}"
+    assert len(optima) > 1, f"optimum never moved at rate={events_per_step}"
 
 
 def test_connectivity_is_preserved():
-    tl, source, target = timeline(GraphCfg(), churn=0.015, steps=60)
+    tl, source, target = timeline(GraphCfg(), events_per_step=0.8, steps=60)
     for t in range(tl.timesteps):
         cost, _, _ = shortest_path(tl.state_at(t), source, target)
         assert np.isfinite(cost), f"source and target disconnected at t={t}"
@@ -190,44 +190,47 @@ def test_connectivity_is_preserved():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "cfg",
-    [GraphCfg(n_nodes=30), GraphCfg(n_nodes=120, density=0.1)],
-    ids=["n30", "n120"],
-)
-def test_edge_ratio_tracks_churn_at_any_graph_size(cfg: GraphCfg):
-    """The edge-ratio signal must mean the same thing at every scale.
-
-    Driving a fixed number of events per timestep would make this ratio
-    ``k/|E|`` — 0.007 for a single event on a 150-edge graph, and smaller
-    still as the graph grows.  A controller thresholding such a signal at
-    any natural value would never leave its lowest regime.  Driving
-    events at a *fraction* of ``|E|`` is what keeps the signal
-    comparable across sizes; this test is what stops it regressing.
-    """
-    churn = 0.015
+def _mean_edge_ratio(cfg: GraphCfg, rate: float = 0.8, seeds: int = 4) -> float:
     ratios = []
-    for seed in range(4):
-        tl, _, _ = timeline(cfg, churn=churn, seed=seed, steps=60)
+    for seed in range(seeds):
+        tl, _, _ = timeline(cfg, rate, seed=seed, steps=60)
         n_edges = tl.state_at(0).n_active_edges
         ratios.append(np.mean([len(step) / n_edges for step in tl.schedule]))
-    observed = float(np.mean(ratios))
-    assert observed == pytest.approx(churn, rel=0.35), (
-        f"edge ratio {observed:.4f} should track churn {churn} regardless of size"
+    return float(np.mean(ratios))
+
+
+def test_edge_ratio_reads_smaller_on_larger_graphs():
+    """The edge ratio divides by ``|E|``, so it is graph-specific.
+
+    With disruption driven at an absolute rate, the same event load reads
+    smaller on a larger graph.  That is a true property of the signal
+    rather than a defect to engineer away — but it means a threshold
+    written against it belongs to one graph size and does not transfer,
+    which is exactly why the controller compares against a running
+    baseline instead of a constant.
+    """
+    small = _mean_edge_ratio(GraphCfg(n_nodes=30, density=0.3))
+    large = _mean_edge_ratio(GraphCfg(model="geometric", n_nodes=200, density=0.04))
+    assert small > large, (
+        f"edge ratio should shrink with graph size: {small:.4f} at n=30 "
+        f"versus {large:.4f} at n=200"
     )
+    assert large > 0.0, "the signal must still register disruption at scale"
 
 
-def test_scenario_tiers_are_ordered_and_separated():
-    """Each tier must be measurably more volatile than the one below."""
+def test_scenario_tiers_are_ordered_and_leave_quiet_steps():
+    """Each tier must be more disruptive than the last, and none saturated."""
     measured = {}
-    for name, churn in [("static", 0.0), ("low", 0.002), ("moderate", 0.006), ("high", 0.015)]:
-        vols = []
+    for name, rate in [("static", 0.0), ("low", 0.1), ("moderate", 0.3), ("high", 0.8)]:
+        quiet = []
         for seed in range(4):
-            tl, _, _ = timeline(GraphCfg(), churn=churn, seed=seed, steps=60)
-            vols.append(sum(1 for step in tl.schedule if step) / tl.timesteps)
-        measured[name] = float(np.mean(vols))
+            tl, _, _ = timeline(GraphCfg(), rate, seed=seed, steps=60)
+            quiet.append(sum(1 for step in tl.schedule if not step) / tl.timesteps)
+        measured[name] = float(np.mean(quiet))
 
-    assert measured["static"] == 0.0
-    assert measured["low"] < measured["moderate"] < measured["high"]
-    # No tier may saturate, or it cannot be told apart from the next one.
-    assert measured["high"] < 0.98, f"high tier saturated at {measured['high']:.2f}"
+    assert measured["static"] == 1.0
+    assert measured["low"] > measured["moderate"] > measured["high"]
+    assert measured["high"] > 0.2, (
+        f"the busiest tier leaves only {measured['high']:.0%} of steps quiet; "
+        "recovery needs calm to decay into"
+    )

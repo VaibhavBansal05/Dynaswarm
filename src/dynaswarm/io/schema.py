@@ -22,7 +22,7 @@ STEP_SCHEMA = pa.schema(
         pa.field("run_id", pa.string()),
         # condition
         pa.field("scenario", pa.string()),
-        pa.field("churn", pa.float64()),
+        pa.field("events_per_step", pa.float64()),
         pa.field("graph_model", pa.string()),
         pa.field("n_nodes", pa.int32()),
         pa.field("n_edges", pa.int32()),

@@ -161,7 +161,7 @@ def tune_best_fixed(
                     "graph": cfg.graph.model,
                     "n_nodes": cfg.graph.n_nodes,
                     "scenario": cfg.scenario.name,
-                    "churn": cfg.scenario.churn,
+                    "events_per_step": cfg.scenario.events_per_step,
                 },
                 indent=2,
             )

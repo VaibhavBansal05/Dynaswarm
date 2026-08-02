@@ -68,12 +68,12 @@ def test_tune_and_eval_seeds_are_disjoint():
     assert not (set(cfg.tune_seeds) & set(cfg.eval_seeds))
 
 
-def test_scenarios_span_a_range_of_churn():
+def test_scenarios_span_a_range_of_disruption():
     """Static must be genuinely static and the tiers must be ordered."""
     with initialize_config_dir(version_base=None, config_dir=CONF_DIR):
-        churn = {}
+        rates = {}
         for name in _group_options("scenario"):
             cfg = compose(config_name="config", overrides=[f"scenario={name}"])
-            churn[name] = cfg.scenario.churn
-    assert churn["static"] == 0.0
-    assert churn["low"] < churn["moderate"] < churn["high"]
+            rates[name] = cfg.scenario.events_per_step
+    assert rates["static"] == 0.0
+    assert rates["low"] < rates["moderate"] < rates["high"]

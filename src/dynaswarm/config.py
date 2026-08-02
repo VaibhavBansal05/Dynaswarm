@@ -61,29 +61,47 @@ class ScenarioCfg:
 
     Attributes:
         name: Label used in results.
-        churn: Expected fraction of edges disturbed per timestep.  Event
-            count per step is ``Poisson(churn * |E|)``.
+        events_per_step: Expected disruptions per timestep, drawn as
+            ``Poisson(events_per_step)``.
 
-            Expressing churn as a *fraction* rather than an absolute
-            count is what makes the edge-ratio signal comparable across
-            graph sizes.  A fixed count of ``k`` events per step would
-            make that signal ``k/|E|``, which on a 150-edge graph reads
-            as 0.007 for a single event and shrinks as the graph grows —
-            far below any threshold one would naturally choose, and not
-            transferable between sizes.
+            An **absolute** rate, not a fraction of ``|E|``.  Scaling
+            disruption with graph size sounds neutral and is not: a city
+            suffers roughly as many incidents per hour however finely one
+            chooses to model its roads.  Tying the rate to edge count
+            meant that at 1200 edges even a modest fraction produced
+            around eighteen events per step, so the graph never settled
+            and there was no quiet period to recover *to* — measured, one
+            hundred percent of timesteps carried a disruption, which
+            makes recovery unobservable.
 
-            Note that no single churn value makes *all* signals span a
-            wide range: volatility (fraction of steps carrying an event)
-            saturates once ``churn * |E| >> 1``, while the edge ratio
-            stays near ``churn``.  That asymmetry is real and is
-            measured rather than assumed away.
+            Keeping the rate absolute preserves quiet stretches at every
+            graph size.  It does mean the edge-ratio signal reads smaller
+            on larger graphs, since it divides by ``|E|`` — but that is a
+            true property of that signal rather than something to
+            engineer away.
+        cluster_size: Edges affected per disruption.  Real disruptions
+            are spatially coherent — congestion fills a district, an
+            incident closes a junction and its approaches — and modelling
+            each as a single uniformly drawn edge makes disruption almost
+            always irrelevant to any given route.  Measured on a 30-node
+            graph, single-edge events left the optimum untouched in four
+            trials out of six.  Clustering keeps events rare enough to
+            leave quiet stretches while making each one consequential.
+
+            Calibrated by measurement: at 25 edges per disruption the
+            optimum moves in every trial at both graph tiers (four to
+            eight distinct optima per run) while roughly three quarters
+            of timesteps stay quiet at the moderate rate.  Smaller
+            clusters left the optimum untouched in a third of trials;
+            larger ones bought little beyond the noise.
         timesteps: Steps per trial.
         p_*: Relative probabilities of each event kind; normalised on use.
         traffic_factor: Multiplier applied by traffic events.
     """
 
     name: str = "moderate"
-    churn: float = 0.015
+    events_per_step: float = 0.3
+    cluster_size: int = 25
     timesteps: int = 60
     p_closure: float = 0.15
     p_traffic_up: float = 0.30
@@ -244,17 +262,17 @@ def register() -> ConfigStore:
     )
     cs.store(group="graph", name="grid20", node=GraphCfg(model="grid", n_nodes=400))
 
-    # Churn calibrated against measured volatility at N=30 (|E| ~= 147).
-    # Expected events per step is churn * |E|, so the fraction of steps
-    # carrying an event is 1 - exp(-churn * |E|), which saturates fast:
-    # measured 0.95 at churn=0.015 and 1.00 at 0.05.  Beyond ~0.02 the
-    # volatility signal cannot tell scenarios apart even though the edge
-    # ratio keeps climbing, so the tiers stay in the range where *both*
-    # signals still discriminate.
-    cs.store(group="scenario", name="static", node=ScenarioCfg(name="static", churn=0.0))
-    cs.store(group="scenario", name="low", node=ScenarioCfg(name="low", churn=0.002))
-    cs.store(group="scenario", name="moderate", node=ScenarioCfg(name="moderate", churn=0.006))
-    cs.store(group="scenario", name="high", node=ScenarioCfg(name="high", churn=0.015))
+    # Rates chosen so quiet stretches survive: the fraction of undisturbed
+    # timesteps is exp(-rate), giving 90%, 74% and 45% for the three
+    # dynamic tiers.  A disruption therefore has somewhere to decay to,
+    # which is the precondition for measuring recovery at all.  Being
+    # absolute, these hold at any graph size.
+    cs.store(group="scenario", name="static", node=ScenarioCfg(name="static", events_per_step=0.0))
+    cs.store(group="scenario", name="low", node=ScenarioCfg(name="low", events_per_step=0.1))
+    cs.store(
+        group="scenario", name="moderate", node=ScenarioCfg(name="moderate", events_per_step=0.3)
+    )
+    cs.store(group="scenario", name="high", node=ScenarioCfg(name="high", events_per_step=0.8))
 
     cs.store(group="experiment", name="smoke", node=ExperimentCfg(name="smoke", n_trials=2))
     cs.store(
