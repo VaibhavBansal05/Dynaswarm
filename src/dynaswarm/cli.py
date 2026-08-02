@@ -17,6 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from dynaswarm.config import Config, register
 from dynaswarm.harness.runner import run_experiment
 from dynaswarm.io.writer import write_manifest
+from dynaswarm.tuning.best_fixed import load_params, tune_best_fixed
 
 log = logging.getLogger("dynaswarm")
 
@@ -33,6 +34,24 @@ def main(cfg: DictConfig) -> None:
     _check_seed_partition(resolved)
 
     log.info("run %s -> %s", run_id, directory)
+
+    if resolved.tuning.enabled:
+        best = tune_best_fixed(
+            resolved,
+            n_candidates=resolved.tuning.candidates,
+            n_trials=resolved.tuning.trials,
+            output=directory / "best_fixed.json",
+        )
+        log.info("tuned parameters: %s", best)
+        return
+
+    if resolved.tuning.params_file:
+        # Both halves of an ablation start from the tuned vector, so the
+        # comparison is adaptive-versus-tuned rather than
+        # adaptive-versus-arbitrary.
+        resolved.control.fixed_params = load_params(resolved.tuning.params_file)
+        log.info("starting from tuned parameters: %s", resolved.control.fixed_params)
+
     write_manifest(directory, run_id, OmegaConf.to_container(cfg, resolve=True))
 
     summary = run_experiment(resolved, list(resolved.experiment.arms), directory, run_id)

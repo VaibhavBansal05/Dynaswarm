@@ -99,34 +99,45 @@ def run_trial(
     cfg: Config,
     trial: int,
     arm_names: list[str],
+    seeds: list[int] | None = None,
     preserve_connectivity: bool = True,
 ) -> TrialOutcome:
     """Run every arm through one shared, pre-materialised event sequence.
 
+    The seed drawn from *seeds* is the trial's entropy, not a label on
+    it: the graph, the event sequence and every arm's stream are all
+    addressed from it.  That is what gives a disjoint seed pool any
+    meaning — tuning on one pool and evaluating on another must present
+    genuinely different problem instances, or a configuration selected on
+    the first would be reported on the very instances that chose it.
+
     Args:
         cfg: Full experiment configuration.
-        trial: Trial index; selects the seed and the random streams.
+        trial: Trial index; selects which seed is used.
         arm_names: Arms to run, as keys of ``ARM_BUILDERS``.
+        seeds: Pool to draw from.  Defaults to the evaluation pool; the
+            tuner passes its own.
         preserve_connectivity: Reject events that would sever the route.
 
     Returns:
         The trial's step and event rows.
     """
-    seed = cfg.experiment.eval_seeds[trial % len(cfg.experiment.eval_seeds)]
+    pool = seeds if seeds is not None else cfg.experiment.eval_seeds
+    if not pool:
+        raise ValueError("seed pool is empty")
+    seed = pool[trial % len(pool)]
 
-    view, source, target = build(cfg.graph, stream(cfg.root_seed, "trial", trial, "graph"))
+    view, source, target = build(cfg.graph, stream(seed, "graph"))
     schedule = build_schedule(
         view,
         cfg.scenario,
-        stream(cfg.root_seed, "trial", trial, "events"),
+        stream(seed, "events"),
         source,
         target,
         preserve_connectivity=preserve_connectivity,
     )
     timeline = GraphTimeline(view, schedule)
-    arms = build_arms(
-        arm_names, view, source, target, cfg.root_seed, trial, cfg.control
-    )
+    arms = build_arms(arm_names, view, source, target, seed, trial, cfg.control)
 
     outcome = TrialOutcome()
     previous_path: dict[str, tuple[int, ...]] = {}

@@ -9,6 +9,7 @@ defaults:
 
 root_seed: 42
 
+
 hydra:
   # Each run owns its directory and the process works inside it, so
   # results land beside the config that produced them with no path

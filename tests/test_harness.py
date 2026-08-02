@@ -204,6 +204,38 @@ def test_different_trials_differ():
     assert [r.best_cost for r in a.steps] != [r.best_cost for r in b.steps]
 
 
+def test_seeds_are_entropy_not_labels():
+    """A disjoint seed pool must present genuinely different instances.
+
+    If seeds only labelled rows while the randomness came from somewhere
+    else, then tuning on one pool and evaluating on another would use the
+    *same* graphs and event sequences — and the separation that is
+    supposed to keep a tuned baseline honest would be decorative.
+    """
+    cfg = make_cfg(churn=0.02, timesteps=12)
+    tuning = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[9000, 9001])
+    evaluation = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[1000, 1001])
+
+    assert tuning.steps[0].optimum != evaluation.steps[0].optimum, (
+        "different seed pools produced the same problem instance"
+    )
+    assert tuning.steps[0].seed == 9000
+    assert evaluation.steps[0].seed == 1000
+
+
+def test_the_same_seed_reproduces_regardless_of_trial_index():
+    """Entropy follows the seed, so the same seed is the same instance."""
+    cfg = make_cfg(churn=0.02, timesteps=12)
+    first = run_trial(cfg, trial=0, arm_names=["aco"], seeds=[4242])
+    second = run_trial(cfg, trial=3, arm_names=["aco"], seeds=[4242])
+    assert [r.optimum for r in first.steps] == [r.optimum for r in second.steps]
+
+
+def test_empty_seed_pool_is_rejected():
+    with pytest.raises(ValueError, match="seed pool"):
+        run_trial(make_cfg(), trial=0, arm_names=["aco"], seeds=[])
+
+
 # ---------------------------------------------------------------------------
 # Round-trip through Parquet
 # ---------------------------------------------------------------------------

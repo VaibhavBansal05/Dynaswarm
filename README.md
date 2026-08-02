@@ -41,6 +41,34 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 - Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
 - Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
+## Choosing a testbed that can show the effect
+
+A null result means nothing if the mechanism under test does no work on the instances used. Disabling pheromone entirely (α = 0):
+
+| graph | with pheromone | without | delta | Wilcoxon |
+|---|---|---|---|---|
+| Erdős–Rényi n=30 | 0.91% | 0.75% | −0.15% | 0.910 |
+| geometric n=200 | 8.25% | **23.88%** | **+15.63%** | **<0.001** |
+
+**Pheromone does nothing at n=30 and almost everything at n=200.** A 30-node graph of mean degree 18 puts the target a hop or two from anywhere, so almost any goal-directed walk finds a good route and the colony's collective memory is redundant.
+
+The small tier is therefore a demo and a debugging aid, **not a testbed for any claim about pheromone** — including claims about adapting its evaporation rate. Two tests enforce that distinction rather than leaving it to memory.
+
+## Tuning versus adapting
+
+A best-fixed vector found by Optuna on sixteen tuning seeds, evaluated on sixteen seeds it never saw:
+
+| | moderate | high |
+|---|---|---|
+| default parameters | 6.81% | 6.18% |
+| **tuned, frozen** | **1.28%** | **0.71%** |
+| tuned, adapting ρ | 1.27% | 0.62% |
+| adaptive − frozen | −0.01% (p=0.686) | −0.10% (p=0.109) |
+
+Tuning buys a factor of 5–9. Adapting buys nothing distinguishable. That is Stützle et al.'s conclusion, reproduced — with the caveat above that these numbers come from the demo tier and must be repeated where the mechanism is load-bearing.
+
+The tuned vector is itself informative: α=0.59, β=0.95, ρ=0.75, goal_weight=2.90. At n=30 the search sensibly turned the pheromone mechanism down, because there it contributes nothing.
+
 ## First findings
 
 Adapting evaporation alone, driven by each of the three signals, against its own frozen twin — paired by trial, n=16:
@@ -79,8 +107,8 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M2 · optimizer protocol, meter, A\*, ACO | ✅ |
 | M3 · harness, IO, first result | ✅ |
 | M4 · signals + controllers | ✅ |
-| M5 · best-fixed baseline (Optuna) | 🚧 |
-| M6 · PSO (cost-biased) + Hybrid | ⬜ |
+| M5 · best-fixed baseline (Optuna) | ✅ |
+| M6 · PSO (cost-biased) + Hybrid | 🚧 |
 | M7 · **allocation experiment** | ⬜ |
 | M8 · statistics + figures | ⬜ |
 | M9 · scale study | ⬜ |

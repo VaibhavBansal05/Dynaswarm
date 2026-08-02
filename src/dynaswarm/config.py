@@ -164,6 +164,11 @@ class ControlCfg:
         baseline_alpha: Weight of the newest reading in the running
             baseline the signal is compared against.
         adapt_every: Timesteps between adaptation cycles.
+        fixed_params: Starting parameter values applied to every ACO arm.
+            This is how a tuned baseline is supplied: the tuner writes a
+            vector, and both halves of an ablation start from it, so the
+            comparison is adaptive-versus-tuned rather than
+            adaptive-versus-arbitrary.
     """
 
     signal: str | None = None
@@ -173,6 +178,28 @@ class ControlCfg:
     deadband: float = 0.0
     baseline_alpha: float = 0.05
     adapt_every: int = 1
+    fixed_params: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class TuningCfg:
+    """Search for a fixed parameter vector.
+
+    Attributes:
+        enabled: Run the search instead of an experiment.
+        candidates: Parameter vectors to try.
+        trials: Instances each candidate is averaged over.
+        params_file: A vector produced by an earlier search, applied as
+            the starting point for every arm.  Supplying one is what
+            turns the comparison into adaptive-versus-tuned; without it
+            the fixed arm is merely the default, which is a far easier
+            opponent than the literature actually poses.
+    """
+
+    enabled: bool = False
+    candidates: int = 60
+    trials: int = 6
+    params_file: str | None = None
 
 
 @dataclass
@@ -185,6 +212,7 @@ class Config:
     experiment: ExperimentCfg = field(default_factory=ExperimentCfg)
     budget: BudgetCfg = field(default_factory=BudgetCfg)
     control: ControlCfg = field(default_factory=ControlCfg)
+    tuning: TuningCfg = field(default_factory=TuningCfg)
 
 
 def register() -> ConfigStore:

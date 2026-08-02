@@ -152,11 +152,19 @@ def build_arms(
             raise KeyError(f"unknown arm {name!r}; registered: {sorted(ARM_BUILDERS)}")
         spec = ARM_BUILDERS[name]
         rng = stream(root_seed, "trial", trial, "arm", spec.family, "search")
+        optimizer = spec.build(view, source, target, rng)
+        if control.fixed_params:
+            # Applied to every arm alike, so an ablation's two halves
+            # start from the same place and differ only in what happens
+            # to them afterwards.
+            optimizer.apply(
+                {k: v for k, v in control.fixed_params.items() if k in optimizer.PARAM_SPEC}
+            )
         arms.append(
             Arm(
                 name=name,
                 family=spec.family,
-                optimizer=spec.build(view, source, target, rng),
+                optimizer=optimizer,
                 metered=spec.metered,
                 signal=_make_signal(spec, control),
                 controller=_make_controller(spec, control),
