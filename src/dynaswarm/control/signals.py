@@ -118,10 +118,19 @@ class EdgeRatioSignal(_Windowed):
 class VolatilitySignal(_Windowed):
     """Fraction of recent timesteps that carried any disruption.
 
-    Insensitive to how *much* changed, only to how often.  That makes it
-    span ``[0, 1]`` at any graph size, but also saturates once the
-    expected event count per step exceeds one or two — beyond that it
-    cannot tell a busy world from a chaotic one.
+    Insensitive to how *much* changed, only to how often.  That bounds it
+    to ``[0, 1]`` at any graph size, but also gives it a working range
+    rather than universal applicability: it saturates once the expected
+    event count per step exceeds one or two, and beyond that cannot tell
+    a busy world from a chaotic one.
+
+    Because events are driven at a *fraction* of ``|E|``, that count
+    grows with the graph, so the usable range shrinks as graphs get
+    larger.  Measured: at n=30 (|E| ~ 150) the scenario tiers read 0.00,
+    0.26, 0.56 and 0.86; at n=200 (|E| ~ 1200) even the moderate tier
+    delivers about seven events per step and the signal pins at 1.000
+    everywhere.  A pinned signal has no gradient, and a controller driven
+    by one cannot move at all.
     """
 
     name = "volatility"

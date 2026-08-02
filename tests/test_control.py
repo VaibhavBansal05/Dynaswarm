@@ -137,6 +137,38 @@ def separation(groups: list[list[float]]) -> float:
     return (max(means) - min(means)) / span if span > 0 else 0.0
 
 
+def test_volatility_saturates_on_larger_graphs():
+    """Volatility is only usable while events per step stay near one.
+
+    It asks "did anything change this step?", so it saturates once the
+    expected event count exceeds a couple.  Because events are driven at
+    a *fraction* of ``|E|``, that count grows with the graph: at n=30
+    (|E| ~ 150) the scenario tiers span 0.00 to 0.87, but at n=200
+    (|E| ~ 1200) even the moderate tier delivers about seven events per
+    step and the signal pins at 1.000 in every scenario.
+
+    A pinned signal has no gradient, so a controller driven by it cannot
+    move — measured, the adaptive arm became bit-identical to its frozen
+    twin.  This is asserted so the limitation stays visible: volatility
+    is not a general-purpose signal, it is one with a working range, and
+    the range depends on graph size as well as churn.
+    """
+    big = GraphCfg(model="geometric", n_nodes=200, density=0.04)
+    readings = []
+    for churn in (0.006, 0.015):
+        cfg = make_cfg(churn, "volatility", timesteps=25)
+        cfg.graph = big
+        outcome = run_trial(cfg, 0, ["aco_adaptive"])
+        readings.extend(
+            r.signal_value for r in outcome.steps if r.signal_value is not None
+        )
+
+    assert min(readings) > 0.99, (
+        "volatility is no longer saturated at n=200; the tiers may have been "
+        "recalibrated, and the guidance about its working range needs revisiting"
+    )
+
+
 @pytest.mark.parametrize("signal_kind", EXTERNAL_SIGNALS)
 def test_external_signal_discriminates_scenarios(signal_kind: str):
     """An environment-facing signal must read differently in calm and chaos.

@@ -41,6 +41,45 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 - Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
 - Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
+## Why adaptation does not help here
+
+The result the harness was built to produce. On geometric n=200 — the tier where disabling pheromone costs +23 points, so the adapted mechanism is genuinely load-bearing — against a tuned baseline, paired over 16 trials:
+
+| signal | scenario | tuned fixed | adaptive | delta | Wilcoxon |
+|---|---|---|---|---|---|
+| edge_ratio | moderate | 4.28% | 4.32% | +0.04% | 0.893 |
+| edge_ratio | high | 3.35% | 3.52% | +0.18% | 0.552 |
+| volatility | moderate | 4.28% | 4.21% | −0.07% | 0.317 |
+| volatility | high | 3.35% | 3.35% | +0.00% | — |
+| lambda_branch | moderate | 4.28% | 4.22% | −0.06% | 0.859 |
+| lambda_branch | high | 3.35% | 3.39% | +0.05% | 0.530 |
+
+Smallest p is 0.317 against a Holm threshold of 0.0083 for six tests.
+
+**And here is why.** Tuning separately for each volatility level, then evaluating every vector on every scenario (evaluation seeds, never seen by any tuning run):
+
+| tuned for ↓ / run on → | static | moderate | high |
+|---|---|---|---|
+| static | 3.23% | 4.28% | 3.48% |
+| moderate | 2.99% | 4.09% | 5.16% |
+| high | 3.23% | 4.28% | 3.48% |
+
+The vector matched to a scenario never significantly beats a mismatched one — no comparison reaches p < 0.47, and twice the mismatched vector is numerically better. **The optimal parameters do not depend on volatility in any way we can measure**, so a volatility-driven controller has nothing to gain. The null results above are not a failure of the controller; they follow from the problem.
+
+Two caveats stated plainly. Twelve trials cannot rule out small effects — the largest gap (1.68 points) still carries p = 0.47. And the static and high searches returned identical vectors partly because all three shared a sampler seed and so explored the same candidates; the cross-evaluation, not that coincidence, is the evidence.
+
+## A signal's working range depends on the graph, not just the churn
+
+`volatility` asks "did anything change this step?", so it saturates once events per step exceed a couple. Because events are driven at a fraction of |E|, that threshold arrives sooner on larger graphs:
+
+| | n=30 (\|E\|≈150) | n=200 (\|E\|≈1200) |
+|---|---|---|
+| static | 0.00 | 0.00 |
+| moderate | 0.56 | **1.000** |
+| high | 0.86 | **1.000** |
+
+Pinned at 1.000, the signal has no gradient and the controller cannot move — measured, its arm came out bit-identical to the frozen twin. The gate that was supposed to catch this ran only at n=30, where volatility still discriminates. **A signal's usability is a property of the signal and the tier together.** There is now a test pinning the saturation, so recalibrating the tiers fails loudly rather than silently reviving a dead controller.
+
 ## Choosing a testbed that can show the effect
 
 A null result means nothing if the mechanism under test does no work on the instances used. Disabling pheromone entirely (α = 0):
