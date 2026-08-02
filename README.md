@@ -41,7 +41,20 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 - Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
 - Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
-## Why adaptation does not help here
+## The hybrid beats both of its components
+
+The project's original goal, and the first positive result. Geometric n=200, paired over 10 trials, equal evaluation budget:
+
+| scenario | ACO | PSO | **Hybrid** | hybrid − ACO | Wilcoxon |
+|---|---|---|---|---|---|
+| moderate | 8.2% | 13.7% | **7.7%** | −0.5% | 0.625 |
+| high | 9.3% | 26.8% | **7.1%** | **−2.3%** | **0.004** |
+
+The advantage grows with disruption and is significant in the busier scenario, which is what the design predicts: the colony's pheromone is worth a great deal in the steady state but goes stale immediately after a closure, and the swarm — whose priorities rank nodes rather than edges — is unaffected by that staleness. The hybrid is a bet that one covers the other's failure window, not simply that two methods are better than one.
+
+Treat this as promising rather than settled: ten trials, one graph tier, an untuned 50/50 split. The allocation experiment (M7) is what would establish whether shifting the split by *time since disruption* improves on a fixed one.
+
+## Why volatility-driven adaptation does not help
 
 The result the harness was built to produce. On geometric n=200 — the tier where disabling pheromone costs +23 points, so the adapted mechanism is genuinely load-bearing — against a tuned baseline, paired over 16 trials:
 
@@ -147,11 +160,11 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M3 · harness, IO, first result | ✅ |
 | M4 · signals + controllers | ✅ |
 | M5 · best-fixed baseline (Optuna) | ✅ |
-| M6 · PSO (cost-biased) + Hybrid | 🚧 |
-| M7 · **allocation experiment** | ⬜ |
-| M8 · statistics + figures | ⬜ |
-| M9 · scale study | ⬜ |
-| M10 · Pygame replay | ⬜ |
+| M6 · PSO + Hybrid | ✅ |
+| M7 · **allocation experiment** | 🔬 ready to run |
+| M8 · statistics + figures | ✅ |
+| M9 · scale study | 🔬 ready to run |
+| M10 · Pygame replay | ✅ |
 
 ## Quick start
 

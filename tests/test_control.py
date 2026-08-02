@@ -62,7 +62,7 @@ def observe_sequence(signal_kind: str, events_per_step: float, trials: int = 4) 
 
 
 def test_registry_is_complete():
-    assert set(SIGNALS) == {"edge_ratio", "volatility", "lambda_branch"}
+    assert set(SIGNALS) == {"edge_ratio", "volatility", "lambda_branch", "recency"}
     for kind in SIGNALS:
         assert make_signal(kind).name == kind
 

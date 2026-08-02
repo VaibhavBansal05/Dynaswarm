@@ -38,6 +38,7 @@ __all__ = [
     "EdgeRatioSignal",
     "VolatilitySignal",
     "LambdaBranchingSignal",
+    "RecencySignal",
     "make_signal",
     "SIGNALS",
 ]
@@ -174,11 +175,51 @@ class LambdaBranchingSignal(_Windowed):
             self._history.append(float(reading))
 
 
+class RecencySignal:
+    """How recently the world was disrupted, decaying toward calm.
+
+    The other signals describe the environment's *rate* of change, and
+    the optimal parameters were measured not to vary with it: a vector
+    tuned for one rate performs as well at another, so a controller
+    driven by rate has nothing to exploit.
+
+    This one describes a *transient* instead — a disruption just landed,
+    and any structure the search accumulated is now partly stale.  That
+    is a different quantity, and the measurement above says nothing about
+    it, because averaging over a whole trial hides an effect confined to
+    the few steps after each event.
+
+    Reads 1 on the timestep a disruption lands and decays geometrically
+    toward 0 through the quiet that follows, so it is largest exactly
+    when memory is least trustworthy.
+
+    Args:
+        window: Unused; accepted so every signal shares a constructor.
+        decay: Multiplier applied per quiet timestep.
+    """
+
+    name = "recency"
+    explore_direction = 1.0
+
+    def __init__(self, window: int = 10, decay: float = 0.7) -> None:
+        if not 0.0 < decay < 1.0:
+            raise ValueError(f"decay must lie in (0, 1), got {decay}")
+        self._decay = decay
+        self._value = 0.0
+
+    def observe(self, obs: StepObservation) -> None:
+        self._value = 1.0 if obs.n_events > 0 else self._value * self._decay
+
+    def value(self) -> float:
+        return self._value
+
+
 #: Signal constructors, keyed by the name used in config.
 SIGNALS = {
     "edge_ratio": EdgeRatioSignal,
     "volatility": VolatilitySignal,
     "lambda_branch": LambdaBranchingSignal,
+    "recency": RecencySignal,
 }
 
 

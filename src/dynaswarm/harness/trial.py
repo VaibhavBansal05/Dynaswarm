@@ -62,6 +62,7 @@ class StepRow:
     path_valid: bool
     path_changed: bool
     path_len: int
+    best_path: list[int]
     evaluations_spent: int
     wall_ms: float
     astar_expansions: float | None
@@ -229,6 +230,7 @@ def run_trial(
                     path_valid=solution is not None,
                     path_changed=path != previous_path.get(arm.name, ()),
                     path_len=max(len(path) - 1, 0),
+                    best_path=list(path),
                     evaluations_spent=meter.spent,
                     wall_ms=wall_ms,
                     astar_expansions=probe.get("expansions"),

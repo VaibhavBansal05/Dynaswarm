@@ -41,6 +41,9 @@ STEP_SCHEMA = pa.schema(
         pa.field("path_valid", pa.bool_()),
         pa.field("path_changed", pa.bool_()),
         pa.field("path_len", pa.int32()),
+        # The route itself, so a replay can draw what the arm actually
+        # chose rather than reconstruct something merely plausible.
+        pa.field("best_path", pa.list_(pa.int32())),
         # cost
         pa.field("evaluations_spent", pa.int32()),
         pa.field("wall_ms", pa.float64()),

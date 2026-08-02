@@ -56,6 +56,9 @@ def main(cfg: DictConfig) -> None:
 
     summary = run_experiment(resolved, list(resolved.experiment.arms), directory, run_id)
 
+    if resolved.report:
+        _write_report(directory)
+
     log.info("%-10s %12s %12s %8s %10s", "arm", "mean excess", "final", "avail", "evals")
     for arm, metrics in summary.items():
         log.info(
@@ -66,6 +69,34 @@ def main(cfg: DictConfig) -> None:
             100 * metrics["availability"],
             metrics["evaluations"],
         )
+
+
+def _write_report(directory: Path) -> None:
+    """Turn a finished run into figures and a comparison table.
+
+    Kept separate from the run itself so a sweep costs nothing extra, and
+    so a report can be regenerated from stored results without repeating
+    the experiment.
+    """
+    from dynaswarm.analysis.load import load_steps, per_trial_excess
+    from dynaswarm.analysis.plots import (
+        arm_comparison,
+        excess_over_time,
+        recovery_profile,
+        save,
+    )
+    from dynaswarm.analysis.recovery import per_trial_recovery
+
+    steps = load_steps(directory)
+    figures = directory / "figures"
+
+    save(excess_over_time(steps), figures / "excess_over_time.png")
+    save(recovery_profile(steps), figures / "recovery_profile.png")
+    save(arm_comparison(per_trial_excess(steps)), figures / "arm_comparison.png")
+
+    per_trial_excess(steps).to_csv(directory / "per_trial.csv", index=False)
+    per_trial_recovery(steps).to_csv(directory / "recovery.csv", index=False)
+    log.info("wrote figures and tables to %s", directory)
 
 
 def _check_seed_partition(cfg: Config) -> None:

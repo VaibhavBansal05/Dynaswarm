@@ -28,7 +28,9 @@ from dynaswarm.core.graphview import GraphView
 from dynaswarm.core.rng import stream
 from dynaswarm.optimizers.aco import ACO
 from dynaswarm.optimizers.astar import AStar
+from dynaswarm.optimizers.hybrid import Hybrid
 from dynaswarm.optimizers.protocol import Optimizer
+from dynaswarm.optimizers.pso import PSO
 
 __all__ = ["Arm", "build_arms", "ARM_BUILDERS"]
 
@@ -107,6 +109,29 @@ ARM_BUILDERS: dict[str, ArmSpec] = {
         family="aco_controlled",
         build=lambda view, s, t, rng: ACO(view, s, t, rng),
         signal="volatility",
+        controller="incremental",
+    ),
+    "pso": ArmSpec(
+        family="pso",
+        build=lambda view, s, t, rng: PSO(view, s, t, rng),
+    ),
+    "hybrid": ArmSpec(
+        family="hybrid",
+        build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
+    ),
+    # The allocation ablation.  Both hold the same optimizer and the same
+    # stream; one may shift the budget between colony and swarm, the
+    # other may not.
+    "hybrid_fixed": ArmSpec(
+        family="hybrid_controlled",
+        build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
+        signal="recency",
+        controller="none",
+    ),
+    "hybrid_adaptive": ArmSpec(
+        family="hybrid_controlled",
+        build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
+        signal="recency",
         controller="incremental",
     ),
 }

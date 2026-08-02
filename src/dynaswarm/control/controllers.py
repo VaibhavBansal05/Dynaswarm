@@ -58,6 +58,15 @@ EXPLORE_SIGN: Mapping[str, float] = {
     "rho": +1.0,
     "alpha": -1.0,
     "beta": -1.0,
+    "aco_rho": +1.0,
+    "aco_alpha": -1.0,
+    "aco_beta": -1.0,
+    # Shifting the hybrid's budget toward the colony buys accumulated
+    # structure; shifting it toward the swarm buys freedom from stale
+    # structure.  Right after a disruption the trail is the least
+    # trustworthy thing in the system, so "explore" here means giving
+    # the memoryless component more of the budget.
+    "aco_fraction": -1.0,
 }
 
 

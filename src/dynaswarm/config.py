@@ -222,9 +222,15 @@ class TuningCfg:
 
 @dataclass
 class Config:
-    """Top-level composition root."""
+    """Top-level composition root.
+
+    Attributes:
+        report: Emit figures and comparison tables after the run.  Off by
+            default so a sweep is not slowed by rendering it will discard.
+    """
 
     root_seed: int = 42
+    report: bool = False
     graph: GraphCfg = field(default_factory=GraphCfg)
     scenario: ScenarioCfg = field(default_factory=ScenarioCfg)
     experiment: ExperimentCfg = field(default_factory=ExperimentCfg)
