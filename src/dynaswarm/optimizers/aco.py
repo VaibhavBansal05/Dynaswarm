@@ -64,6 +64,10 @@ _VISIT_FLOOR = 1.0
 #: Per-iteration decay of the visit counter.
 _VISIT_DECAY = 0.9
 
+#: Uniform draws taken per refill.  Amortises the numpy call that would
+#: otherwise sit in the innermost loop.
+_RAND_BUFFER = 4096
+
 
 class ACO:
     """MAX--MIN Ant System over a :class:`GraphView`.
@@ -110,6 +114,10 @@ class ACO:
         self._goal_cost = self._compute_goal_cost()
         self._refresh_visibility()
 
+        self._rand_buf = rng.random(_RAND_BUFFER)
+        self._rand_i = 0
+        self._sync_lists(structure=True)
+
     # -- protocol ---------------------------------------------------------
 
     def rebind(self, view: GraphView) -> None:
@@ -120,6 +128,7 @@ class ACO:
         # it now avoids resurrecting a stale preference if the edge later
         # reopens with a quite different weight.
         self._tau[~np.asarray(view.active)] = 0.0
+        self._sync_lists(structure=True)
         self._revalidate_best()
 
     def spend(self, meter: EvaluationMeter) -> None:
@@ -146,6 +155,7 @@ class ACO:
                 self._offer(best_path, best_cost)
                 self._deposit(best_path, best_cost)
             self._clamp_trails()
+            self._sync_lists()
 
             self._visits *= _VISIT_DECAY
             self._iterations += 1
@@ -157,8 +167,16 @@ class ACO:
         return dict(self._p)
 
     def apply(self, values) -> None:
-        """Adopt ``values``; unknown names raise rather than being ignored."""
+        """Adopt ``values``; unknown names raise rather than being ignored.
+
+        Visibility is recomputed here because ``goal_weight`` enters it.
+        Deferring that to the next :meth:`rebind` would leave the
+        parameter recorded but not yet in effect — which reads, in a
+        decision log, exactly like a parameter that does nothing.
+        """
         self._p = bind(self.PARAM_SPEC, {**self._p, **dict(values)})
+        self._refresh_visibility()
+        self._sync_lists(structure=True)
 
     def probe(self) -> dict[str, float]:
         """Internal telemetry, including the branching measure."""
@@ -183,50 +201,105 @@ class ACO:
             return
         mean = float(self._tau[active].mean())
         self._tau[active] = (1.0 - s) * self._tau[active] + s * mean
+        self._sync_lists()
 
     # -- search -----------------------------------------------------------
 
     def _construct(self, meter: EvaluationMeter) -> tuple[list[int], float] | None:
         """Build one path, charging the meter exactly once.
 
+        Written against plain Python lists rather than the numpy arrays
+        that back them.  A node's candidate set is its degree — a dozen
+        entries or so — and at that size numpy is the wrong tool: each
+        call costs a microsecond or two of dispatch regardless of how
+        little data it touches, and this loop makes several per step.
+        Profiling put 72 % of a run inside this function, almost all of
+        it dispatch on arrays of about twelve elements.
+
+        The lists are mirrors of the arrays, refreshed once per iteration
+        rather than per step, so bulk operations like evaporation still
+        get to be vectorised where that genuinely pays.
+
         Returns:
             ``(path, cost)``, or ``None`` if the ant reached a dead end.
         """
         meter.charge()
 
-        topo = self._view.topology
-        active = self._view.active
+        indptr, indices = self._indptr_l, self._indices_l
+        active, tau, eta, weight = self._active_l, self._tau_l, self._eta_l, self._weight_l
         alpha, beta = self._p["alpha"], self._p["beta"]
 
         current = self._source
+        target = self._target
         path = [current]
         cost = 0.0
-        visited = np.zeros(self._view.n_nodes, dtype=bool)
-        visited[current] = True
+        visited = {current}
 
-        while current != self._target:
-            lo, hi = int(topo.indptr[current]), int(topo.indptr[current + 1])
-            dest = topo.indices[lo:hi]
-            usable = active[lo:hi] & ~visited[dest]
-            if not usable.any():
+        while current != target:
+            candidates: list[int] = []
+            scores: list[float] = []
+            total = 0.0
+            for slot in range(indptr[current], indptr[current + 1]):
+                if not active[slot] or indices[slot] in visited:
+                    continue
+                score = (tau[slot] ** alpha) * (eta[slot] ** beta)
+                candidates.append(slot)
+                scores.append(score)
+                total += score
+
+            if not candidates:
                 return None
 
-            slots = np.flatnonzero(usable) + lo
-            weights = (self._tau[slots] ** alpha) * (self._eta[slots] ** beta)
-            total = float(weights.sum())
-            if not np.isfinite(total) or total <= 0.0:
-                pick = int(self._rng.integers(slots.size))
+            if total > 0.0:
+                threshold = self._uniform() * total
+                acc = 0.0
+                chosen = candidates[-1]
+                for slot, score in zip(candidates, scores, strict=True):
+                    acc += score
+                    if acc >= threshold:
+                        chosen = slot
+                        break
             else:
-                pick = int(self._rng.choice(slots.size, p=weights / total))
+                # Every option scored zero — an underflow rather than a
+                # preference, so fall back to an unbiased choice.
+                chosen = candidates[int(self._uniform() * len(candidates))]
 
-            slot = int(slots[pick])
-            cost += float(self._view.weight[slot])
-            current = int(topo.indices[slot])
+            cost += weight[chosen]
+            current = indices[chosen]
             path.append(current)
-            visited[current] = True
+            visited.add(current)
             self._visits[current] += 1.0
 
         return path, cost
+
+    def _uniform(self) -> float:
+        """Next uniform draw, taken from a pre-filled buffer.
+
+        Drawing singly would put a numpy call in the innermost loop, at
+        roughly the cost of the arithmetic it guards.
+        """
+        if self._rand_i >= self._rand_buf.size:
+            self._rand_buf = self._rng.random(_RAND_BUFFER)
+            self._rand_i = 0
+        value = self._rand_buf[self._rand_i]
+        self._rand_i += 1
+        return float(value)
+
+    def _sync_lists(self, structure: bool = False) -> None:
+        """Refresh the Python mirrors of the numpy state.
+
+        Args:
+            structure: Also refresh topology and per-edge state, which
+                change only when the graph does.
+        """
+        self._tau_l = self._tau.tolist()
+        if structure:
+            topo = self._view.topology
+            self._indptr_l = topo.indptr.tolist()
+            self._indices_l = topo.indices.tolist()
+            self._active_l = np.asarray(self._view.active).tolist()
+            self._eta_l = self._eta.tolist()
+            self._weight_l = np.asarray(self._view.weight).tolist()
 
     def _offer(self, path: list[int], cost: float) -> None:
         if self._best is None or cost < self._best.cost:

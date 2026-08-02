@@ -29,6 +29,7 @@ from pathlib import Path
 
 import numpy as np
 import optuna
+from joblib import Parallel, delayed
 
 from dynaswarm.config import Config
 from dynaswarm.harness.trial import run_trial
@@ -72,9 +73,19 @@ def objective_value(
     tuned.update(params)
     cfg = _with_fixed_params(cfg, tuned)
 
+    jobs = max(1, cfg.experiment.parallel_jobs)
+    if jobs == 1:
+        outcomes = [run_trial(cfg, t, [arm], seeds=seeds) for t in range(n_trials)]
+    else:
+        # Parallelism goes here rather than across Optuna trials: the
+        # sampler is sequential by design, and the objective is
+        # CPU-bound Python, so threading it would gain nothing.
+        outcomes = Parallel(n_jobs=jobs)(
+            delayed(run_trial)(cfg, t, [arm], seeds=seeds) for t in range(n_trials)
+        )
+
     excesses: list[float] = []
-    for trial in range(n_trials):
-        outcome = run_trial(cfg, trial, [arm], seeds=seeds)
+    for outcome in outcomes:
         values = [row.excess for row in outcome.steps if row.excess is not None]
         if values:
             excesses.append(float(np.mean(values)))
