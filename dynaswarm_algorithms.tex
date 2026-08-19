@@ -1,0 +1,786 @@
+% =============================================================
+%  Dynaswarm — Algorithms in Scientific Notation
+%  Part 1/3: Preamble, Introduction, Environment, A*
+% =============================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{program}          % pseudocode — available in base texlive
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{parskip}
+\geometry{margin=2.5cm}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{remark}{Remark}[section]
+
+% --- notation -----------------------------------------------
+\newcommand{\calG}{\mathcal{G}}
+\newcommand{\calE}{\mathcal{E}}
+\newcommand{\calV}{\mathcal{V}}
+\newcommand{\RR}{\mathbb{R}}
+\newcommand{\xvec}{\mathbf{x}}
+\newcommand{\vvec}{\mathbf{v}}
+\newcommand{\pvec}{\mathbf{p}}
+\newcommand{\gvec}{\mathbf{g}}
+\newcommand{\excess}{\varepsilon}
+% =============================================================
+\begin{document}
+
+\begin{titlepage}
+  \centering\vspace*{3cm}
+  {\Huge\bfseries Dynaswarm}\\[0.6em]
+  {\Large\itshape Adaptive Swarm Intelligence for Dynamic Path Optimisation}\\[0.4em]
+  {\large A Technical Reference: Algorithms in Mathematical Notation}\\[3cm]
+  {\large Vaibhav Bansal}\\[0.5em]
+  {\normalsize ML Research Project --- \today}\\[4cm]
+  \begin{abstract}
+    \noindent
+    We study whether an online adaptive controller that monitors environment volatility
+    and incrementally retunes optimiser parameters can outperform a carefully tuned
+    \emph{static} configuration when searching for shortest paths in dynamically disrupted
+    networks.  Four algorithms are investigated: the exact reference A$^*$, the MAX--MIN
+    Ant Colony Optimiser (MMAS), a priority-vector Particle Swarm Optimiser (PSO), and a
+    budget-sharing hybrid.  The hybrid rests on a falsifiable prediction: the memoryless
+    swarm covers the colony's staleness window immediately after a disruption.  Across 400
+    independent trials the adaptive controller yields no statistically significant
+    improvement; we discuss why and what the result implies for future work.
+  \end{abstract}
+\end{titlepage}
+
+\tableofcontents\newpage
+
+% =============================================================
+\section{Introduction}
+% =============================================================
+
+\subsection{Motivation}
+
+Real-world routing networks are not static. Roads close, link capacities fluctuate, and
+edges are added or removed.  Two complementary strategies handle this:
+
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{Exact recomputation.}  Re-run Dijkstra or A$^*$ after every change.
+        Guaranteed optimal; cost grows with graph size.
+  \item \textbf{Metaheuristic search.}  Maintain a population that continuously samples
+        the search space.  Sub-optimal but cheap; exploits information from prior timesteps.
+\end{enumerate}
+
+The metaheuristic approach introduces a new problem: parameters governing the
+exploration--exploitation balance have an optimal value that depends on how fast the
+environment changes.  The question is whether a controller that measures volatility and
+adjusts these parameters in real time can outperform a fixed, well-tuned setting.
+
+\subsection{Problem Formulation}
+
+\begin{definition}[Dynamic Weighted Graph]
+  A \emph{dynamic weighted graph} is a sequence $\{\calG^{(t)}\}_{t=0}^{T}$ where each
+  $\calG^{(t)} = (\calV,\calE^{(t)},w^{(t)})$ shares a fixed vertex set
+  $\calV = \{1,\ldots,n\}$, has active edge set
+  $\calE^{(t)} \subseteq \calE_{\text{all}}$, and weight function
+  $w^{(t)}:\calE_{\text{all}} \to \RR_{>0}$.
+\end{definition}
+
+\begin{definition}[Dynamic Shortest Path Problem]
+  At each timestep $t$, find a simple path $\pi^{(t)} = (s=v_0,v_1,\ldots,v_k=q)$
+  minimising total weight
+  $c(\pi^{(t)}) = \sum_{i=0}^{k-1}w^{(t)}(v_i,v_{i+1})$
+  subject to $(v_i,v_{i+1})\in\calE^{(t)}$ for all $i$.
+\end{definition}
+
+\begin{definition}[Excess Over Optimum]
+  Let $c^*(\calG^{(t)})$ be the true optimal cost.  The excess of solution
+  $\hat\pi^{(t)}$ is
+  \[
+    \excess^{(t)} = \frac{c(\hat\pi^{(t)})}{c^*(\calG^{(t)})} - 1 \;\ge 0.
+  \]
+\end{definition}
+
+% =============================================================
+\section{Environment Model}
+\label{sec:environment}
+% =============================================================
+
+\subsection{Graph Representation}
+
+The network uses a \emph{static topology superset}
+$\calE_{\text{all}} = \calE_{\text{base}} \cup \calE_{\text{pool}}$
+allocated once per trial.  Each undirected edge $\{u,v\}$ occupies two directed
+\emph{slots}: slot $s$ for arc $(u,v)$ and slot $\texttt{rev}[s]$ for $(v,u)$.
+State at time $t$:
+\begin{align}
+  w^{(t)}_s &\in \RR_{>0} &\text{(slot weight)}\\
+  a^{(t)}_s &\in \{0,1\} &\text{(active mask)}
+\end{align}
+Both arrays are read-only, shared identically by every arm.
+
+\subsection{Graph Models}
+
+\begin{table}[h]\centering
+  \caption{Graph models and their properties.}
+  \begin{tabular}{llll}
+    \toprule
+    Model & Edge rule & Coordinates & A$^*$ heuristic \\
+    \midrule
+    Erd\H{o}s--R\'enyi & Each pair w.p.\ $p$ & None & Zero (Dijkstra) \\
+    Geometric & Connect if $\|u-v\|_2\le r$ & 2-D unit square & Euclidean \\
+    Grid & 4-connected lattice & Integer grid & Manhattan \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Edge weights for spatial models:
+$w(\{u,v\}) = w_{\min} + d(u,v)(w_{\max}-w_{\min})$
+where $d$ is Euclidean or Manhattan distance.
+
+\subsection{Disruption Events}
+
+At each timestep $t$:
+\[
+  K^{(t)} \sim \mathrm{Poisson}(\lambda),\quad \lambda\in\{0,0.1,0.3,0.8\}
+\]
+The rate is \emph{absolute} (not proportional to $|\calE|$), preserving quiet stretches.
+
+\begin{table}[h]\centering
+  \caption{Event kinds and their effect on the graph state.}
+  \label{tab:events}
+  \begin{tabular}{lll}
+    \toprule
+    Kind & Weight update & Active update \\
+    \midrule
+    Closure     & $w_s \leftarrow \infty$ & unchanged \\
+    Traffic up  & $w_s \leftarrow \phi\,w_s$ & unchanged \\
+    Traffic down& $w_s \leftarrow \max(w_s/\phi,\,w^{\text{free}}_s)$ & unchanged \\
+    Reopen      & $w_s \sim \text{Uniform}[w^{\text{free}}_s,\;\phi w^{\text{free}}_s]$ & unchanged \\
+    Delete      & unchanged & $a_s\leftarrow 0$ \\
+    Add         & $w_s\leftarrow w^{\text{free}}_s$ & $a_s\leftarrow 1$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Events disconnecting $s$ from $q$ are rejected.  Cluster size: $C=25$ edges per
+disruption.
+
+\subsection{Pre-materialised Timeline}
+
+The entire event sequence is frozen before any optimiser exists:
+\[
+  \mathcal{S} = (E^{(0)},\ldots,E^{(T-1)}),\quad
+  \calG^{(t)} = \Phi(\calG^{(0)},E^{(0)},\ldots,E^{(t-1)}).
+\]
+Every arm sees byte-identical graph states verified by a BLAKE2b digest.
+
+% =============================================================
+\section{A$^*$ --- The Exact Reference}
+\label{sec:astar}
+% =============================================================
+
+\subsection{Role}
+
+A$^*$ provides $c^*(\calG^{(t)})$ at every timestep and never competes under a budget
+constraint.  Its node expansion count measures the cost of exact recomputation.
+
+\subsection{Algorithm}
+
+$f$-score: $f(v) = g(v) + h(v)$ where $g(v)$ is the known shortest distance from $s$.
+
+\begin{center}
+\begin{minipage}{0.88\linewidth}
+\hrule\medskip
+\textbf{Algorithm 1:} A$^*$ shortest path $(s\to q)$
+
+\smallskip\textit{Input:} $\calG^{(t)}$, source $s$, target $q$, heuristic $h$.
+\textit{Output:} optimal path $\pi^*$, cost $c^*$.
+\hrule\medskip
+\begin{program}
+g(v) := \infty \mbox{ for all } v;\; g(s) := 0;\; \mathit{prev}(v) := \mathbf{nil}
+Q := \{(f(s),s)\} \mbox{ (min-heap)};\; \mathit{closed} := \emptyset
+|while| Q \ne \emptyset |do|
+  \mbox{pop } (\_,u) := \mathrm{pop\text{-}min}(Q)
+  |if| u \in \mathit{closed} \mbox{ then skip}
+  \mathit{closed} := \mathit{closed} \cup \{u\}
+  |if| u = q \mbox{ then break}
+  |for| \mbox{each active arc } (u,v) |do|
+    g' := g(u) + w(u,v)
+    |if| g' < g(v) \mbox{ then}
+      g(v) := g';\; \mathit{prev}(v) := u
+      Q := Q \cup \{(g(v)+h(v),\,v)\}
+    |fi|
+  |od|
+|od|
+|return| \mathrm{reconstruct\text{-}path}(\mathit{prev},q),\; g(q)
+\end{program}
+\hrule
+\end{minipage}
+\end{center}
+
+\subsection{Heuristic Admissibility}
+
+\begin{proposition}
+  For geometric and grid graphs, $h(v) = w_{\mathrm{scale}}\cdot d(v,q)$ is admissible.
+\end{proposition}
+\begin{proof}
+  Every edge satisfies $w(\{u,v\})\ge w_{\min}+d(u,v)\cdot w_{\mathrm{scale}}$, so by
+  the triangle inequality $c^*(v,q)\ge w_{\mathrm{scale}}\cdot d(v,q)=h(v)$.
+\end{proof}
+
+\subsection{Behaviour Under Disruption}
+
+A$^*$ keeps no state.  On each \texttt{rebind}$(\calG^{(t)})$ it discards its solution
+and performs a full re-search, so $\excess^{(t)}_{\mathrm{A}^*}=0$ always.
+
+% =============================================================
+%  Part 2/3: MAX-MIN ACO, PSO, Hybrid
+% =============================================================
+
+\section{MAX--MIN Ant Colony Optimisation (MMAS)}
+\label{sec:aco}
+
+\subsection{Overview}
+
+MMAS maintains a pheromone trail $\tau_s\in[\tau_{\min},\tau_{\max}]$ on each directed
+slot $s$.  Ants build paths stochastically, biased toward high-pheromone low-cost arcs.
+After each iteration the trail is partially evaporated and the best path is reinforced.
+Trails are clamped to $[\tau_{\min},\tau_{\max}]$, preventing premature convergence.
+
+\subsection{Visibility}
+
+\[
+  \eta_s = \frac{1}{w_s + \gamma\cdot h_s},\quad
+  h_s = w_{\mathrm{scale}}\cdot d(v_s,\,q)
+\]
+where $\gamma$ is the goal-weight parameter and $v_s$ is the destination of slot $s$.
+Without $\gamma$, ants have no notion of the target's location and settle $\approx90\%$
+above the optimum on 200-node graphs.
+
+\subsection{Transition Probability}
+
+\begin{definition}[ACO Transition]
+  At node $u$, an ant selects next hop $v$ from unvisited neighbours
+  $\mathcal{N}^+(u)$:
+  \[
+    P(u\to v) =
+    \frac{\tau_{s(u,v)}^{\alpha}\cdot\eta_{s(u,v)}^{\beta}}
+         {\displaystyle\sum_{v'\in\mathcal{N}^+(u)}
+          \tau_{s(u,v')}^{\alpha}\cdot\eta_{s(u,v')}^{\beta}}
+  \]
+  Selection by roulette-wheel sampling: draw $r\sim U[0,\Sigma]$; take the first $v$
+  whose cumulative score exceeds $r$.
+\end{definition}
+
+\subsection{Trail Update (Three Steps)}
+
+\paragraph{Step 1 — Evaporation.}
+\[
+  \tau_s \;\leftarrow\; (1-\rho)\,\tau_s \qquad\forall s
+\]
+
+\paragraph{Step 2 — Reinforcement.}
+Let $\pi^*_{\text{iter}}$ be the best path this iteration with cost $c^*_{\text{iter}}$.
+Each slot $s$ on that path and its reverse are reinforced:
+\[
+  \tau_s \;\mathrel{+}=\; \frac{1}{c^*_{\text{iter}}},\quad
+  \tau_{\texttt{rev}[s]} \;\mathrel{+}=\; \frac{1}{c^*_{\text{iter}}}
+\]
+
+\paragraph{Step 3 — MAX--MIN Clamping.}
+Let $C_{\text{best}}$ be the best cost found so far.
+\begin{align}
+  \tau_{\max} &= \frac{1}{\rho\cdot C_{\text{best}}} \\
+  \tau_{\min} &= \frac{\tau_{\max}}{2n}
+\end{align}
+Clamp: $\tau_s\leftarrow\min(\tau_{\max},\max(\tau_{\min},\tau_s))$.
+
+\begin{remark}
+  Without bounds the ratio $\tau_{\max}/\tau_{\min}$ grows without bound.  At iteration 80
+  on a 30-node graph it reached $9\times10^8$; every ant followed an identical deterministic
+  route.  The bounds cap the ratio at $2n$, keeping the evaporation parameter meaningful.
+\end{remark}
+
+\subsection{State Under Disruption}
+
+Trails are kept across timesteps; inactive slots are zeroed:
+$\tau_s\leftarrow 0$ if $a_s^{(t)}=0$.
+The stale trail on a closed road is the phenomenon under study: the controller's job is
+to accelerate forgetting (raise $\rho$) when it detects disruption.
+
+\subsection{Full Algorithm}
+
+\begin{center}
+\begin{minipage}{0.88\linewidth}
+\hrule\medskip
+\textbf{Algorithm 2:} MAX--MIN ACO at timestep $t$
+
+\smallskip\textit{Input:} $\calG^{(t)}$, trails $\{\tau_s\}$,
+parameters $(\alpha,\beta,\rho,n_{\text{ants}},\gamma)$, budget $B$.
+\textit{Output:} updated trails; incumbent $\hat\pi$.
+\hrule\medskip
+\begin{program}
+\mbox{Rebind: recompute }\{\eta_s\};\mbox{ zero trails on inactive slots}
+b := 0 \mbox{ (evaluations spent)}
+|while| b < B |do|
+  F := \emptyset \mbox{ (successful paths this iteration)}
+  |for| k := 1 |to| n_{\text{ants}} |do|
+    |if| b \ge B |then| \mbox{break} |fi|
+    \pi_k := \mathrm{ConstructPath}(\calG^{(t)},\tau,\eta,\alpha,\beta)
+    b := b + 1
+    |if| \pi_k \mbox{ reaches } q |then| F := F\cup\{\pi_k\} |fi|
+  |od|
+  \mbox{Evaporate: } \tau_s := (1-\rho)\tau_s \mbox{ for all } s
+  |if| F \ne \emptyset |then|
+    \pi^*_{\text{iter}} := \arg\min_{\pi\in F} c(\pi)
+    \mbox{Reinforce } \pi^*_{\text{iter}} \mbox{ (both directions)}
+    |if| c(\pi^*_{\text{iter}}) < c(\hat\pi) |then| \hat\pi := \pi^*_{\text{iter}} |fi|
+  |fi|
+  \mbox{Clamp: } \tau_s := \min(\tau_{\max},\max(\tau_{\min},\tau_s))
+|od|
+|return| \hat\pi,\;\{\tau_s\}
+\end{program}
+\hrule\medskip
+\textbf{Algorithm 3:} ConstructPath (one ant)
+
+\smallskip\textit{Input:} $\calG^{(t)}$, $\tau$, $\eta$, $\alpha$, $\beta$.
+\textit{Output:} path $\pi$, or failure.
+\hrule\medskip
+\begin{program}
+\pi := [s];\; \mathit{visited} := \{s\};\; u := s
+|while| u \ne q |do|
+  N := \{v \mid (u,v)\in\calE^{(t)},\; v\notin \mathit{visited}\}
+  |if| N = \emptyset |then| |return| \mathrm{failure} |fi|
+  \Sigma := \textstyle\sum_{v\in N}\tau_{s(u,v)}^\alpha\eta_{s(u,v)}^\beta
+  \mbox{Draw } r\sim U[0,\Sigma];\; \mathit{acc} := 0
+  |for| \mbox{each } v\in N |do|
+    \mathit{acc} := \mathit{acc} + \tau_{s(u,v)}^\alpha\eta_{s(u,v)}^\beta
+    |if| \mathit{acc} \ge r |then| u^* := v;\; \mbox{break} |fi|
+  |od|
+  \pi := \pi\cdot[u^*];\; \mathit{visited} := \mathit{visited}\cup\{u^*\};\; u := u^*
+|od|
+|return| \pi
+\end{program}
+\hrule
+\end{minipage}
+\end{center}
+
+\subsection{Parameters}
+\begin{table}[h]\centering
+  \caption{MMAS tunable parameters.}
+  \begin{tabular}{lllp{5.5cm}}
+    \toprule Symbol & Default & Range & Interpretation \\ \midrule
+    $\alpha$ & 1.0 & $[0,5]$ & Trail exponent (weight of accumulated memory) \\
+    $\beta$  & 2.0 & $[0,8]$ & Visibility exponent (weight of edge cost) \\
+    $\rho$   & 0.10 & $[0.01,0.90]$ & Evaporation rate (speed of forgetting) \\
+    $n_{\text{ants}}$ & 20 & $[4,100]$ & Paths built per iteration \\
+    $\gamma$ & 1.0 & $[0,5]$ & Goal-direction weight in visibility \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Lambda Branching (Convergence Telemetry)}
+
+\[
+  \lambda_B = \frac{1}{|\mathcal{R}|}\sum_{u\in\mathcal{R}}
+  \Bigl|\bigl\{s(u,v)\;\big|\;v\in\mathcal{N}^+(u),\;
+  \tau_{s(u,v)}\ge\tau^{(u)}_{\min}+0.05(\tau^{(u)}_{\max}-\tau^{(u)}_{\min})\bigr\}\Bigr|
+\]
+$\mathcal{R}$: nodes recently visited.
+$\lambda_B\approx 1$ means convergence; $\lambda_B\approx\bar{d}$ (mean degree) means
+healthy exploration.
+
+% =============================================================
+\section{Priority-Vector Particle Swarm Optimisation}
+\label{sec:pso}
+% =============================================================
+
+\subsection{Encoding}
+
+Each particle $i$ holds a priority vector $\xvec_i\in[0,1]^n$.
+Path construction: starting at $s$, choose
+\[
+  v^* = \arg\max_{v\in\mathcal{N}^+(u),\;v\notin\mathit{visited}}
+        \xvec_i[v]\cdot\eta_{s(u,v)},\quad u\leftarrow v^*
+\]
+The same visibility $\eta$ as MMAS makes the two methods directly comparable.
+Dead-ended particles are \emph{repaired}: priority vector is perturbed and construction
+retried up to $R$ times, each attempt charged to the budget.
+
+\begin{remark}
+  A natural alternative gives each particle a bias $\mathbf{b}\in\RR^n$ and finds the
+  shortest path under $w'(u,v)=w(u,v)(1+b_v)$.  This always returns a valid path, but
+  the optimal solution sits at $\mathbf{b}=\mathbf{0}$ --- a distinguished point --- making
+  the method equivalent to Dijkstra and providing no insight into swarm dynamics.
+\end{remark}
+
+\subsection{Velocity and Position Update}
+
+\begin{align}
+  \vvec_i^{(k+1)} &= w_I\vvec_i^{(k)}
+    + c_1 r_1(\pvec_i - \xvec_i^{(k)})
+    + c_2 r_2(\gvec - \xvec_i^{(k)}) \label{eq:vel}\\
+  \xvec_i^{(k+1)} &= \operatorname{clip}(\xvec_i^{(k)}+\vvec_i^{(k+1)},\;0,\;1)
+  \label{eq:pos}
+\end{align}
+where $r_1,r_2\sim U[0,1]$; $\pvec_i$ = personal best; $\gvec$ = global best.
+
+\subsection{Handling Disruptions}
+
+\begin{itemize}
+  \item \textbf{Positions kept.}  Priorities rank nodes, not edges; a closure does not
+        invalidate the ranking.
+  \item \textbf{Personal costs invalidated:} $c_i\leftarrow\infty$.  Costs were priced
+        against a graph that no longer exists.
+  \item \textbf{Global best position kept.}  Discarding $\gvec$ was measured to cost
+        $\approx90\%$ additional excess under disruption.
+\end{itemize}
+
+\subsection{Full Algorithm}
+
+\begin{center}
+\begin{minipage}{0.88\linewidth}
+\hrule\medskip
+\textbf{Algorithm 4:} Priority-Vector PSO at timestep $t$
+
+\smallskip\textit{Input:} $\calG^{(t)}$, swarm $\{(\xvec_i,\vvec_i,\pvec_i)\}$,
+parameters $(w_I,c_1,c_2,R,\gamma)$, budget $B$.
+\textit{Output:} updated swarm; incumbent $\hat\pi$.
+\hrule\medskip
+\begin{program}
+\mbox{Rebind: recompute }\{\eta_s\};\; c_i := \infty;\;\mbox{re-price }\hat\pi
+b := 0
+|while| b < B |do|
+  |for| i := 1 |to| N |do|
+    |if| b \ge B |then| \mbox{break} |fi|
+    \mbox{Update }\vvec_i,\xvec_i \mbox{ via Eqs.\,(\ref{eq:vel})--(\ref{eq:pos})}
+    \pi_i := \mathrm{Construct}(\xvec_i,\calG^{(t)},\eta);\; b := b+1
+    |if| \pi_i = \mathrm{failure} |then|
+      |for| r := 1 |to| R |do|
+        |if| b \ge B |then| \mbox{break} |fi|
+        \mbox{Perturb }\xvec_i;\; \pi_i := \mathrm{Construct}(\xvec_i,\calG^{(t)},\eta);\; b:=b+1
+        |if| \pi_i \ne \mathrm{failure} |then| \mbox{break} |fi|
+      |od|
+    |fi|
+    |if| \pi_i \ne \mathrm{failure} \mbox{ and } c(\pi_i) < c_i |then|
+      c_i := c(\pi_i);\; \pvec_i := \xvec_i
+    |fi|
+    |if| c(\pi_i) < c(\hat\pi) |then| \hat\pi := \pi_i;\; \gvec := \xvec_i |fi|
+  |od|
+|od|
+|return| \hat\pi
+\end{program}
+\hrule
+\end{minipage}
+\end{center}
+
+\subsection{Parameters}
+\begin{table}[h]\centering
+  \caption{PSO tunable parameters.}
+  \begin{tabular}{lllp{5cm}}
+    \toprule Symbol & Default & Range & Interpretation \\ \midrule
+    $w_I$ & 0.7 & $[0,1]$ & Inertia (velocity momentum) \\
+    $c_1$ & 1.5 & $[0,4]$ & Cognitive coefficient \\
+    $c_2$ & 1.5 & $[0,4]$ & Social coefficient \\
+    $N$   & 20  & $[4,100]$ & Swarm size \\
+    $\gamma$ & 1.0 & $[0,5]$ & Goal-direction weight \\
+    $R$   & 3   & $[0,10]$ & Max repair attempts \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================
+\section{Hybrid ACO-PSO with Budget Sharing}
+\label{sec:hybrid}
+% =============================================================
+
+\subsection{Rationale}
+
+\begin{proposition}[Complementary Failure Modes]
+  \begin{enumerate}[label=(\roman*)]
+    \item \textbf{ACO} fails because pheromone memory points toward routes that no longer
+          exist.  Recovery time $\propto 1/\rho$.
+    \item \textbf{PSO} fails because the swarm has converged; disruption invalidates
+          costs but not positions, leaving particles clustered in a suboptimal region of
+          $\calG^{(t)}$.
+  \end{enumerate}
+\end{proposition}
+
+\begin{remark}[Testable Claim]
+  If the hybrid's advantage is mechanistic, it should manifest as lower
+  \emph{damage} and faster \emph{recovery} in the steps immediately after a
+  disruption, while steady-state excess stays comparable to ACO alone.
+\end{remark}
+
+\subsection{Budget Splitting}
+
+\begin{align}
+  B_{\mathrm{ACO}}^{(t)} &= \max\!\left(1,\;\bigl\lfloor B^{(t)}\cdot f\bigr\rceil\right) \\
+  B_{\mathrm{PSO}}^{(t)} &= \max\!\left(1,\;B^{(t)}-B_{\mathrm{ACO}}^{(t)}\right)
+\end{align}
+$f\in[0.05,0.95]$ is the \emph{ACO fraction}.  The parent meter is charged exactly
+$B_{\mathrm{ACO}}+B_{\mathrm{PSO}}$ (actual work done), preventing budget smuggling.
+
+\subsection{Bidirectional Exchange}
+
+\paragraph{Colony $\to$ Swarm.}
+Let $\hat\pi_A$ be the colony's incumbent.  Boost swarm priorities along its nodes:
+\[
+  \xvec_i[v]\leftarrow\min(\xvec_i[v]+\delta_{\text{ex}},\;1)
+  \quad\forall v\in\hat\pi_A,\;\forall i,\qquad \delta_{\text{ex}}=0.25
+\]
+
+\paragraph{Swarm $\to$ Colony.}
+Let $\hat\pi_P$ be the swarm's incumbent.  Deposit trail on that path:
+\[
+  \tau_s\;\mathrel{+}=\;\frac{1}{c(\hat\pi_P)}\quad\forall s\in\hat\pi_P
+  \quad\text{(both directions via \texttt{rev})}
+\]
+
+\subsection{Full Algorithm}
+
+\begin{center}
+\begin{minipage}{0.88\linewidth}
+\hrule\medskip
+\textbf{Algorithm 5:} Hybrid ACO-PSO at timestep $t$
+
+\smallskip\textit{Input:} $\calG^{(t)}$, ACO state $(\tau,\hat\pi_A)$,
+PSO state $(\{\xvec_i\},\hat\pi_P)$, fraction $f$, budget $B$.
+\textit{Output:} updated states; best incumbent.
+\hrule\medskip
+\begin{program}
+B_A := \max(1,\lfloor Bf \rceil);\; B_P := \max(1, B - B_A)
+\hat\pi_A := \mathrm{MMAS}(\calG^{(t)},\tau,B_A) \mbox{ (Alg.\ 2)}
+\hat\pi_P := \mathrm{PSO}(\calG^{(t)},\{\xvec_i\},B_P) \mbox{ (Alg.\ 4)}
+\mbox{Exchange Colony}\to\mbox{Swarm:}
+|if| \hat\pi_A \ne \mathbf{nil} |then|
+  |for| \mbox{each } v\in\hat\pi_A, \mbox{each } i |do|
+    \xvec_i[v] := \min(\xvec_i[v]+\delta_{\text{ex}},\;1)
+  |od|
+|fi|
+\mbox{Exchange Swarm}\to\mbox{Colony:}
+|if| \hat\pi_P \ne \mathbf{nil} |then|
+  |for| \mbox{each slot } s \mbox{ in } \hat\pi_P |do|
+    \tau_s := \tau_s + 1/c(\hat\pi_P);\;\tau_{\texttt{rev}[s]} := \tau_{\texttt{rev}[s]} + 1/c(\hat\pi_P)
+  |od|
+|fi|
+|return| \arg\min(c(\hat\pi_A),\,c(\hat\pi_P))
+\end{program}
+\hrule
+\end{minipage}
+\end{center}
+
+\subsection{Parameters}
+The hybrid has 12 tunables: 5 ACO (prefixed \texttt{aco\_}), 6 PSO (prefixed
+\texttt{pso\_}), and:
+
+\begin{table}[h]\centering
+  \caption{Hybrid-specific tunable.}
+  \begin{tabular}{lllp{6cm}}
+    \toprule Symbol & Default & Range & Interpretation \\ \midrule
+    $f$ & 0.5 & $[0.05,0.95]$ & ACO fraction of the shared budget \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+$f$ is the natural lever for allocation control: driven by the recency signal, shift
+budget toward PSO (low-$f$) right after a disruption and back toward ACO during calm.
+
+% =============================================================
+%  Part 3/3: Controller, Evaluation, Results, Conclusion
+% =============================================================
+
+% =============================================================
+\section{Adaptive Controller}
+\label{sec:controller}
+% =============================================================
+
+\subsection{Feedback Architecture}
+
+The controller is a discrete-time feedback loop. At timestep $t$:
+\begin{enumerate}[label=(\arabic*)]
+  \item The optimiser searches under current parameters $\bm{\theta}^{(t)}$.
+  \item A signal $\sigma(t)$ is computed from the step's observations.
+  \item The controller proposes updated parameters $\bm{\theta}^{(t+1)}$.
+  \item The optimiser applies the update before the next timestep.
+\end{enumerate}
+
+\subsection{Volatility Signals}
+
+\subsubsection{Edge Ratio Signal}
+$\sigma_{\text{ER}}(t) = \frac{1}{W} \sum_{\ell=t-W+1}^{t} K^{(\ell)}/|\calE^{(\ell)}|$.
+Explore direction: $+1$.
+\textit{Limitation:} Dividing absolute disruptions by $|\calE|$ makes the signal small
+on large graphs, failing to distinguish scenarios at the geometric tier.
+
+\subsubsection{Volatility Signal}
+$\sigma_{\text{V}}(t) = \frac{1}{W} \sum_{\ell=t-W+1}^{t} \mathbf{1}[K^{(\ell)}>0] \in [0,1]$.
+Fraction of recent steps with \emph{any} disruption. Explore direction: $+1$.
+\textit{Limitation:} Saturates at 1.0 when expected disruptions $\lambda \gtrsim 1$.
+
+\subsubsection{Recency Signal (Transient)}
+Tracks time since the last disruption. Decay $\mu\in(0,1)$ (default $0.7$).
+\begin{align}
+  \sigma_{\text{R}}(t) &=
+  \begin{cases}
+    1   & \text{if } K^{(t)} > 0 \\
+    \mu \cdot \sigma_{\text{R}}(t-1) & \text{otherwise}
+  \end{cases}
+\end{align}
+Explore direction: $+1$.
+This is the target for the hybrid budget split $f$, as staleness is a transient property
+peaking immediately after a disruption.
+
+\subsection{Incremental Controller}
+
+The controller compares the signal against its \emph{own running baseline} rather than
+an absolute threshold.
+
+\begin{definition}[Pressure]
+  Let $\bar\sigma^{(t)}$ be the EMA of the signal with smoothing $\alpha_b$:
+  \[
+    \bar\sigma^{(t)} = (1-\alpha_b)\bar\sigma^{(t-1)} + \alpha_b\sigma(t)
+  \]
+  Pressure: $\delta^{(t)} = \xi\cdot\sigma(t) - \bar\sigma^{(t)}$, where $\xi$ is the
+  signal's explore direction.
+\end{definition}
+
+\begin{center}
+\begin{minipage}{0.88\linewidth}
+\hrule\medskip
+\textbf{Algorithm 6:} Incremental Controller (adaptation step at time $t$)
+
+\smallskip\textit{Input:} $\sigma(t)$, $\bm{\theta}^{(t)}$, $\bar\sigma$,
+targets $\mathcal{T}$, step $\Delta$, deadband $\varepsilon_d$, period $p$.
+\textit{Output:} $\bm{\theta}^{(t+1)}$, updated baseline $\bar\sigma$.
+\hrule\medskip
+\begin{program}
+\delta := \xi \cdot \sigma(t) - \bar\sigma
+\bar\sigma := \bar\sigma + \alpha_b\cdot\delta
+|if| t \bmod p \ne 0 \mbox{ or } |\delta| \le \varepsilon_d |then|
+  |return| \bm{\theta}^{(t)},\;\bar\sigma \mbox{ (no change)}
+|fi|
+\bm{\theta}^{(t+1)} := \bm{\theta}^{(t)}
+|for| \mbox{each target } \theta_k\in\mathcal{T} |do|
+  \mathit{step} := +\Delta \mbox{ if } \delta > 0 \mbox{ else } -\Delta
+  \theta_k^{(t+1)} := \theta_k^{(t)} + \mathrm{sign}_k\cdot\mathit{step}
+  \theta_k^{(t+1)} := \min(\theta_k^{\max},\max(\theta_k^{\min},\theta_k^{(t+1)}))
+|od|
+|return| \bm{\theta}^{(t+1)},\;\bar\sigma
+\end{program}
+\hrule
+\end{minipage}
+\end{center}
+
+\begin{table}[h]\centering
+  \caption{Explore direction $\mathrm{sign}_k$ for target parameters.}
+  \begin{tabular}{lll}
+    \toprule Parameter & $\mathrm{sign}_k$ & Reasoning \\ \midrule
+    $\rho$ (evaporation) & $+1$ & Faster evaporation forgets sooner $\to$ explore \\
+    $\alpha$ (trail exponent) & $-1$ & Higher $\alpha$ trusts trail $\to$ exploit \\
+    $\beta$ (visibility exp) & $-1$ & Higher $\beta$ is greedy $\to$ exploit \\
+    $f$ (ACO fraction) & $-1$ & Shift budget away from colony $\to$ explore \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Null Controller (Ablation)}
+
+Returns $\bm{\theta}^{(t+1)}=\bm{\theta}^{(t)}$. Adaptive and frozen arms execute
+identical code paths, differing only in controller logic, drawing from the same random
+stream.
+
+% =============================================================
+\section{Evaluation Framework}
+\label{sec:evaluation}
+% =============================================================
+
+\subsection{Recovery Metrics}
+
+\begin{definition}[Disruption Transient]
+  For a scoreable disruption at time $t$ (preceded by $C_b=2$ quiet steps):
+  \begin{align}
+    b &= \frac{1}{C_b}\sum_{\ell=t-C_b}^{t-1} \excess^{(\ell)} \\
+    \text{damage} &= \max_{\ell\in[t,\,t+3]}\excess^{(\ell)} - b \\
+    \text{recovery\_time} &= \min\{k\ge t \mid \excess^{(k)} \le b + 0.1|b|\}
+  \end{align}
+\end{definition}
+
+\subsection{Statistical Framework}
+
+\paragraph{Pairing Strategy.}
+Comparisons are paired on \emph{trials}, not timesteps, because timesteps within a trial
+share a graph and event sequence. Treating them as independent inflates the sample size.
+Each trial is reduced to a mean excess $\bar\excess$.
+
+\paragraph{Holm Correction.}
+A signal-by-scenario grid produces $M$ simultaneous comparisons. Holm's step-down
+procedure adjusts the raw Wilcoxon signed-rank p-values:
+$p_{(k)}^{\mathrm{Holm}} = \min(1,\;(M-k+1)p_{(k)})$,
+enforcing monotonic significance thresholds.
+
+\paragraph{Effect Size (Cliff's $\delta$).}
+Measures stochastic dominance $\hat\delta \in [-1,1]$. With $T=400$ trials, negligible
+differences can yield tiny p-values. $\hat\delta$ provides scale: $<0.147$ is negligible.
+
+% =============================================================
+\section{Experimental Results}
+\label{sec:results}
+% =============================================================
+
+\textbf{Setup:} Geometric graph ($n=200$). $B=300$ evals. $T=400$ trials.
+
+\begin{table}[h]\centering
+  \caption{Mean excess ($\excess$) over moving optimum.}
+  \begin{tabular}{lllll}
+    \toprule Arm & Static & Low & Moderate & High \\ \midrule
+    A$^*$ & 0.0\% & 0.0\% & 0.0\% & 0.0\% \\
+    ACO & 8.1\% & 8.0\% & 7.2\% & 8.2\% \\
+    PSO & 38.4\% & 37.3\% & 37.0\% & 35.4\% \\
+    Hybrid-Fixed & 4.1\% & 5.0\% & 5.1\% & 6.0\% \\
+    Hybrid-Adaptive & 5.8\% & 5.0\% & 5.0\% & 5.1\% \\ \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]\centering
+  \caption{Ablation: Hybrid-Adaptive vs Hybrid-Fixed.}
+  \begin{tabular}{lllll}
+    \toprule Scenario & $\Delta$ (Adapt $-$ Fixed) & $p^{\mathrm{Holm}}$ & $\hat\delta$ & Verdict \\ \midrule
+    Static   & $+0.017$ & 0.003 & 0.07 & Fixed significantly better \\
+    Low      & $-0.001$ & 0.71 & 0.02 & Not significant \\
+    Moderate & $-0.001$ & 0.94 & 0.01 & Not significant \\
+    High     & $-0.009$ & 0.23 & 0.04 & Not significant \\ \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% =============================================================
+
+We formulated four path-finding algorithms (A$^*$, MMAS, PSO, Hybrid) and an adaptive
+controller. The key findings are:
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{Parameter quality dominates.} Tuned fixed parameters reduce excess by
+        $\approx 3.5$ percentage points over presets.
+  \item \textbf{Online adaptation does not.} Adapting tuned parameters reduces excess
+        by $\approx 0.004$ points, indistinguishable from noise at $n=400$.
+  \item \textbf{Hybrid architecture works.} Hybrid arms significantly outperform plain
+        ACO and PSO across all disruption scenarios.
+\end{enumerate}
+
+Future work will test the allocation thesis (recency-driven hybrid budget splitting) and
+investigate reinforcement-learning controllers and neural metaheuristics.
+
+\begin{thebibliography}{9}
+\bibitem{stutzle2000} T.~Stützle and H.~H.~Hoos. \emph{MAX--MIN Ant System}. FGCS, 16(8):889--914, 2000.
+\bibitem{mavrovouniotis2017} M.~Mavrovouniotis and S.~Yang. \emph{Adapting the Pheromone Evaporation Rate in Dynamic Environments}. EC, 2017.
+\end{thebibliography}
+\end{document}
+
