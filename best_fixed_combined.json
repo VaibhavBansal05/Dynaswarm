@@ -1,0 +1,26 @@
+{
+  "params": {
+    "alpha": 0.6035436031006715,
+    "beta": 2.0579062850876024,
+    "rho": 0.5693046286390957,
+    "n_ants": 27.0,
+    "goal_weight": 4.981944476738879,
+    "inertia": 0.33441348801008575,
+    "cognitive": 3.6558538119893695,
+    "social": 1.718290983084067,
+    "n_particles": 66.0,
+    "repair_attempts": 6.0,
+    "aco_alpha": 0.8840984462191996,
+    "aco_beta": 2.965867936636066,
+    "aco_rho": 0.4636170998475248,
+    "aco_n_ants": 73.0,
+    "aco_goal_weight": 3.0384694679692346,
+    "pso_inertia": 0.05741351893924335,
+    "pso_cognitive": 3.398463576632147,
+    "pso_social": 1.8809143950768235,
+    "pso_n_particles": 60.0,
+    "pso_goal_weight": 3.0825483969840644,
+    "pso_repair_attempts": 5.0,
+    "aco_fraction": 0.8240728242757133
+  }
+}
