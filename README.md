@@ -165,6 +165,13 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M8 · statistics + figures | ✅ |
 | M9 · scale study | 🔬 ready to run |
 | M10 · Pygame replay | ✅ |
+| M11 · full technical documentation | ✅ |
+
+## Documentation
+
+This repository contains exhaustive documentation detailing the project's architecture, mathematical formulations, and experimental methodology:
+- **[DOCUMENTATION.md](DOCUMENTATION.md)**: Comprehensive technical documentation covering the project overview, system architecture, control feedback loops, operational workflows, and experimental setup.
+- **[dynaswarm_algorithms.pdf](dynaswarm_algorithms.pdf)**: A formal, 13-page academic reference detailing the mathematical formulation of A*, MAX-MIN ACO, Priority-Vector PSO, the Hybrid ACO-PSO, and the adaptive controller. (Source: `dynaswarm_algorithms.tex`).
 
 ## Running it
 
