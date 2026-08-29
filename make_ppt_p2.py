@@ -13,25 +13,24 @@ sl = prs.slides.add_slide(prs.slide_layouts[6])
 set_bg(sl)
 section_tag(sl, "METHODOLOGY")
 slide_title(sl, "Layered System Architecture")
-add_image(sl, IMG_ARCH, 0.4, 1.55, 5.8, 5.7)
+add_image(sl, IMG_ARCH, 0.4, 1.5, 6.1, 5.75)
 layers = [
-    ("INTERFACES",  "CLI · Web Dashboard (FastAPI) · Tkinter GUI"),
-    ("ORCHESTRATION","Hydra + dynaswarm.cli · ExperimentManager"),
+    ("CLI",         "Hydra entrypoint · run / tune / analyse / replay"),
     ("TUNING",      "Optuna TPE · seed-separated tuning vs evaluation"),
     ("HARNESS",     "run_trial · build_arms · EvaluationMeter"),
-    ("CONTROL",     "Signals (4) · Controllers (3)"),
-    ("OPTIMIZERS",  "AStar · ACO · PSO · Hybrid"),
-    ("ENVIRONMENT", "GraphView (CSR) · Timeline · Events · Oracle"),
-    ("ANALYSIS",    "Wilcoxon/Holm · Recovery · Plots · Parquet"),
+    ("CONTROL",     "4 signals · 3 controllers"),
+    ("OPTIMIZERS",  "A* · MMAS ACO · priority PSO · Hybrid"),
+    ("CORE / ENVIRONMENT", "GraphView (CSR) · Timeline · Events · Oracle · RNG"),
+    ("IO / ANALYSIS", "Parquet + manifest · Wilcoxon/Holm · Recovery · Plots"),
 ]
 cy = 1.55
 for name, detail in layers:
-    txb(sl, name, 6.5, cy, 2.5, 0.37, size=11, bold=True, colour=ACCENT)
-    txb(sl, detail, 9.1, cy, 4.1, 0.37, size=11, colour=LGREY)
+    txb(sl, name, 6.75, cy, 2.6, 0.37, size=11, bold=True, colour=ACCENT)
+    txb(sl, detail, 9.35, cy, 3.6, 0.5, size=11, colour=LGREY)
     cy += 0.62
-txb(sl, "Key principles:", 6.5, 6.6, 3, 0.35, size=12, bold=True, colour=GOLD)
+txb(sl, "Key principles:", 6.75, 6.35, 3, 0.35, size=12, bold=True, colour=GOLD)
 txb(sl, "Immutable shared world  ·  Budget in work not iterations  ·  Pluggable controllers",
-    6.5, 6.95, 6.7, 0.4, size=11, colour=WHITE, italic=True)
+    6.75, 6.68, 6.2, 0.6, size=11, colour=WHITE, italic=True)
 
 # ── Slide 13: Environment ─────────────────────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
@@ -99,7 +98,7 @@ txb(sl, "Without goal-direction (γ=0): colony settled 90% above optimum on n=20
 sl = prs.slides.add_slide(prs.slide_layouts[6])
 set_bg(sl)
 section_tag(sl, "METHODOLOGY")
-slide_title(sl, "Algorithms: Priority-Vector PSO and Hybrid ACO-PSO")
+slide_title(sl, "Algorithms: Priority-Vector PSO and the Hybrid")
 txb(sl, "Priority-Vector PSO", 0.4, 1.55, 6.1, 0.45, size=18, bold=True, colour=ACCENT)
 txb(sl, "Each particle: x ∈ [0,1]ⁿ  (one priority per node)\nPath: greedy argmax priority[v]·η(u,v)",
     0.4, 2.05, 6.1, 0.85, size=13, colour=WHITE)
@@ -128,9 +127,7 @@ sl = prs.slides.add_slide(prs.slide_layouts[6])
 set_bg(sl)
 section_tag(sl, "METHODOLOGY")
 slide_title(sl, "Adaptive Controller: Sense → Propose → Apply")
-# Flowchart text
-txb(sl, "Environment ──► Signal ──► Controller ──► Optimizer\n        ▲                                          │\n        └──────────────────── (next timestep) ──────┘",
-    1.5, 1.6, 10, 1.1, size=14, colour=ACCENT)
+add_image(sl, IMG_LOOP, 7.1, 1.4, 5.8, 4.3)
 headers = ["Signal", "Formula", "Range", "Limitation"]
 rows = [
     ["Edge Ratio",  "mean(K / |E|) over window",   "[0, ∞)", "Graph-size dependent; tiny on n=200"],
@@ -138,9 +135,11 @@ rows = [
     ["λ-Branching", "mean competitive arcs (ACO)",  "[1, d̄]", "Stagnation detector, NOT volatility"],
     ["Recency ★",   "1.0 on event; ×0.7 each quiet step", "[0,1]","Best for E4 — transient signal"],
 ]
-table_slide_data(sl, headers, rows, 0.4, 2.85, 12.5, 3.5)
+table_slide_data(sl, headers, rows, 0.4, 1.55, 6.4, 3.5)
 txb(sl, "★ Recency preferred for allocation experiment: peaks at staleness, decays geometrically.",
-    0.4, 6.55, 12.5, 0.45, size=13, colour=GOLD, italic=True)
+    0.4, 5.9, 12.5, 0.45, size=13, colour=GOLD, italic=True)
+txb(sl, "One target at a time — moving several parameters together would make it impossible\nto attribute an effect to any single one.",
+    0.4, 6.4, 12.5, 0.7, size=12, colour=LGREY, italic=True)
 
 # ── Slide 17: Controller Update Rule ─────────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
@@ -202,7 +201,7 @@ section_tag(sl, "IMPLEMENTATION")
 slide_title(sl, "Technology Stack & Project Scale")
 txb(sl, "Stack", 0.4, 1.55, 5.5, 0.4, size=18, bold=True, colour=GOLD)
 stack = [
-    "Python 3.11  +  NumPy  +  SciPy",
+    "Python 3.10+  +  NumPy  +  SciPy",
     "Hydra (config)  +  Optuna (tuning)",
     "Apache Parquet (results storage)",
     "Pygame (network visualizer)",
@@ -217,7 +216,7 @@ scale = [
     "786-line LaTeX academic paper (auto-compiled to PDF)",
     "1,377-line DOCUMENTATION.md",
     "Results: steps.parquet — 1 row per arm per timestep",
-    "400 trials × 4 scenarios = full experimental study",
+    "Headline study: 4 arms × 4 scenarios × 30 trials, geometric n=200",
 ]
 bullet_block(sl, scale, 6.5, 2.0, 6.3, 3.5, size=14)
 divider(sl, 5.75)
@@ -246,18 +245,18 @@ bullet_block(sl, [
     "Two ablation arms share family key → differ only in controller",
 ], 6.9, 2.0, 6.1, 3.0, size=13)
 callout(sl,
-    "ACO inner loop uses Python lists (not numpy) for 12-element candidate sets: 2–3× speedup.\n"
-    "Pre-filled 4096-draw random buffer avoids per-roulette numpy call.",
+    "ACO inner loop uses Python lists (not numpy) for ~12-element candidate sets: 26–28× speedup\n"
+    "(n=200 geo: 4039µs → 143µs per construction). Pre-filled random buffer avoids per-roulette numpy call.",
     0.4, 5.25, 12.5, 1.0, border=GOLD, size=13)
 
 # ── Slide 21: Performance Optimisations ──────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
 set_bg(sl)
 section_tag(sl, "IMPLEMENTATION")
-slide_title(sl, "Performance: Making 400 Trials Feasible")
+slide_title(sl, "Performance: Making Large-Scale Tuning Feasible")
 items = [
     ("Python lists for ACO inner loop",
-     "200-node graph, degree ≈18, candidate set ≈12 elements. NumPy dispatch overhead dominated data work.\nProfiling: 72% of runtime in _construct(). Switching to Python lists → 2–3× speedup."),
+     "200-node graph, degree ≈18, candidate set ≈12 elements. NumPy dispatch overhead dominated data work.\nProfiling: 72% of runtime in _construct(). Switching to Python lists → 26–28× speedup (measured, not estimated)."),
     ("Pre-filled random buffer (4096 draws)",
      "Avoids one numpy.random call per roulette-wheel selection step.\nBuffer refilled when exhausted; no RNG state drift."),
     ("Bulk numpy for evaporate / deposit / clamp",

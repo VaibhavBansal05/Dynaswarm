@@ -1,0 +1,89 @@
+{
+  "run_id": "sim",
+  "python": "3.10.12",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "git_sha": "7c9417594ce9d530a94ed17756043cc94d9f2adb",
+  "packages": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pyarrow": "25.0.0"
+  },
+  "config": {
+    "root_seed": 42,
+    "report": false,
+    "graph": {
+      "model": "geometric",
+      "n_nodes": 40,
+      "density": 0.16,
+      "weight_min": 1.0,
+      "weight_max": 100.0,
+      "addable_pool_factor": 1.0
+    },
+    "scenario": {
+      "name": "demo",
+      "events_per_step": 0.6,
+      "cluster_size": 6,
+      "timesteps": 30,
+      "p_closure": 0.15,
+      "p_traffic_up": 0.3,
+      "p_traffic_down": 0.2,
+      "p_reopen": 0.1,
+      "p_delete": 0.1,
+      "p_add": 0.15,
+      "traffic_factor": 2.0
+    },
+    "experiment": {
+      "name": "smoke",
+      "arms": [
+        "astar",
+        "aco"
+      ],
+      "n_trials": 1,
+      "tune_seeds": [
+        9000,
+        9001,
+        9002,
+        9003,
+        9004,
+        9005,
+        9006,
+        9007,
+        9008,
+        9009,
+        9010,
+        9011,
+        9012,
+        9013,
+        9014,
+        9015
+      ],
+      "eval_seeds": [
+        4242
+      ],
+      "parallel_jobs": 1,
+      "record_traces": false
+    },
+    "budget": {
+      "evaluations": 300
+    },
+    "control": {
+      "signal": null,
+      "window": 10,
+      "targets": [
+        "rho"
+      ],
+      "sigma": 0.001,
+      "deadband": 0.0,
+      "baseline_alpha": 0.05,
+      "adapt_every": 1,
+      "fixed_params": {}
+    },
+    "tuning": {
+      "enabled": false,
+      "arm": "aco",
+      "candidates": 60,
+      "trials": 6,
+      "params_file": null
+    }
+  }
+}

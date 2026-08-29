@@ -19,7 +19,7 @@ GREEN   = RGBColor(0x4C, 0xAF, 0x50)
 
 W, H = Inches(13.33), Inches(7.5)      # 16:9
 
-IMG_DIR = "/home/vaibhav/.gemini/antigravity/brain/3d615667-be85-4a4c-a2b0-e14d448bcb21"
+IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ppt_assets")
 
 def new_prs():
     prs = Presentation()
@@ -68,11 +68,10 @@ def bullet_block(slide, items, x, y, w, h, size=15, colour=WHITE, gap=0.38):
         cy += gap
     return cy
 
-def table_slide_data(slide, headers, rows, x, y, w, h, hdr_col=ACCENT):
+def table_slide_data(slide, headers, rows, x, y, w, h, hdr_col=ACCENT, rh=0.32):
     """Draw a simple table using textboxes."""
     cols = len(headers)
     cw = w / cols
-    rh = 0.32
     # header
     for i, hdr in enumerate(headers):
         txb(slide, hdr, x + i*cw, y, cw, rh, size=12, bold=True, colour=hdr_col)
@@ -110,9 +109,14 @@ def add_image(slide, path, x, y, w, h):
 # BUILD PRESENTATION
 # ══════════════════════════════════════════════════════════════
 prs = new_prs()
-IMG_NET  = IMG_DIR + "/network_disruption_1787198421387.png"
-IMG_DIAL = IMG_DIR + "/explore_exploit_dial_1787198434843.png"
-IMG_ARCH = IMG_DIR + "/system_architecture_1787198449747.png"
+IMG_NET  = IMG_DIR + "/fig_disruption_network.png"
+IMG_DIAL = IMG_DIR + "/fig_explore_exploit_dial.png"
+IMG_ARCH = IMG_DIR + "/fig_architecture.png"
+IMG_LOOP = IMG_DIR + "/fig_control_loop.png"
+IMG_ARMS = IMG_DIR + "/fig_arm_comparison.png"
+IMG_PAIR = IMG_DIR + "/fig_hybrid_vs_aco_paired.png"
+IMG_ALLOC = IMG_DIR + "/fig_allocation_ablation.png"
+IMG_SIM = IMG_DIR + "/fig_simulation_storyboard.png"
 
 # ── Slide 1: Title ────────────────────────────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
@@ -136,12 +140,15 @@ section_tag(sl, "INTRODUCTION")
 slide_title(sl, "Why does routing need intelligence?")
 add_image(sl, IMG_NET, 7.8, 1.5, 5.1, 4.8)
 bullets = [
-    "Road networks change continuously: closures, traffic spikes, link additions",
-    "Classical routing (GPS, Dijkstra) recomputes from scratch — exact but expensive at scale",
-    "Swarm algorithms maintain a population that learns over time — but parameters must be tuned",
-    "A fixed parameter setting cannot adapt when disruption rate changes mid-trial",
+    "Road networks change continuously:\nclosures, traffic spikes, link additions",
+    "Classical routing (GPS, Dijkstra) recomputes\nfrom scratch — exact but expensive at scale",
+    "Swarm algorithms maintain a population that\nlearns over time — but parameters must be tuned",
+    "A fixed parameter setting cannot adapt\nwhen disruption rate changes mid-trial",
 ]
-bullet_block(sl, bullets, 0.4, 1.6, 7.2, 4.5, size=16)
+cy = 1.6
+for b in bullets:
+    txb(sl, "• " + b, 0.4, cy, 6.9, 0.9, size=16)
+    cy += 1.0
 
 # ── Slide 3: Exploration vs Exploitation ─────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
@@ -252,7 +259,7 @@ rows = [
      "Trail clamping to [τ_min, τ_max]; reinforces only best solution; prevents premature convergence",
      "Directly implemented; bounds cap trail ratio at 2n, keeping controller meaningful"],
 ]
-table_slide_data(sl, headers, rows, 0.4, 1.55, 12.5, 5.0)
+table_slide_data(sl, headers, rows, 0.4, 1.55, 12.5, 5.0, rh=0.75)
 
 # ── Slide 9: Literature Survey – Adaptation ───────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
@@ -271,7 +278,7 @@ rows = [
      "ACO+PSO combination for static graphs; budget splitting strategies",
      "Motivates our time-varying recency-driven budget split mechanism (E4)"],
 ]
-table_slide_data(sl, headers, rows, 0.4, 1.55, 12.5, 5.0)
+table_slide_data(sl, headers, rows, 0.4, 1.55, 12.5, 5.0, rh=0.75)
 
 # ── Slide 10: Gap Identified ──────────────────────────────────
 sl = prs.slides.add_slide(prs.slide_layouts[6])
