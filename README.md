@@ -1,12 +1,16 @@
 # dynaswarm
 
-**Volatility-driven compute allocation in hybrid swarm metaheuristics for dynamic path optimization.**
+**Recency-driven compute allocation in hybrid swarm metaheuristics for dynamic path optimisation.**
 
 Minor project · School of Computer Engineering, MIT Manipal (MAHE)
 Vaibhav Krishna Bansal · Rudra Rajpurohit · Kartikey Goyal · Pavit Agrawal
 Mentor: Mrs. Vidhya V
 
 > **Design of record: [ARCHITECTURE.md](ARCHITECTURE.md).** That document describes what the system is being built to be, and supersedes this README wherever the two disagree. Settled decisions and the defect log live in [decisionLedger.md](decisionLedger.md).
+
+> ## ⚠️ Every result figure in this README is provisional
+>
+> None of the numbers below can be verified from this repository — they come from runs that are not present here. All of them are superseded by the regeneration programme in [ARCHITECTURE.md](ARCHITECTURE.md) §13, which reports at ≥100 trials on tuned parameters. **Do not cite any figure from this document.** Each table below carries a short reminder.
 
 ---
 
@@ -20,11 +24,14 @@ This project asks a different question.
 
 ## Thesis
 
-> In a hybrid metaheuristic, the **allocation of compute between exploration and exploitation components** should be driven by measured environmental volatility.
+> In a hybrid metaheuristic, the **allocation of compute between its exploring and refining components**
+> should shift with **how recently the environment was disrupted**.
 
-Not *what parameters to use*, but *how much of your budget to give the explorer versus the refiner*, and when to shift that balance. ACO explores; PSO refines. When the world churns, buy exploration. When it settles, buy refinement.
+Not *what parameters to use*, but *how much of a fixed budget goes to the explorer versus the refiner*, and when to move that split. ACO explores and accumulates memory on edges; PSO refines and holds none. A disruption makes the colony's memory stale at exactly the moment it is most trusted — so buy the memoryless component while the trail recovers, and buy the colony back during calm.
 
-**Supporting question:** what should the system actually *sense* to make that decision? We compare **external** signals (how much did the world change?) against **internal** signals (has my colony stagnated?), a choice the literature makes largely arbitrarily.
+**This is not the thesis the project started with.** It began by asking whether allocation should follow measured environmental *volatility*. That was tested and cannot work: tuning separately for each volatility level and then evaluating every vector on every scenario showed that **the optimal parameters do not depend on the disruption rate at all**, so a volatility-driven controller has nothing to steer by. Recency describes a *transient* — a disruption just landed, so the trail is maximally untrustworthy right now — which is a different quantity, and one that sweep said nothing about. See [ARCHITECTURE.md](ARCHITECTURE.md) §1.3.
+
+**Supporting question, since settled:** what should the system actually *sense* to make that decision? **External** signals (how much did the world change?) were compared against **internal** ones (has my colony stagnated?) — a choice the literature makes largely arbitrarily. That comparison is reported below, and its outcome is what moved the thesis from rate to recency.
 
 ## Design commitments
 
@@ -47,7 +54,7 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 
 The project's original goal, and the first positive result. Geometric n=200, paired over 10 trials, equal evaluation budget:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | scenario | ACO | PSO | **Hybrid** | hybrid − ACO | Wilcoxon |
 |---|---|---|---|---|---|
@@ -62,7 +69,7 @@ Treat this as promising rather than settled: ten trials, one graph tier, an untu
 
 The result the harness was built to produce. On geometric n=200 — the tier where disabling pheromone costs +23 points, so the adapted mechanism is genuinely load-bearing — against a tuned baseline, paired over 16 trials:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | signal | scenario | tuned fixed | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
@@ -77,7 +84,7 @@ Smallest p is 0.317 against a Holm threshold of 0.0083 for six tests.
 
 **And here is why.** Tuning separately for each volatility level, then evaluating every vector on every scenario (evaluation seeds, never seen by any tuning run):
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | tuned for ↓ / run on → | static | moderate | high |
 |---|---|---|---|
@@ -93,7 +100,7 @@ Two caveats stated plainly. Twelve trials cannot rule out small effects — the 
 
 `volatility` asks "did anything change this step?", so it saturates once events per step exceed a couple. Because events are driven at a fraction of |E|, that threshold arrives sooner on larger graphs:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | | n=30 (\|E\|≈150) | n=200 (\|E\|≈1200) |
 |---|---|---|
@@ -107,7 +114,7 @@ Pinned at 1.000, the signal has no gradient and the controller cannot move — m
 
 A null result means nothing if the mechanism under test does no work on the instances used. Disabling pheromone entirely (α = 0):
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | graph | with pheromone | without | delta | Wilcoxon |
 |---|---|---|---|---|
@@ -122,7 +129,7 @@ The small tier is therefore a demo and a debugging aid, **not a testbed for any 
 
 A best-fixed vector found by Optuna on sixteen tuning seeds, evaluated on sixteen seeds it never saw:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | | moderate | high |
 |---|---|---|
@@ -139,7 +146,7 @@ The tuned vector is itself informative: α=0.59, β=0.95, ρ=0.75, goal_weight=2
 
 Adapting evaporation alone, driven by each of the three signals, against its own frozen twin — paired by trial, n=16:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | signal | scenario | frozen | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
@@ -156,7 +163,7 @@ No signal beats freezing. The parameter did move — `rho` drifts from 0.100 to 
 
 **The signals behave very differently.** Measured across scenarios:
 
-> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+*(provisional — see the banner at the top)*
 
 | signal | static | low | moderate | high | separation |
 |---|---|---|---|---|---|
@@ -212,12 +219,12 @@ Hydra owns run directories: every run writes to its own timestamped folder along
 
 ```
 src/dynaswarm/
-  core/        rng · graphview · generate · events · schedule · timeline · oracle · meter
+  core/        rng · graphview · generate · events · timeline · oracle · meter
   optimizers/  protocol · astar · aco · pso · hybrid · spec
   control/     signals · controllers
   harness/     arm · trial · runner
   io/          schema · writer
-  analysis/    load · stats · plots
+  analysis/    load · stats · recovery · plots
   tuning/      best_fixed
   viz/         replay
 conf/          graph/ scenario/ experiment/ budget/ ...

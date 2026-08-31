@@ -1207,6 +1207,8 @@ is used (stable but not geometrically meaningful).
 `slow` tests (tuning searches) are excluded by default. Counts below are as
 collected, several files being heavily parametrised.
 
+*Counts as collected on 30 Aug 2026. `test_hygiene` and `test_optimizers` are parametrised across source files and `PARAM_SPEC`, so these numbers move whenever a module or a parameter is added. Run `pytest --collect-only -q` for the current figures rather than trusting this table.*
+
 | File | Tests | What it protects |
 |---|---|---|
 | `test_hygiene.py` | 75 | No global RNG, no GUI imports, statement budget |

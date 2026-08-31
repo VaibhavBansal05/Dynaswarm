@@ -145,7 +145,8 @@ It always contains **exactly one segment**: the goal, the rationale, the files i
 ### Process
 
 - Before declaring a segment complete, run the full test suite and the linter and paste the **actual** output. Not remembered output, not summarised output.
-- Do not `git push`. Do not create or switch branches unless instructed. Local commits only if the segment asks for them.
+- **Never `git push`.** Rudra pushes, and only after the Architect has verified the segment — nothing unreviewed reaches the remote. Do not create or switch branches unless instructed.
+- **One local commit per segment**, when the segment asks for it, using the message the segment supplies. Do not commit work in progress, and do not amend a previous segment's commit.
 - Do not install new dependencies without the segment authorising it. If one is genuinely required, report it and wait.
 
 ### Honesty
