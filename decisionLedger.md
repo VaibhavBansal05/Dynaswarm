@@ -1,0 +1,124 @@
+# Decision Ledger — Dynaswarm
+
+> Every settled decision about the project's direction, architecture and scope, with the reasoning behind it.
+> **Append-only in spirit** — a decision that changes gets a new row marked *superseded*, it does not get edited away.
+>
+> Owner: **Rudra** · Specifications: **the Architect** · Implementation: **vClaude**
+
+---
+
+## 1. Direction and scope
+
+| # | Decision | Choice | Reasoning |
+|---|---|---|---|
+| D1 | **Headline claim** | **Both, sequenced** — the Hybrid works (positive) → parameter adaptation does not, and here is the diagnosed reason → so we asked a different question: allocation | Ends forward-looking instead of on a null. Architecture centres on allocation; harness rigour is the enabling asset beneath it |
+| D2 | **Rebuild scope** | **Core kept, control layer + visualiser rebuilt.** Environment, optimizers, harness, analysis and tests stay | The core is question-independent and its value is concentrated in guards whose reasons are not obvious. The control layer is architected around the dead thesis and must be redesigned |
+| D3 | **Dashboard technology** | **Local web — FastAPI + plain JS** | Legends, side panels, timeline scrubbing and click-to-inspect are all things a game loop fights you on. Requires mentor sign-off (see O1) |
+| D4 | **Dashboard scope** | **All four stages** — build · disrupt · race · inspect | Stage 4 is what makes the novelty visible: `aco_fraction` sliding toward PSO as a disruption lands |
+| D5 | **Results provenance** | **Re-run everything.** No dependency on any teammate's output tree | Every figure traceable to a run Rudra executed and can defend |
+| D6 | **Old parameter-adaptation machinery** | **Demoted to a runnable, tested evidence set.** Out of the live control path, still fully reproducible | It is the evidence for "adaptation cannot help and here is why." Deleting it would destroy the ability to regenerate the project's key explanatory finding |
+| D7 | **Learned allocation policy** | **Rule-based now, pluggable policy interface.** Learned baseline (contextual bandit or tabular Q-learner) built in Phase 4 **if** the mentor signs off. Not PPO | Basket is Computational Intelligence, so swarm methods already fit — learning is an upgrade, not a requirement. But the ±σ rule can only express a monotonic response; if the good policy is non-monotonic the rule structurally cannot represent it. Decision point: end of Phase 3 |
+| D8 | **Canonical testbed** | `medium200` **primary** · `large1000` **generality check** · `small30` **debug-only, enforced by test** · `grid20` optional | Pheromone is proven load-bearing at n=200 (+15.63 pts, p<0.001) and proven irrelevant at n=30 (p=0.91). Claims made on small30 are vacuous |
+| D9 | **Trials per condition** | **100+** for all reported numbers | Trial variance runs 5–12%. n=30 rules out large effects only, and the key result is a small one |
+| D10 | **Evaluation budget** | **A studied variable** — 300 primary, 2000 as a second axis | The allocation thesis is about how a budget is spent. Allocation should matter more when the budget is tight. Nobody has looked |
+| D11 | **Inversion ablations** | **Build all four** — equalise iterations instead of work · pair on timesteps instead of trials · compare against defaults instead of a tuned baseline · run the pheromone claim on small30 | Turns the methodology from a claim into a demonstrated result, and it is entirely original. Safety design mandatory (see D19) |
+| D12 | **Real-world road networks** | **Parked.** Graph loader kept general enough to accept one later. Listed as future work | Out of approved synopsis scope, and the claims rest on the synthetic tiers |
+
+---
+
+## 2. Architecture rulings
+
+*Prompted by vClaude's protocol review, which found two genuine contradictions in the original plan.*
+
+| # | Decision | Choice | Reasoning |
+|---|---|---|---|
+| D13 | **Statement cap** | **Unchanged at 2000, scoped to the science surface.** The dashboard gets its own separate cap | The cap brakes *research code* scope, which is its stated purpose. A dashboard is presentation. Raising it to fit a UI would defeat the brake. Retiring `viz/replay.py` (158 statements) restores headroom anyway |
+| D14 | **Dashboard location** | **`dashboard/` at repo root, outside `src/` entirely.** It imports `dynaswarm` as a library; `dynaswarm` never imports it | *Supersedes an earlier plan to put it at `dynaswarm/dash/`, which fails `FORBIDDEN_IMPORTS`.* This enforces "view, never an engine" structurally rather than by convention, and leaves every hygiene test untouched and unweakened |
+| D15 | **Dashboard: replay or drive?** | **Both, strictly separated.** It drives runs **through `run_trial()`** — the same entry point the CLI uses — and can also load and replay an existing run directory | Stages 1–3 require interactivity. Driving through the real harness means no reimplementation, and a dashboard-driven run writes a normal run directory indistinguishable from a CLI run |
+| D16 | **Dashboard hard constraint** | **configure → run → observe.** Never run → tweak → continue. No dashboard-specific parameter may enter a run; nothing may mutate a run in flight | Preserves what `test_replay_reads_what_it_needs_from_results` was protecting, at the level that actually matters — the dashboard must never be able to influence a result |
+| D17 | **Pygame replay** | **Retired** once the dashboard covers it | Two viewers can disagree about what a result looks like. Same argument as one engine |
+| D18 | **Experiment manifest** | A single declarative file naming every experiment that produces a reported number: config, arms, trials, seeds, expected runtime, and which figure or table it feeds | "Regenerate everything" becomes one command, every number traces to a named run, and the experiment list cannot quietly become a wishlist |
+| D19 | **Inversion ablation safety** | Flags that **cannot be set accidentally**, and every result they produce carries a tag **in the data itself** so it can never be loaded and analysed as a real result | A deliberately-broken path leaking into a real result would be worse than not building them at all |
+| D20 | **Run provenance** | Exploratory runs and manifest runs are separated by convention established in Phase 0 | Three exploratory runs already exist from 30 Aug 2026. Nothing exploratory may drift into the report |
+| D21 | **Metrics and statistics** | **Unchanged.** Excess over the moving optimum primary · recovery metrics · paired-on-trials Wilcoxon · Holm correction across families · Cliff's delta beside every p-value | Already correct. Explicitly not being touched |
+| D22 | **v1 (`DPO_Minor_project-main`)** | **Archived, not deleted.** README marked superseded; `paper/paper.tex` and `docs/presentation.md` deleted | Those two files contain fabricated numbers contradicting the real measurements. But v1's bug history is what justifies v2's entire design and is worth keeping |
+| ~~D23~~ | ~~**Naming convention** — Rudra's component names used everywhere: code, docs, report, deck~~ | **SUPERSEDED by D23a.** The original wording implied renaming at code level, which would break every recorded run |
+| **D23a** | **Naming convention — DISPLAY ONLY** | Rudra's component names are used in the **report, deck, dashboard labels and prose**. **Code identifiers are frozen** — `astar`, `aco`, `pso`, `hybrid`, `hybrid_fixed`, `hybrid_adaptive`, `aco_fixed`, `aco_adaptive` stay exactly as they are. A single display-name map holds the translation | Arm identifiers are not labels — they are **data values written into the `arm` column of every `steps.parquet` on disk**, they key `ARM_BUILDERS`, they appear in Hydra configs, and they are asserted in roughly eight tests. Renaming them would silently break the ability to load any recorded run, buy nothing scientific, and turn D5 into a hard prerequisite rather than a choice |
+| **D23b** | **"Fixed / Static Hybrid" is ambiguous and must be pinned** | The convention names one thing that maps to **two different arms**: `hybrid` (plain — 50/50 split, **no control machinery at all**) and `hybrid_fixed` (recency signal attached, **null controller**, sharing a random stream with `hybrid_adaptive`). They are not interchangeable: only `hybrid_fixed` is a valid ablation twin, because a fair comparison needs two arms identical in every way except whether the controller may move anything. **`ARCHITECTURE.md` pins the full mapping** | Surfaced while ruling on D23a. Left unresolved, the report would use one name for two different experimental conditions |
+| **D25** | **Science statement cap rises at Phase 3 — it is never exempted** | Measured: 1984 today, 1826 after `viz/replay.py` retires, 174 headroom. Phase 0.5's timeline instrumentation and Phase 3's `allocation/` package both draw on it. **The exact new number is fixed when the Phase 3 segment is written, from a measured design sketch, and recorded as a superseding decision** | `allocation/` is **science, not presentation**, so the dashboard's separate-cap reasoning (D13) does not transfer and a carve-out would be a dodge. The justification for raising is real rather than convenient: the thesis moved, and the science surface now carries two control paradigms — allocation live, parameter adaptation as reproducible evidence. Never decided mid-segment, never by deleting other code |
+| **D26** | **Oracle-derived values are forbidden as policy inputs — `excess` explicitly** | `AllocationObservation` drops `excess_last_step` and gains three **self-knowledge** fields instead: `own_cost`, `own_cost_delta`, `path_invalidated`. I1's wording is tightened to name derived quantities | `excess = cost / optimum − 1` is computed from the oracle. A policy that knows its own excess knows how far from optimal it is — information no deployed router has — and "buy PSO when excess is high" would be a policy trained on oracle knowledge, contaminating E4. The replacements are things a real routing system genuinely has |
+| **D27** | **A missing `run_class` is read as `exploratory`** | No migration, no schema version, no rewriting of existing files. `load_steps()` fills the column when absent rather than raising, and handles mixed loads | Every parquet on disk predates the column, and `load_steps()` concatenates across directories, so one old file would poison a mixed load. `exploratory` is the safe default — never reportable, so an old run can never silently become evidence — and it is the correct label for every run that currently exists |
+| **D24** | **Document precedence** | For *what the system is or should be*: **`ARCHITECTURE.md` > `decisionLedger.md` > `AGENT_PROTOCOL.md`**. For *how we work* (process, guardrails, findings format): **`AGENT_PROTOCOL.md` is authoritative**. `WORKFLOW_LOG.md` is **history, never authority**. `currentWorkFlow.md` may **narrow** a segment's scope but never contradict the above — a contradiction is a defect to report, not a licence | Four standing documents produce six possible conflicting pairs; the earlier rule covered only one. The D23 case was exactly such a conflict, and left alone a future session reading the ledger cold would have renamed arm keys |
+
+---
+
+## 3. Phase plan
+
+| Phase | Work | Why it sits here |
+|---|---|---|
+| **0 — Ground truth** | Fix stale `README.md` and `RUNBOOK.md` · **caveat or excise the legacy and superseded figures in `DOCUMENTATION.md` §19.1, §19.2, §20**  · establish the `run_class` convention · clean baseline test run. *(v1 retirement is Rudra's task, outside vClaude's reach)* | Stop the repository from lying to you |
+| **0.5 — Defect triage** | Fix all three defects (§4) **and** write the Layer 1 invariants, including *no access to future state* | Promoted from Phase 2. Everything downstream is worthless while the signal driving the thesis is misaligned |
+| **1 — See it** | The dashboard, all four stages | You cannot judge what you cannot see |
+| **2 — Trust it** | Layer 2 mechanism-alive probes, then Layer 3 guided visual walkthrough per algorithm | Layer 3 requires the dashboard to exist |
+| **3 — Restructure** | Control layer rebuilt around allocation · PSO inertia resolved · learned-policy interface | Architecture matches the thesis |
+| **4 — Run the science** | Tuning → tuned allocation experiment → prescheduled control → recovery analysis → scale study → budget axis → inversion ablations | Now every number means something |
+| **5 — Deliverables** | Report · deck · demo | |
+
+### Verification layers
+
+- **Layer 1 — invariants that make cheating impossible.** Phase 0.5. Existing: cost never below optimum · state hash unchanged · identical state to every arm · budget spent exactly · adding an arm leaves others bit-identical. To write: **no optimizer or signal receives the oracle's answer · no optimizer or signal can reach a future timestep · no optimizer holds a reference to another arm's internals**, with the Hybrid's own ACO↔PSO exchange asserted as the only sanctioned channel.
+- **Layer 2 — mechanism-alive probes.** Phase 2. Does pheromone actually concentrate? Does PSO diversity actually shrink? Does disabling the Hybrid's exchange change results — if not it is decorative. Does `aco_fraction` actually move without pinning to a bound?
+- **Layer 3 — watch it.** Phase 2. Each algorithm run alone on a small geometric graph in the dashboard, walked through against the code.
+
+---
+
+## 4. Defect log
+
+*Found by vClaude during its protocol read, 30 Aug 2026. None fixed at time of writing.*
+
+| # | Defect | Severity | Impact |
+|---|---|---|---|
+| **F1** | **`GraphTimeline.events_at()` is off by one.** `state_at(t)` applies `schedule[t-1]`, so `schedule[k]` is the transition k→k+1 — but `events_at(t)` returns `schedule[t]`, i.e. events that have not happened yet. The unused `changed_edges()` uses the opposite, correct convention | **Critical — thesis-level** | `RecencySignal` fires 1.0 **one step early**; by the step where pheromone is actually stale it has decayed to 0.7. **Every recency-driven result, including the E4 allocation run, was produced on a misaligned signal.** Also shifts the damage window in `analysis/recovery.py` and the alignment in `plots.recovery_profile` (neither yet run). Structurally this is *a signal reading the future* — exactly what the Layer 1 "no future access" invariant exists to catch |
+| **F2** | **`IncrementalController.propose` silently ignores unknown targets.** A hybrid arm left on the default `targets=["rho"]` adapts nothing — hybrid parameters are named `aco_rho` — while still logging `controller_kind=incremental` alongside moving signal values | **High** | The inert-mechanism failure this project has already been bitten by. Inconsistent with `bind()` in `spec.py`, which raises on unknown names. **Fix: raise.** Probably not contaminating — the RUNBOOK command and the Round-1 deck both show `targets=[aco_fraction]` was passed explicitly — but "we got lucky" is not a standard |
+| **F3** | **`scripts/cross_evaluate.py` no longer runs.** Passes a `churn=` keyword `ScenarioCfg` no longer has; immediate `TypeError` | **High** | This is the script behind *"the optimal parameters do not depend on volatility"* — the project's **key explanatory finding**, and what makes the negative result a diagnosis rather than a shrug. That finding currently cannot be reproduced, and every number is being regenerated |
+
+> **Consequence worth stating plainly:** because of F1, the allocation thesis has **never been tested on a correct signal**. The existing "directionally positive, not significant" result is not a disappointing answer — it is a void. Fixing F1 and re-running is now the single highest-value action available to the project.
+
+---
+
+## 5. Open items
+
+| # | Item | Needs | When |
+|---|---|---|---|
+| **O1** | **Web dashboard** — the synopsis lists web deployment as out of scope | Mentor sign-off | One conversation after 18 Sept |
+| **O2** | **Learned allocation policy** — the synopsis excludes neural networks; a contextual bandit arguably is not one, but it is a scope extension either way | Mentor sign-off | Same conversation. Decision point end of Phase 3 |
+| **O3** | **Narrative walkthrough for the mentor** — why `change_rate` was abandoned, and that Expected Outcome #3 was disproved by the team's own measurements | Rudra to present | Same conversation |
+| ~~**O4**~~ | ~~`scripts/` directory missed by the Step 3 audit~~ | **CLOSED.** The directory contains exactly one file, `cross_evaluate.py`, fully covered by F3. Nothing else to find | Closed 30 Aug 2026 |
+| **O5** | **Teammates** — three members hold synopsis-assigned roles and will each be vivaed on their own section | Rudra's call | Before October |
+
+---
+
+## 6. Corrections to the record
+
+| Item | Was | Is |
+|---|---|---|
+| Slow tests | RUNBOOK says four | **Five.** 276 collected, 5 slow, 271 not-slow, all passing |
+| v1 path | `DPO_Minor_project` | `DPO_Minor_project-main`, and **outside vClaude's workspace root** — its retirement is Rudra's task |
+| Dashboard location | `dynaswarm/dash/` | **`dashboard/` at repo root** (D14) |
+| Step 3 audit coverage | Believed complete | **Missed `scripts/`** — now closed, one file only (O4) |
+| Naming convention scope | "everywhere — code, docs, report, deck" | **Display only; code identifiers frozen** (D23a) |
+| Retiring `viz/replay.py` | Assumed safe | **Verified safe.** `test_replay_reads_what_it_needs_from_results` imports only `analysis.load` and `io.writer`, never `viz.replay`. It survives intact and becomes a schema guard for the new dashboard |
+| `DOCUMENTATION.md` §19.2 | Not considered | **In-repo and not legacy**, but "Current Standing (Dynaswarm v2, 10 trials)" falls under D5/D9 regeneration and needs the same treatment as the legacy sections |
+| `DOCUMENTATION.md` §20.3 | Assumed absent | **Already flags the paper-vs-measurement discrepancy internally.** Phase 0 is strengthening an existing caveat, not adding one from scratch |
+| Document precedence | Only protocol vs architecture | **Full order stated** (D24) |
+| Trail survival across deactivation | `graphview.py`'s docstring and an early `ARCHITECTURE.md` draft both said a reopened edge "keeps the trail it had" | **Wrong.** `ACO.rebind()` zeroes the trail on any slot that goes inactive; `_clamp_trails()` then lifts active slots to `tau_min`, so a reopened edge returns **at the floor** — neither keeping its old trail nor staying at zero. The docstring is a defect to fix |
+| `EXPLORE_SIGN` contents | §17.1 asserted no `inertia` entry | **Verified.** Exactly seven entries: `aco_alpha`, `aco_beta`, `aco_fraction`, `aco_rho`, `alpha`, `beta`, `rho`. PSO inertia adaptation was never delivered |
+| F2 sequencing | §8 framed the fix as a "required change on move" to `evidence/` (Phase 3) | **Fixed in place at Phase 0.5** in `control/controllers.py`. The Phase 3 move carries it along |
+| Manifest example | §13's sample was labelled `E3_hybrid_vs_components` while §13.1 assigns that work to E2 | Corrected to `E2_hybrid_vs_components` |
+
+---
+
+*Last updated: 30 Aug 2026 — after Round 3 of the architecture back-and-forth and vClaude's three reviews.*
+
+*Revision 2: added D23a, D23b, D24; closed O4; widened Phase 0 scope to `DOCUMENTATION.md`; recorded five corrections.*
+*Revision 3 (from vClaude's `ARCHITECTURE.md` review): added D25 (statement cap rises, never exempted), D26 (no oracle-derived policy inputs — `excess` removed from the allocation observation), D27 (`run_class` migration rule); recorded five further corrections including the trail-survival defect inherited from `graphview.py`'s docstring.*

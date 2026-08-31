@@ -6,6 +6,8 @@ Minor project · School of Computer Engineering, MIT Manipal (MAHE)
 Vaibhav Krishna Bansal · Rudra Rajpurohit · Kartikey Goyal · Pavit Agrawal
 Mentor: Mrs. Vidhya V
 
+> **Design of record: [ARCHITECTURE.md](ARCHITECTURE.md).** That document describes what the system is being built to be, and supersedes this README wherever the two disagree. Settled decisions and the defect log live in [decisionLedger.md](decisionLedger.md).
+
 ---
 
 ## The question
@@ -45,6 +47,8 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 
 The project's original goal, and the first positive result. Geometric n=200, paired over 10 trials, equal evaluation budget:
 
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
 | scenario | ACO | PSO | **Hybrid** | hybrid − ACO | Wilcoxon |
 |---|---|---|---|---|---|
 | moderate | 8.2% | 13.7% | **7.7%** | −0.5% | 0.625 |
@@ -58,6 +62,8 @@ Treat this as promising rather than settled: ten trials, one graph tier, an untu
 
 The result the harness was built to produce. On geometric n=200 — the tier where disabling pheromone costs +23 points, so the adapted mechanism is genuinely load-bearing — against a tuned baseline, paired over 16 trials:
 
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
 | signal | scenario | tuned fixed | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
 | edge_ratio | moderate | 4.28% | 4.32% | +0.04% | 0.893 |
@@ -70,6 +76,8 @@ The result the harness was built to produce. On geometric n=200 — the tier whe
 Smallest p is 0.317 against a Holm threshold of 0.0083 for six tests.
 
 **And here is why.** Tuning separately for each volatility level, then evaluating every vector on every scenario (evaluation seeds, never seen by any tuning run):
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
 
 | tuned for ↓ / run on → | static | moderate | high |
 |---|---|---|---|
@@ -85,6 +93,8 @@ Two caveats stated plainly. Twelve trials cannot rule out small effects — the 
 
 `volatility` asks "did anything change this step?", so it saturates once events per step exceed a couple. Because events are driven at a fraction of |E|, that threshold arrives sooner on larger graphs:
 
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
 | | n=30 (\|E\|≈150) | n=200 (\|E\|≈1200) |
 |---|---|---|
 | static | 0.00 | 0.00 |
@@ -96,6 +106,8 @@ Pinned at 1.000, the signal has no gradient and the controller cannot move — m
 ## Choosing a testbed that can show the effect
 
 A null result means nothing if the mechanism under test does no work on the instances used. Disabling pheromone entirely (α = 0):
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
 
 | graph | with pheromone | without | delta | Wilcoxon |
 |---|---|---|---|---|
@@ -109,6 +121,8 @@ The small tier is therefore a demo and a debugging aid, **not a testbed for any 
 ## Tuning versus adapting
 
 A best-fixed vector found by Optuna on sixteen tuning seeds, evaluated on sixteen seeds it never saw:
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
 
 | | moderate | high |
 |---|---|---|
@@ -125,6 +139,8 @@ The tuned vector is itself informative: α=0.59, β=0.95, ρ=0.75, goal_weight=2
 
 Adapting evaporation alone, driven by each of the three signals, against its own frozen twin — paired by trial, n=16:
 
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
 | signal | scenario | frozen | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
 | edge_ratio | moderate | 6.81% | 6.82% | +0.00% | 0.674 |
@@ -139,6 +155,8 @@ No signal beats freezing. The parameter did move — `rho` drifts from 0.100 to 
 **This study is underpowered for small effects.** Trial-to-trial variance in excess is 5–12%, so detecting a 0.5% difference would need on the order of a thousand trials. n=16 rules out large effects only.
 
 **The signals behave very differently.** Measured across scenarios:
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
 
 | signal | static | low | moderate | high | separation |
 |---|---|---|---|---|---|
@@ -161,11 +179,13 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M4 · signals + controllers | ✅ |
 | M5 · best-fixed baseline (Optuna) | ✅ |
 | M6 · PSO + Hybrid | ✅ |
-| M7 · **allocation experiment** | 🔬 ready to run |
+| M7 · **allocation experiment** | ⚠️ run once, result void — must be re-run |
 | M8 · statistics + figures | ✅ |
 | M9 · scale study | 🔬 ready to run |
-| M10 · Pygame replay | ✅ |
-| M11 · full technical documentation | ✅ |
+| M10 · Pygame replay | ✅ — to be retired once the dashboard replaces it (`decisionLedger.md` D17) |
+| M11 · full technical documentation | ✅ — but see the provisional and legacy markers in [DOCUMENTATION.md](DOCUMENTATION.md) |
+
+**M7.** It was run once — two scenarios, 30 trials, untuned parameters — on a signal misaligned by defect F1, which made `RecencySignal` fire one timestep early. That result is a void rather than a negative finding, and the experiment is re-run after F1 is fixed. See `decisionLedger.md` §4 and `ARCHITECTURE.md` §13 (E4).
 
 ## Documentation
 

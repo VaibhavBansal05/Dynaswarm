@@ -14,16 +14,21 @@ dynamically-disrupted road network, an adaptive feedback-loop controller that re
 parameters in real time, and a statistically rigorous experimental harness to measure whether the
 controller actually helps.
 
-**Scale (Dynaswarm v2 — the current codebase under `dynaswarm/`):**
+**Scale (Dynaswarm v2 — this codebase, the only one this document describes):**
 - ~10 Python modules, ~7 sub-packages
-- 271 pytest tests, run in ~60 seconds
+- 276 pytest tests collected · 5 slow · 271 not-slow, running in ~60 seconds
 - Hydra-based structured configuration
 - Results written to Apache Parquet for post-hoc analysis
 
-**Scale (DPO_Minor_project — the legacy codebase):**
-- 63 Python files, ~13 300 lines of code
-- 116 passing tests
-- Three user interfaces: CLI, Tkinter GUI, FastAPI web dashboard
+**`DPO_Minor_project` — a separate, retired project, outside this repository.**
+It is a predecessor, not a component of this one, and its size is not part of
+this project's scale. It is not present in this repository, none of its result
+files exist here, and nothing from it may be cited, carried into a report, or
+treated as evidence. It is retained only as history — see §20 for the bug
+history that justifies this project's design, and §20.3 for the discrepancy
+between its paper and its measurements. For the record, it comprised 63 Python
+files, ~13 300 lines, 116 passing tests, and three user interfaces (CLI,
+Tkinter GUI, FastAPI web dashboard).
 
 ---
 
@@ -1198,21 +1203,23 @@ is used (stable but not geometrically meaningful).
 
 ## 18. Test Suite
 
-271 tests, ~60 seconds. Four `slow` tests (tuning searches) excluded by default.
+**276 collected · 5 slow · 271 not-slow · all passing.** ~60 seconds. The five
+`slow` tests (tuning searches) are excluded by default. Counts below are as
+collected, several files being heavily parametrised.
 
 | File | Tests | What it protects |
 |---|---|---|
-| `test_control.py` | 27 | Signal dynamic range, controller step sizes, ablation correctness |
-| `test_optimizers.py` | 24 | Budget exactness, parameter liveness, A\* correctness |
-| `test_harness.py` | 23 | Shared world, stream independence, reproducibility |
+| `test_hygiene.py` | 75 | No global RNG, no GUI imports, statement budget |
+| `test_optimizers.py` | 40 | Budget exactness, parameter liveness, A\* correctness |
+| `test_control.py` | 30 | Signal dynamic range, controller step sizes, ablation correctness |
+| `test_environment.py` | 26 | Graph construction, event clustering, timeline purity |
+| `test_hybrid.py` | 25 | PSO encoding, budget splitting, component exchange |
+| `test_config.py` | 20 | Every config combination composes |
+| `test_harness.py` | 20 | Shared world, stream independence, reproducibility |
 | `test_analysis.py` | 17 | Recovery detection, Holm correction, effect sizes, figures |
-| `test_environment.py` | 17 | Graph construction, event clustering, timeline purity |
-| `test_hybrid.py` | 17 | PSO encoding, budget splitting, component exchange |
 | `test_tuning.py` | 11 | Seed separation, per-arm parameter spaces |
 | `test_rng.py` | 8 | Stream stability under arm insertion |
-| `test_config.py` | 5 | Every config combination composes |
 | `test_testbed.py` | 4 | The tier in use can show the effect being claimed |
-| `test_hygiene.py` | 3 | No global RNG, no GUI imports, statement budget |
 
 ### 18.1 Key Tests Worth Knowing
 
@@ -1240,7 +1247,9 @@ config (excluding wall-clock timings).
 
 ## 19. Experimental Results (Measured)
 
-### 19.1 The 400-Trial Study (Legacy DPO, July 2026)
+### 19.1 The 400-Trial Study — LEGACY AND UNVERIFIABLE, NOT EVIDENCE (Legacy DPO, July 2026)
+
+> **Legacy and unverifiable — not evidence.** Produced by a predecessor codebase that is not part of this project and is not present in this repository. No result files exist for these figures. They are retained as project history only. Never cite them, and never carry a number from this section into a report, figure or presentation.
 
 Run over 400 independent trials per scenario (8 808 seconds). Primary metric: mean excess over
 moving optimum. Arms: A\*, ACO, PSO, Fixed\_Hybrid, Adaptive\_Hybrid.
@@ -1279,7 +1288,11 @@ moving optimum. Arms: A\*, ACO, PSO, Fixed\_Hybrid, Adaptive\_Hybrid.
 
 > Delta = −0.0094 (adaptive better), p = 0.23 → **not significant**
 
-### 19.2 Current Standing (Dynaswarm v2, 10 trials)
+### 19.2 Current Standing — PROVISIONAL (Dynaswarm v2, 10 trials)
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
+Unlike §19.1, these figures were produced by *this* codebase — they are superseded, not legacy.
 
 On `medium200` (geometric, n=200), `high` scenario (0.8 events/step):
 - ACO: ~9.3% excess
@@ -1315,6 +1328,8 @@ variance runs 5–12%; ~30 trials is the minimum for a solid claim.
 
 ## 20. Known Bugs & Limitations (Legacy DPO)
 
+> **This section describes a predecessor codebase — `DPO_Minor_project`, retired, outside this repository — not the current system's state.** It is retained deliberately and in full: a benchmark that ran on the pre-mutation graph, a budget split written but never read, a trigger that fired zero times. That history is precisely what justifies this project's design philosophy — invariants and mechanism-alive probes rather than trust — and it is a report asset, not clutter.
+
 ### 20.1 Bugs Now Fixed
 
 | Component | Bug | Fix |
@@ -1341,7 +1356,18 @@ Highly_Dynamic     A*=46.25  ACO=46.25  PSO=46.25  Hybrid=46.25
 `paper/paper.tex` and `docs/presentation.md` report path costs of 142.3, 148.7, etc.;
 t-statistics of −6.82; "p < 0.001" on every pairwise comparison; "18.3% improvement". None of
 these numbers appear in any generated result file. They are placeholders that directly contradict
-the 400-trial study. Must be corrected before submission.
+the 400-trial study.
+
+**Stated as strongly as it deserves.** Those figures appear in **no generated result file
+anywhere** — not in the predecessor, not here. The two files carrying them,
+`paper/paper.tex` and `docs/presentation.md`, belong to `DPO_Minor_project`, which is a
+**separate retired project outside this repository**; they are not reachable from here and
+their retirement is handled outside this codebase. **No number from those files may enter any
+deliverable of this project** — not the report, not the deck, not a figure, not a caption,
+not as a comparison or a "previous work" citation. They are not merely uncorrected: they are
+fabrications relative to what was measured, and treating them as history rather than as
+evidence is the only safe handling. Every number this project reports is regenerated from a
+run recorded in this repository (`ARCHITECTURE.md` §13).
 
 ---
 

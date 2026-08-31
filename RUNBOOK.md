@@ -24,7 +24,7 @@ required for the live demo.
 **Verify the install:**
 
 ```bash
-./.venv/bin/pytest -q -m "not slow"     # ~60 s, 271 tests
+./.venv/bin/pytest -q -m "not slow"     # ~60 s, 271 not-slow tests
 ./.venv/bin/ruff check src/ tests/
 ./.venv/bin/python -m dynaswarm.cli     # smoke run, ~10 s
 ```
@@ -35,23 +35,24 @@ If the suite passes, everything below will run.
 
 ## 1. The test suite
 
-271 tests, 60 seconds. Four more are marked `slow` (they run tuning
-searches) and are excluded by default; run them with `pytest -q` before a
-release.
+**276 collected · 5 slow · 271 not-slow · all passing.** The five `slow` tests
+run tuning searches and are excluded by default; run them with `pytest -q`
+before a release. Counts below are as collected, several files being heavily
+parametrised.
 
 | file | tests | what it protects |
 |---|---|---|
-| `test_control.py` | 27 | signal dynamic range, controller step sizes, the ablation |
-| `test_optimizers.py` | 24 | budget exactness, parameter liveness, A\* correctness |
-| `test_harness.py` | 23 | shared world, stream independence, reproducibility |
+| `test_hygiene.py` | 75 | no global RNG, no GUI imports, statement budget |
+| `test_optimizers.py` | 40 | budget exactness, parameter liveness, A\* correctness |
+| `test_control.py` | 30 | signal dynamic range, controller step sizes, the ablation |
+| `test_environment.py` | 26 | graph construction, event clustering, timeline purity |
+| `test_hybrid.py` | 25 | PSO encoding, budget splitting, component exchange |
+| `test_config.py` | 20 | every config combination composes |
+| `test_harness.py` | 20 | shared world, stream independence, reproducibility |
 | `test_analysis.py` | 17 | recovery detection, Holm correction, effect sizes, figures |
-| `test_environment.py` | 17 | graph construction, event clustering, timeline purity |
-| `test_hybrid.py` | 17 | PSO encoding, budget splitting, component exchange |
 | `test_tuning.py` | 11 | seed separation, per-arm parameter spaces |
 | `test_rng.py` | 8 | stream stability under arm insertion |
-| `test_config.py` | 5 | every config combination composes |
 | `test_testbed.py` | 4 | the tier in use can show the effect being claimed |
-| `test_hygiene.py` | 3 | no global RNG, no GUI imports, statement budget |
 
 Several are worth knowing about individually, because they fail loudly on
 mistakes that are otherwise silent:
@@ -72,6 +73,13 @@ mistakes that are otherwise silent:
 ---
 
 ## 2. Experiments
+
+> **Superseded as the reported programme.** The E1–E7 sequence below no longer
+> defines what this project reports. The experiment manifest in
+> `ARCHITECTURE.md` §13 does — tuning T1–T4 first, then E1–E12, every reported
+> condition at ≥100 trials. The commands here remain valid as ad-hoc
+> invocations for exploration and debugging, and runs they produce are
+> `exploratory` and are never reportable.
 
 Ordered so each one's result informs the next. Run them from a working
 directory you are happy to fill with output.
@@ -150,6 +158,8 @@ significant p-value on a negligible effect is not a result.
 9.3 % in the busiest scenario, p = 0.004. Thirty trials on one tier would
 make that solid rather than suggestive.
 
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
+
 ### E4 — Does allocation help? *(~20 min)*
 
 The remaining open question, and the one nobody has answered. Both arms
@@ -183,6 +193,8 @@ assert at_bound < 0.2, f"split pinned to a bound for {at_bound:.0%} of steps"
 **Choosing sigma.** Over 60 timesteps the split can drift at most
 `60 x sigma`, against a range of 0.9. Measured on geometric n=200 at the
 moderate rate, the observed span was:
+
+> **Provisional.** These figures come from runs not present in this repository and cannot be verified here. They are superseded by the regeneration programme in `ARCHITECTURE.md` §13, which reports at ≥100 trials. Do not cite them.
 
 | sigma | span of `aco_fraction` |
 |---|---|
