@@ -86,7 +86,9 @@ def replay(
 
     from dynaswarm.analysis.load import load_events, load_steps
 
-    steps = load_steps(run_dir)
+    # One named run, so no class filter — see cli.py.  A viewer that
+    # filtered would refuse to open every run it was pointed at.
+    steps = load_steps(run_dir, run_class=None)
     events = load_events(run_dir)
 
     if scenario is not None:

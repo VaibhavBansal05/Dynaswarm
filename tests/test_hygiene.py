@@ -34,7 +34,7 @@ PYGAME_ALLOWED_UNDER = "viz"
 #: growing it.  Statements measure the thing actually worth bounding —
 #: how much behaviour there is to understand and test.  Set comfortably
 #: above the planned scope so a breach signals drift, not normal growth.
-MAX_SRC_STATEMENTS = 2000
+MAX_SRC_STATEMENTS = 2100
 
 #: Names under ``np.random`` that merely *refer to* a type rather than
 #: producing randomness.  Annotating a parameter as

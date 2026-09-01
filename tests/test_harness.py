@@ -261,7 +261,7 @@ def test_parquet_round_trip_preserves_results(tmp_path):
     with ResultWriter(tmp_path, run_id="test") as writer:
         writer.write(outcome)
 
-    frame = load_steps(tmp_path)
+    frame = load_steps(tmp_path, run_class=None)
     assert len(frame) == len(outcome.steps)
     assert set(frame.arm) == {"astar", "aco"}
     assert (frame[frame.arm == "astar"].excess == 0.0).all()
@@ -277,7 +277,7 @@ def test_map_columns_survive_the_round_trip(tmp_path):
     with ResultWriter(tmp_path, run_id="test") as writer:
         writer.write(outcome)
 
-    frame = expand_maps(expand_maps(load_steps(tmp_path), "params"), "probe")
+    frame = expand_maps(expand_maps(load_steps(tmp_path, run_class=None), "params"), "probe")
     for column in ("params_alpha", "params_rho", "params_n_ants", "probe_lambda_branch"):
         assert column in frame.columns
     assert frame["params_n_ants"].notna().all()
@@ -289,7 +289,7 @@ def test_per_trial_excess_reduces_to_one_row_per_arm_trial(tmp_path):
         for trial in range(3):
             writer.write(run_trial(cfg, trial=trial, arm_names=["astar", "aco"]))
 
-    summary = per_trial_excess(load_steps(tmp_path))
+    summary = per_trial_excess(load_steps(tmp_path, run_class=None))
     assert len(summary) == 3 * 2
     assert (summary[summary.arm == "astar"].mean_excess == 0.0).all()
 
@@ -311,6 +311,6 @@ def test_conditions_from_one_sweep_are_not_merged(tmp_path):
             for trial in range(2):
                 writer.write(run_trial(cfg, trial=trial, arm_names=["aco_adaptive"]))
 
-    summary = per_trial_excess(load_steps(tmp_path))
+    summary = per_trial_excess(load_steps(tmp_path, run_class=None))
     assert len(summary) == 2 * 2, "conditions were pooled instead of kept apart"
     assert set(summary.signal_kind) == {"edge_ratio", "volatility"}

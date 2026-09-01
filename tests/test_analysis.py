@@ -279,7 +279,7 @@ def test_replay_reads_what_it_needs_from_results(tmp_path):
     with ResultWriter(tmp_path, run_id="replay") as writer:
         writer.write(run_trial(cfg, 0, ["astar"]))
 
-    steps, events = load_steps(tmp_path), load_events(tmp_path)
+    steps, events = load_steps(tmp_path, run_class=None), load_events(tmp_path)
     required = {"best_path", "n_nodes", "seed", "timestep", "num_events",
                 "optimum", "best_cost", "excess", "scenario", "trial", "arm"}
     assert required <= set(steps.columns)

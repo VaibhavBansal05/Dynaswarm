@@ -45,6 +45,7 @@ _COST_TOL = 1e-6
 class StepRow:
     """One arm's result at one timestep."""
 
+    run_class: str
     scenario: str
     events_per_step: float
     graph_model: str
@@ -77,6 +78,7 @@ class StepRow:
 class EventRow:
     """One disruption, recorded so signals can be re-derived offline."""
 
+    run_class: str
     scenario: str
     trial: int
     seed: int
@@ -157,6 +159,7 @@ def run_trial(
         for event in timeline.events_at(t):
             outcome.events.append(
                 EventRow(
+                    run_class=cfg.run_class,
                     scenario=cfg.scenario.name,
                     trial=trial,
                     seed=seed,
@@ -213,6 +216,7 @@ def run_trial(
             path = solution.path if solution is not None else ()
             outcome.steps.append(
                 StepRow(
+                    run_class=cfg.run_class,
                     scenario=cfg.scenario.name,
                     events_per_step=cfg.scenario.events_per_step,
                     graph_model=cfg.graph.model,

@@ -8,7 +8,7 @@ Mentor: Mrs. Vidhya V
 
 > **Design of record: [ARCHITECTURE.md](ARCHITECTURE.md).** That document describes what the system is being built to be, and supersedes this README wherever the two disagree. Settled decisions and the defect log live in [decisionLedger.md](decisionLedger.md).
 
-> ## ⚠️ Every result figure in this README is provisional
+> **⚠️ Every result figure in this README is provisional**
 >
 > None of the numbers below can be verified from this repository — they come from runs that are not present here. All of them are superseded by the regeneration programme in [ARCHITECTURE.md](ARCHITECTURE.md) §13, which reports at ≥100 trials on tuned parameters. **Do not cite any figure from this document.** Each table below carries a short reminder.
 

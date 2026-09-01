@@ -88,7 +88,11 @@ def _write_report(directory: Path) -> None:
     )
     from dynaswarm.analysis.recovery import per_trial_recovery
 
-    steps = load_steps(directory)
+    # One named run, not an aggregation: the manifest-only default exists
+    # to stop scratch rows contaminating a pool of runs, and reporting on
+    # the run just produced is not that.  Filtering here would emit blank
+    # figures for every exploratory run and raise nothing.
+    steps = load_steps(directory, run_class=None)
     figures = directory / "figures"
 
     save(excess_over_time(steps), figures / "excess_over_time.png")

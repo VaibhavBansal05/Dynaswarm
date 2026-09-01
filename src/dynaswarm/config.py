@@ -19,6 +19,14 @@ from dataclasses import dataclass, field
 
 from hydra.core.config_store import ConfigStore
 
+#: The only permitted values of :attr:`Config.run_class`.
+#:
+#: ``manifest`` rows are the only ones any reported figure may be built
+#: from.  ``exploratory`` covers smoke runs, dashboard sessions and
+#: sanity checks; ``inversion`` covers deliberately-broken code paths.
+#: Neither of the latter two is ever reportable, and they are never mixed.
+RUN_CLASSES = ("manifest", "exploratory", "inversion")
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
@@ -230,16 +238,37 @@ class Config:
     Attributes:
         report: Emit figures and comparison tables after the run.  Off by
             default so a sweep is not slowed by rendering it will discard.
+        run_class: What kind of run this is, one of :data:`RUN_CLASSES`.
+
+            Defaults to ``exploratory`` because the safe default is the
+            one that is never reportable: a scratch run that forgets to
+            declare itself cannot then be mistaken for evidence.  A
+            reportable run has to say so explicitly.  Recorded in
+            ``manifest.json`` and as a column on every result row, so the
+            distinction survives rows from several runs being
+            concatenated — which is the case the filtering exists for.
     """
 
     root_seed: int = 42
     report: bool = False
+    run_class: str = "exploratory"
     graph: GraphCfg = field(default_factory=GraphCfg)
     scenario: ScenarioCfg = field(default_factory=ScenarioCfg)
     experiment: ExperimentCfg = field(default_factory=ExperimentCfg)
     budget: BudgetCfg = field(default_factory=BudgetCfg)
     control: ControlCfg = field(default_factory=ControlCfg)
     tuning: TuningCfg = field(default_factory=TuningCfg)
+
+    def __post_init__(self) -> None:
+        """Reject an unrecognised run class before any work begins.
+
+        Runs when the composed config is turned into a :class:`Config`,
+        which happens in the CLI before a single trial executes.  A typo
+        that silently became a class nobody filters on would put scratch
+        rows into a reported figure.
+        """
+        if self.run_class not in RUN_CLASSES:
+            raise ValueError(f"unknown run_class {self.run_class!r}; permitted: {RUN_CLASSES}")
 
 
 def register() -> ConfigStore:

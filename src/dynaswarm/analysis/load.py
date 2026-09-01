@@ -12,22 +12,50 @@ from pathlib import Path
 
 import pandas as pd
 
-__all__ = ["load_steps", "load_events", "expand_maps", "per_trial_excess"]
+#: What a row is taken to be when it predates the ``run_class`` column.
+#:
+#: Every parquet written before that column existed is, in fact, a
+#: scratch run — so reading a missing value as ``exploratory`` is not
+#: merely the safe default, it is the correct label.  Safe *and* correct:
+#: an old run can never silently become evidence, and nothing has to be
+#: migrated or rewritten to make that true (D27).
+UNCLASSIFIED = "exploratory"
+
+__all__ = ["load_steps", "load_events", "expand_maps", "per_trial_excess", "UNCLASSIFIED"]
 
 
-def load_steps(directory: Path | str) -> pd.DataFrame:
+def load_steps(
+    directory: Path | str, run_class: str | None = "manifest"
+) -> pd.DataFrame:
     """Load ``steps.parquet`` from one or more run directories.
+
+    Reportable rows only, by default.  A scratch run and a hundred-trial
+    experiment produce byte-identical tables apart from this column, so
+    a load that silently mixed them would build a confident figure out of
+    the wrong data and raise nothing.  Anything other than ``manifest``
+    has to be asked for by name.
 
     Args:
         directory: A run directory, or a parent containing several.
+        run_class: Which class to return; ``None`` returns every row
+            regardless of class, which is what a provenance audit wants.
 
     Returns:
-        All step rows concatenated.
+        The selected step rows, always carrying a ``run_class`` column.
 
     Raises:
         FileNotFoundError: If no ``steps.parquet`` exists beneath it.
     """
-    return _load(directory, "steps.parquet")
+    frame = _load(directory, "steps.parquet")
+    # Two distinct gaps to close, and a mixed load produces both at once:
+    # a tree where *no* run has the column, and a concatenation where
+    # only some do — pandas fills the latter with NaN.  Neither may raise.
+    if "run_class" not in frame.columns:
+        frame["run_class"] = None
+    frame["run_class"] = frame["run_class"].fillna(UNCLASSIFIED)
+    if run_class is not None:
+        frame = frame[frame["run_class"] == run_class]
+    return frame
 
 
 def load_events(directory: Path | str) -> pd.DataFrame:
