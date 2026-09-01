@@ -159,3 +159,81 @@ When a task supplies replacement text **verbatim** and an adjacent paragraph dep
 - The provisional banner is a blockquote containing an `h2`, so it appears in the document outline as a section. A warning is not a section — **corrected in segment 3** to bold text. Architect's markup, Architect's fix.
 - Every other README mention of volatility is legitimately history and was left alone.
 - The `Layout` block's module ordering does not match the tree, but the spec said not to restructure, so only the two named inaccuracies were fixed. Correct restraint.
+
+---
+
+## Entry 003 — Segment 3: Run Provenance and a Clean Baseline
+
+**Phase** 0 (Ground truth) · **Segment** 3 of 3 · **PHASE 0 CLOSED**
+**Verified** 31 Aug 2026 · **Status** COMPLETE
+**Commit** `a71cb93`
+
+### What the segment asked for
+
+Make results files say what they are. A `steps.parquet` from a real 100-trial experiment and one from a ten-second scratch run were indistinguishable, and three exploratory runs already sat in `outputs/`. Loading "all the results" would have silently mixed them and produced a confident wrong answer with no exception — **the exact failure that killed the predecessor codebase.**
+
+First segment to touch code.
+
+### What was done
+
+`run_class` with three permitted values (`manifest` / `exploratory` / `inversion`), defaulting to `exploratory`, validated so an unrecognised value raises. Recorded in `manifest.json`, `steps.parquet` **and** `events.parquet`. `load_steps()` returns `manifest` rows only by default; single-run tools pass the class through and are not filtered (D30). A missing `run_class` reads as `exploratory` (D27), so every run predating the column loads without migration.
+
+Six source files, four test files, `README.md`. Statement cap raised to 2100 (D28).
+
+### Acceptance — ten checks, all independently verified
+
+| # | Result |
+|---|---|
+| 1a | 11 in-scope files |
+| 1b | `conf/ scripts/` empty |
+| 2 | **292 passed**, 5 deselected — 271 before plus 21 new, none lost |
+| 3 | Lint clean |
+| 4 | `src/` at **1998 / 2100** — margin 102 |
+| 5 | Run B: `manifest` in all three places. Run A: `exploratory` |
+| 6 | `load_steps("outputs")` → `['manifest']`; unfiltered → 6360 exploratory + 2880 manifest, no raise |
+| 7 | A\* exact — 720 rows per run, `True` |
+| 8 | `a71cb93` on top, ahead 1, unpushed |
+| 9 | Five named tests pass, **every assertion byte-identical** — the diff is five lines, only the `load_steps()` argument |
+| 10 | Run A's report: 48-row CSVs, 33–108 KB figures — **not blank** |
+
+**Architect verification.** `load.py` and `schema.py` read directly. Confirmed `load_steps(directory, run_class="manifest")`, the migration fill via `UNCLASSIFIED`, and `run_class` in both schemas at lines 26 and 71. Report accurate throughout.
+
+Check 10 is the permanent guard added by the addendum — the check that would have caught the Architect's original contradiction, now part of the suite.
+
+### T0 re-measured, because scope changed
+
+D29 says measure. The addendum added two source files and `EVENT_SCHEMA` **after** the original sketch, so vClaude **re-established the number rather than carrying a stale one forward**: the addendum cost +1 statement (`EventRow.run_class`), everything else free. 1984 → 1997 → 1998.
+
+That is D29 applied correctly on its first outing after being written. A measurement that predates a scope change is not a measurement.
+
+### Three findings worth keeping
+
+**1. The fixture nearly tested the wrong thing.** The first pre-column fixture round-tripped parquet through pandas, which mangles `map<string,double>` columns — three tests failed with `ArrowTypeError`. Rewritten at the Arrow level so the fixture is byte-identical to a real pre-column run **except for the missing column**.
+
+> A fixture that differs from reality in a second way is not testing the migration rule. It is testing the fixture.
+
+**2. The two baseline runs are numerically identical** — ACO 10.33%, PSO 39.50%, hybrid 8.69%. This is **correct, and it is the reproducibility guarantee working**: `run_class` is metadata, not entropy, so it cannot perturb a result. Flagged because three matching result sets could otherwise read as a copy-paste error — including to an examiner.
+
+**3. Ruling 4 was half a fix — Architect error.** `run_class` now lives in `events.parquet`, but **`load_events()` takes no `run_class` argument and applies no filter.** The asymmetry is closed in the data and still open in the loader, and **recovery analysis reads events across runs** — the same exposure one level up. The ruling named the schema; it should have named the loader too. Reported rather than improvised, correctly.
+
+**Ruled: closed in Phase 0.5**, as an explicit task. Phase 0.5 already touches `analysis/recovery.py` — F1's off-by-one shifts the damage window — so it is the same neighbourhood and the same reviewer attention. Segment 3 is not reopened; Phase 0 closes with the gap recorded rather than forgotten.
+
+### Phase 0 closed — what it bought
+
+Three segments. The repository no longer lies about what it knows.
+
+- **Documents** state what is unverifiable, and distinguish *legacy* (predecessor, no result files, never evidence) from *provisional* (this codebase, superseded, being regenerated)
+- **The README no longer asserts the thesis the project disproved**, and says plainly why the thesis changed
+- **Results files declare their own class**, and the default load returns only reportable rows
+- **Runs predating the column load without migration**, so nothing had to be rewritten or discarded
+- **A real baseline exists** on the research tier, with A\* verified exact
+
+No experiment has been run yet. No defect has been fixed. That is the point of a ground-truth phase — the floor is trustworthy before anything is built on it.
+
+### The protocol after three segments
+
+vClaude has now found **five errors in Architect specifications** across three segments: a task with no target, an under-specified section, an unsatisfiable acceptance check, a contradiction that would have produced blank figures silently, and a half-closed ruling. Every one was reported rather than improvised around, and two were caught *before* any work was done.
+
+It has twice declined to proceed on instructions it judged wrong — once refusing to produce the blank-figure run, once refusing to re-do work the Architect wrongly believed unfinished. Both refusals were correct.
+
+**Three conventions now permanent, all originating with vClaude:** the two-scoped-diff acceptance form (Entry 002), the T0 measurement before any `src/` change (D29), and re-measuring when scope changes mid-segment (this entry).
