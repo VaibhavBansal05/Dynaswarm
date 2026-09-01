@@ -225,8 +225,21 @@ class GraphTimeline:
         return len(self.schedule)
 
     def events_at(self, t: int) -> tuple[Event, ...]:
-        """Events applied to reach state ``t``."""
-        return self.schedule[t] if 0 <= t < len(self.schedule) else ()
+        """Events applied to reach state ``t``.
+
+        ``schedule[k]`` is the transition from state *k* to state *k+1*,
+        so the events that **produced** state ``t`` are ``schedule[t-1]``.
+        Nothing precedes the initial state, so ``t = 0`` is empty.
+
+        This returned ``schedule[t]`` until F1 was fixed — the events that
+        had *not happened yet*.  Every component reading it therefore saw
+        one timestep into the future, which is why ``RecencySignal`` fired
+        a step early and every recency-driven result was misaligned.  The
+        lower bound is written ``1 <= t`` rather than ``0 <= t`` because
+        ``schedule[-1]`` is a valid Python index that would silently hand
+        back the final timestep's disruptions instead of raising.
+        """
+        return self.schedule[t - 1] if 1 <= t <= len(self.schedule) else ()
 
     def state_at(self, t: int) -> GraphView:
         """Return the state at timestep ``t``.

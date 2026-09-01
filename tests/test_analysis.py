@@ -117,6 +117,51 @@ def test_per_trial_recovery_covers_every_condition():
     assert (astar.settled_excess.fillna(0.0) == 0.0).all()
 
 
+def test_recovery_time_is_not_structurally_pinned_at_zero():
+    """The instrument must be able to register a non-zero recovery.
+
+    This guards a failure that is far more dangerous than a crash: under
+    F1 the disruption markers sat one step early, so ``excess[t]`` was the
+    *pre*-disruption reading and therefore already inside the recovery
+    band.  Every transient in every arm and every scenario scored as
+    recovering in **0.000 steps**, and the metric — a measurement
+    instrument reading a constant — looked entirely plausible doing it.
+
+    "The hybrid recovers immediately" is a flattering result nobody would
+    have interrogated, and `ARCHITECTURE.md` §11.2 makes recovery a
+    first-class experiment, so it would have been reported.
+
+    Asserted on pooled transients from several trials rather than on a
+    single mean, because a mean over three disruptions can legitimately be
+    zero.  What may never happen is *every* transient recovering instantly.
+    """
+    from dynaswarm.analysis.recovery import disruptions
+    from dynaswarm.config import GraphCfg
+
+    cfg = Config(
+        graph=GraphCfg(n_nodes=30, density=0.3),
+        scenario=ScenarioCfg(name="r", events_per_step=0.8, timesteps=40),
+        experiment=ExperimentCfg(n_trials=6),
+        budget=BudgetCfg(evaluations=150),
+    )
+    pooled = []
+    for trial in range(6):
+        rows = run_trial(cfg, trial, ["aco", "hybrid"]).steps
+        for arm in ("aco", "hybrid"):
+            of_arm = [r for r in rows if r.arm == arm]
+            excess = [None if r.excess is None else float(r.excess) for r in of_arm]
+            events = [r.num_events for r in of_arm]
+            pooled.extend(disruptions(excess, events))
+
+    recovered = [t.recovery for t in pooled if t.recovery is not None]
+    assert recovered, "no transient was scoreable; the fixture is not exercising recovery"
+    assert any(r > 0 for r in recovered), (
+        f"all {len(recovered)} scored transients recovered in 0 steps. That is the "
+        "signature of disruption markers misaligned against the quality series — "
+        "the metric is reading a constant, not measuring recovery"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Statistics
 # ---------------------------------------------------------------------------

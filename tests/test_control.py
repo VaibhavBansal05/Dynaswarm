@@ -152,15 +152,46 @@ def test_volatility_saturates_above_a_few_events_per_step():
     count instead pushes larger graphs past saturation — at a few
     hundred edges even a modest tier delivers enough events that no step
     is ever quiet.
+
+    **The warm-up ramp is asserted, not skipped (F4).**  The signal is a
+    mean over a rolling window, so for its first ``window`` steps it is
+    averaging fewer samples than it claims and necessarily reads low:
+    ``t=0`` is 0.0 because nothing precedes the initial state, then the
+    value climbs as the window fills.  Only from ``t = window`` is it
+    measuring what it purports to.
+
+    That ramp was invisible for the project's entire history because F1
+    made ``t=0`` report a disruption that had not happened, pinning every
+    reading at 1.0.  Asserting only the saturated tail would re-hide it
+    by a different mechanism, so the whole shape is checked here.
     """
-    readings = []
+    window = ControlCfg().window
     for rate in (5.0, 8.0):
         cfg = make_cfg(rate, "volatility", timesteps=25)
         outcome = run_trial(cfg, 0, ["aco_adaptive"])
-        readings.extend(
-            r.signal_value for r in outcome.steps if r.signal_value is not None
+        readings = [r.signal_value for r in outcome.steps if r.signal_value is not None]
+        events = [r.num_events for r in outcome.steps]
+
+        # The signal is the mean of "did anything change" over the window
+        # so far.  Deriving the expectation from the observed events keeps
+        # this an assertion about the *signal*, not about how many
+        # disruptions this particular seed happened to draw.
+        indicator = [1.0 if n > 0 else 0.0 for n in events]
+        expected = [
+            float(np.mean(indicator[max(0, k - window + 1) : k + 1]))
+            for k in range(len(indicator))
+        ]
+        assert readings == pytest.approx(expected), (
+            f"volatility does not match a {window}-step rolling mean of its own input"
         )
-    assert min(readings) > 0.99, "volatility should be pinned at these rates"
+
+        assert readings[0] == 0.0, "nothing precedes the initial state, so t=0 is quiet"
+        assert readings[:window] != readings[window:], "the warm-up ramp must be visible"
+
+        # The original claim, at full strength: once the window is full the
+        # signal is pinned at exactly 1.0 and has no gradient left to offer
+        # a controller.
+        assert min(readings[window:]) == 1.0, "volatility should be pinned at these rates"
 
 
 def test_scenario_tiers_leave_room_to_recover():
