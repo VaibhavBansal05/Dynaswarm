@@ -194,6 +194,72 @@ def test_volatility_saturates_above_a_few_events_per_step():
         assert min(readings[window:]) == 1.0, "volatility should be pinned at these rates"
 
 
+#: Signals that average over a rolling window, and therefore have a warm-up.
+WINDOWED_SIGNALS = ["edge_ratio", "volatility", "lambda_branch"]
+
+
+@pytest.mark.parametrize("signal_kind", WINDOWED_SIGNALS)
+def test_windowed_signals_ramp_before_their_window_fills(signal_kind: str):
+    """F4 — every windowed signal reads low for its first ``window`` steps.
+
+    A rolling mean over a partially-filled window is averaging fewer
+    samples than it claims.  For its first ``window`` steps the signal is
+    not yet measuring what it purports to, and controllers act from
+    ``t = 0`` — so with 60 timesteps and a window of 10, roughly the first
+    sixth of every trial drives adaptation from a signal that is still
+    warming up.  That is a systematic early-life bias in every adaptive
+    arm, and it was invisible for the project's entire history because F1
+    made ``t = 0`` report a disruption that had not happened.
+
+    Asserted here for all three windowed signals, since the shape is a
+    property of the window rather than of any one signal.  Whether a
+    policy should be *permitted* to act before its window fills is a
+    design question deferred to the allocation governor in Phase 3; this
+    test only pins that the ramp exists and is not mistaken for signal.
+    """
+    window = ControlCfg().window
+    cfg = make_cfg(0.8, signal_kind, timesteps=40)
+    outcome = run_trial(cfg, 0, ["aco_adaptive"])
+    readings = [r.signal_value for r in outcome.steps if r.signal_value is not None]
+
+    assert len(readings) > window, "trial must outlast the window to show a ramp"
+    early, settled = readings[:window], readings[window:]
+    assert early != settled[: len(early)], (
+        f"{signal_kind} shows no warm-up ramp; either the window is not being "
+        "filled progressively or the signal is not windowed after all"
+    )
+
+
+def test_recency_has_no_warm_up_because_it_carries_no_window():
+    """The exemption that lets Claim 3 survive F4, asserted rather than assumed.
+
+    ``recency`` is a geometric decay, not a rolling mean: it reads 1.0 on
+    the step a disruption lands and decays from there, with no history to
+    accumulate and nothing to fill.  It therefore has no warm-up bias.
+
+    This distinction is load-bearing. The three windowed signals are the
+    **evidence set** and underpin Claim 2, the diagnosed null.  ``recency``
+    drives Claim 3, the allocation thesis.  F4 touches the evidence for
+    the null; it does not touch the thesis — and that is true only for as
+    long as ``recency`` stays windowless, which is what this asserts.
+    """
+    from dynaswarm.control.signals import SIGNALS, RecencySignal
+
+    signal = make_signal("recency", window=10)
+    assert isinstance(signal, RecencySignal)
+    assert not hasattr(signal, "_history"), (
+        "recency has acquired a rolling window; it would now carry a warm-up "
+        "bias, and Claim 3's exemption from F4 no longer holds"
+    )
+
+    # It reaches full scale on the very first disturbed step, with no ramp.
+    signal.observe(StepObservation(t=0, n_events=3, n_edges=100, best_cost=1.0))
+    assert signal.value() == 1.0, "recency must peak immediately, not accumulate"
+
+    # Every other registered signal is windowed and is covered above.
+    assert set(SIGNALS) - {"recency"} == set(WINDOWED_SIGNALS)
+
+
 def test_scenario_tiers_leave_room_to_recover():
     """Every dynamic tier must leave quiet stretches between disruptions.
 
@@ -352,6 +418,48 @@ def test_inverted_signal_drives_the_opposite_way():
     assert current["rho"] > 0.1, "stagnation should push toward exploration"
 
 
+def test_unknown_target_raises_rather_than_being_dropped():
+    """F2 — a target the optimizer does not declare is an error, not a no-op.
+
+    Silently skipping it produced a controller that logged itself active
+    while adapting nothing.  ``bind()`` in ``optimizers/spec.py`` raises on
+    the same class of mistake; two components answering one error two
+    different ways is how the next person learns the wrong lesson.
+    """
+    controller = IncrementalController(targets=("nonexistent",), sigma=0.01)
+    signal = make_signal("volatility")
+    signal.observe(StepObservation(t=0, n_events=1, n_edges=100, best_cost=1.0))
+    with pytest.raises(KeyError, match="not parameters of this optimizer"):
+        controller.propose(signal, {"rho": 0.1}, 0)
+
+
+def test_a_known_target_still_adapts_normally():
+    """The other direction: raising must not break the working path."""
+    controller = IncrementalController(targets=("rho",), sigma=0.01)
+    signal = make_signal("volatility", window=4)
+    current = {"rho": 0.1}
+    for t in range(8):
+        signal.observe(StepObservation(t=t, n_events=t % 2, n_edges=100, best_cost=1.0))
+        current = controller.propose(signal, current, t)
+    assert current["rho"] != 0.1, "a declared target must still move"
+
+
+def test_a_hybrid_on_the_default_target_now_fails_loudly():
+    """The exact configuration that was silently inert (F2).
+
+    A hybrid's parameters are ``aco_``/``pso_``-prefixed, so the default
+    ``targets=["rho"]`` matches nothing it declares.  Before the fix this
+    arm ran a full trial adapting **nothing** while recording
+    ``controller_kind=incremental`` beside a moving signal value — a
+    mechanism reporting itself alive while doing no work, which is the
+    failure this project has already been bitten by once.
+    """
+    cfg = make_cfg(events_per_step=0.8, signal="recency", timesteps=10)
+    assert cfg.control.targets == ["rho"], "fixture must use the default target"
+    with pytest.raises(KeyError, match=r"\['rho'\]"):
+        run_trial(cfg, 0, ["hybrid_adaptive"])
+
+
 def test_explore_signs_are_declared_for_adapted_parameters():
     assert EXPLORE_SIGN["rho"] > 0, "faster evaporation forgets sooner"
     assert EXPLORE_SIGN["alpha"] < 0, "trusting the trail more is exploitation"
@@ -375,6 +483,52 @@ def test_prescheduled_sweeps_across_the_horizon():
     signal = make_signal("volatility")
     assert controller.propose(signal, {"rho": 0.1}, 0)["rho"] == pytest.approx(0.1)
     assert controller.propose(signal, {"rho": 0.1}, 10)["rho"] == pytest.approx(0.3)
+
+
+def test_prescheduled_raises_on_a_target_the_optimizer_does_not_declare():
+    """F6 — the identical silent drop, in the arm that can least afford it.
+
+    ``PrescheduledController`` becomes ``ScheduledAllocation`` in Phase 3,
+    where it is the honest control for feedback itself: if an open-loop
+    schedule matches a signal-driven policy, what helped was *varying*,
+    not *sensing*.  A silent drop there varies nothing, so it reproduces
+    the frozen arm exactly while logging itself as an active schedule —
+    and the conclusion drawn is "an open-loop schedule does not help
+    either."  That is a false null on the one arm whose entire job is to
+    falsify the control story, and it is indistinguishable from a real
+    result.
+    """
+    controller = PrescheduledController(
+        targets=("aco_fraction",), start=1.0, end=2.0, horizon=10
+    )
+    signal = make_signal("volatility")
+    with pytest.raises(KeyError, match=r"\['aco_fraction'\]"):
+        controller.propose(signal, {"rho": 0.1}, 0)
+
+
+def test_prescheduled_still_sweeps_a_declared_target():
+    """The guard must reject the unknown without freezing the known."""
+    controller = PrescheduledController(
+        targets=("aco_fraction",), start=1.0, end=2.0, horizon=11
+    )
+    signal = make_signal("volatility")
+    current = {"aco_fraction": 0.5, "rho": 0.1}
+    assert controller.propose(signal, current, 10)["aco_fraction"] == pytest.approx(1.0)
+
+
+def test_null_controller_is_exempt_from_the_target_guard_by_construction():
+    """The third controller cannot carry F2/F6, and this says why.
+
+    ``NullController`` has no ``targets`` field at all — it returns
+    ``dict(current)`` unchanged — so there is no target for it to drop
+    silently.  Asserting the absence rather than assuming it means the
+    exemption survives someone adding target handling later: this test
+    fails the moment it stops being true by construction.
+    """
+    assert not hasattr(NullController(), "targets")
+    signal = make_signal("volatility")
+    current = {"aco_fraction": 0.5}
+    assert NullController().propose(signal, current, 0) == current
 
 
 def test_unknown_controller_is_rejected():

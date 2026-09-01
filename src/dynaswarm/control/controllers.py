@@ -128,6 +128,21 @@ class IncrementalController:
     def propose(
         self, signal: Signal, current: Mapping[str, float], t: int
     ) -> dict[str, float]:
+        # A target the optimizer does not declare is a configuration error,
+        # not something to skip over.  Silently dropping it produced an arm
+        # that logged `controller_kind=incremental` beside a moving signal
+        # while adapting nothing at all — a hybrid left on the default
+        # ``targets=["rho"]`` adapts none of its `aco_rho`-prefixed
+        # parameters.  `bind()` in optimizers/spec.py raises on exactly this
+        # mistake; two components answering the same error two different
+        # ways is how the next person learns the wrong lesson.
+        unknown = set(self.targets) - set(current)
+        if unknown:
+            raise KeyError(
+                f"controller target(s) {sorted(unknown)} are not parameters of this "
+                f"optimizer; it declares {sorted(current)}"
+            )
+
         reading = signal.explore_direction * signal.value()
 
         if self._baseline is None:
@@ -177,6 +192,20 @@ class PrescheduledController:
     def propose(
         self, signal: Signal, current: Mapping[str, float], t: int
     ) -> dict[str, float]:
+        # The same configuration error as F2, and worse in this class.  A
+        # prescheduled controller that drops its targets varies *nothing*,
+        # so it returns results identical to the frozen arm while logging
+        # itself as an active schedule.  This is the open-loop control for
+        # feedback itself: if it silently adapts nothing, the reading is
+        # "an open-loop schedule does not help either" — a false null on
+        # the one arm whose job is to falsify the control story.
+        unknown = set(self.targets) - set(current)
+        if unknown:
+            raise KeyError(
+                f"controller target(s) {sorted(unknown)} are not parameters of this "
+                f"optimizer; it declares {sorted(current)}"
+            )
+
         for name in self.targets:
             self._initial.setdefault(name, float(current.get(name, 0.0)))
 

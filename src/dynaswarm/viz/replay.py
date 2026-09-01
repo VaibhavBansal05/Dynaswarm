@@ -89,7 +89,7 @@ def replay(
     # One named run, so no class filter — see cli.py.  A viewer that
     # filtered would refuse to open every run it was pointed at.
     steps = load_steps(run_dir, run_class=None)
-    events = load_events(run_dir)
+    events = load_events(run_dir, run_class=None)
 
     if scenario is not None:
         steps = steps[steps.scenario == scenario]

@@ -29,7 +29,7 @@ import json
 import pandas as pd
 import pytest
 
-from dynaswarm.analysis.load import UNCLASSIFIED, load_steps
+from dynaswarm.analysis.load import UNCLASSIFIED, load_events, load_steps
 from dynaswarm.config import RUN_CLASSES, BudgetCfg, Config, ExperimentCfg, GraphCfg, ScenarioCfg
 from dynaswarm.harness.trial import run_trial
 from dynaswarm.io.writer import ResultWriter, write_manifest
@@ -213,6 +213,42 @@ def test_a_pre_column_run_is_excluded_from_the_default_load(tmp_path):
     assert load_steps(tmp_path).empty
 
 
+def test_load_events_filters_and_migrates_exactly_as_load_steps_does(tmp_path):
+    """The event table carries the same exposure, so it gets the same rules.
+
+    Recovery analysis reads events *across* runs, so an unlabelled scratch
+    run would be mixed into a reported transient there just as silently.
+    Segment 3 added the column to ``EVENT_SCHEMA`` and stopped; the loader
+    was left unfiltered, which closed the gap in the data and left it open
+    in the code path that reads the data.
+    """
+    write_run(tmp_path / "keep", make_cfg(run_class="manifest"), run_id="keep")
+    write_run(tmp_path / "drop", make_cfg(run_class="exploratory"), run_id="drop")
+    write_run(tmp_path / "old", make_cfg(run_class="manifest"), run_id="old")
+    _strip_run_class(tmp_path / "old")  # a genuine pre-column run
+
+    default = load_events(tmp_path)
+    assert not default.empty
+    assert set(default.run_class.unique()) == {"manifest"}, "default is manifest-only"
+
+    every = load_events(tmp_path, run_class=None)
+    assert every.run_class.notna().all(), "no event row may come back unclassified"
+    assert set(every.run_class.unique()) == {"manifest", "exploratory"}
+    assert len(every) > len(default), "the mixed load must include the filtered rows"
+
+
+def test_load_events_reads_a_missing_column_as_exploratory_on_real_data(tmp_path):
+    """The migration rule (D27) applied to events, against a real pre-column file."""
+    write_run(tmp_path, make_cfg(run_class="manifest"))
+    _strip_run_class(tmp_path)
+    assert "run_class" not in pd.read_parquet(tmp_path / "events.parquet").columns
+
+    frame = load_events(tmp_path, run_class=None)
+    assert not frame.empty
+    assert set(frame.run_class.unique()) == {UNCLASSIFIED}
+    assert load_events(tmp_path).empty, "a pre-column run is not reportable"
+
+
 def test_a_mixed_load_classifies_both_halves_and_never_raises(tmp_path):
     """One directory with the column, one without — the concatenation case.
 
@@ -269,3 +305,66 @@ def test_the_report_path_produces_non_empty_output_for_an_exploratory_run(tmp_pa
     steps = load_steps(tmp_path, run_class=None)
     assert not steps.empty
     assert not per_trial_excess(steps).empty
+
+
+# ---------------------------------------------------------------------------
+# F3 — cross_evaluate.py is repaired, though it cannot run until Phase 4
+# ---------------------------------------------------------------------------
+
+
+def test_cross_evaluate_imports_and_builds_a_valid_config():
+    """F3 — the script is correct against today's API and scenarios.
+
+    It cannot be *executed* until Phase 4 produces the per-scenario tuned
+    vectors it needs, so what is testable now is that it constructs valid
+    configuration under the current disruption model.  It previously
+    passed ``churn`` — a fraction of |E| from the superseded proportional
+    model — and raised ``TypeError`` on import of the first config.
+    """
+    import importlib.util
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "cross_evaluate", root / "scripts" / "cross_evaluate.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Today's registered rates, not a translation of the old fractions.
+    assert module.SCENARIOS == {"static": 0.0, "moderate": 0.3, "high": 0.8}
+    assert not hasattr(module, "CHURN"), "the proportional churn model is gone"
+
+    cfg = module.make_cfg({"rho": 0.2}, module.SCENARIOS["high"])
+    assert isinstance(cfg, Config)
+    assert cfg.scenario.events_per_step == 0.8
+    assert cfg.control.fixed_params == {"rho": 0.2}
+    assert cfg.run_class == "exploratory", "a script run is never reportable"
+
+
+def test_cross_evaluate_refuses_to_run_without_tuned_vectors(monkeypatch, tmp_path):
+    """It must fail readably, not with a TypeError or an empty table.
+
+    The original failure mode would have been worse than a crash: an empty
+    glob feeding an empty dict produces a confident-looking cross-
+    evaluation built on default parameters — a vector silently compared
+    against itself.
+    """
+    import importlib.util
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "cross_evaluate_missing", root / "scripts" / "cross_evaluate.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    monkeypatch.setattr(module, "VECTOR_GLOB", str(tmp_path / "nothing" / "*.json"))
+    with pytest.raises(SystemExit) as excinfo:
+        module.require_vectors()
+
+    message = str(excinfo.value)
+    assert "cannot run" in message
+    assert "Phase 4" in message, "must name the phase that produces the vectors"
+    assert "ARCHITECTURE.md" in message, "must name where the step is specified"

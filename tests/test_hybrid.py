@@ -230,7 +230,10 @@ def test_recency_peaks_on_disruption_and_decays():
         scenario=ScenarioCfg(name="t", events_per_step=0.3, timesteps=40),
         experiment=ExperimentCfg(n_trials=1),
         budget=BudgetCfg(evaluations=150),
-        control=ControlCfg(signal="recency"),
+        # A hybrid's parameters are `aco_`/`pso_`-prefixed, so the default
+        # targets=["rho"] names nothing it declares.  That used to be
+        # silently dropped (F2) and now raises, so the target is named.
+        control=ControlCfg(signal="recency", targets=["aco_fraction"]),
     )
     rows = run_trial(cfg, 0, ["hybrid_adaptive"]).steps
     disturbed = [r.signal_value for r in rows if r.num_events > 0]

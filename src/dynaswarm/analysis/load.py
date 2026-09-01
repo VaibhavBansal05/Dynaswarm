@@ -46,21 +46,49 @@ def load_steps(
     Raises:
         FileNotFoundError: If no ``steps.parquet`` exists beneath it.
     """
-    frame = _load(directory, "steps.parquet")
-    # Two distinct gaps to close, and a mixed load produces both at once:
-    # a tree where *no* run has the column, and a concatenation where
-    # only some do — pandas fills the latter with NaN.  Neither may raise.
+    return _classified(_load(directory, "steps.parquet"), run_class)
+
+
+def load_events(
+    directory: Path | str, run_class: str | None = "manifest"
+) -> pd.DataFrame:
+    """Load ``events.parquet`` from one or more run directories.
+
+    Filtered exactly as :func:`load_steps` is, and for the same reason:
+    recovery analysis reads events *across* runs, so an unlabelled scratch
+    run would be mixed into a reported transient just as silently there.
+
+    Args:
+        directory: A run directory, or a parent containing several.
+        run_class: Which class to return; ``None`` returns every row.
+
+    Returns:
+        The selected event rows, always carrying a ``run_class`` column.
+
+    Raises:
+        FileNotFoundError: If no ``events.parquet`` exists beneath it.
+    """
+    return _classified(_load(directory, "events.parquet"), run_class)
+
+
+def _classified(frame: pd.DataFrame, run_class: str | None) -> pd.DataFrame:
+    """Fill the class column, then apply the filter.
+
+    Two distinct gaps to close, and a mixed load produces both at once: a
+    tree where *no* run has the column, and a concatenation where only
+    some do — pandas fills the latter with NaN.  Neither may raise.
+
+    Shared by both loaders rather than written twice.  Provenance
+    filtering that disagreed between the step table and the event table
+    would be worse than none at all, because the disagreement would only
+    surface once someone joined them.
+    """
     if "run_class" not in frame.columns:
         frame["run_class"] = None
     frame["run_class"] = frame["run_class"].fillna(UNCLASSIFIED)
     if run_class is not None:
         frame = frame[frame["run_class"] == run_class]
     return frame
-
-
-def load_events(directory: Path | str) -> pd.DataFrame:
-    """Load ``events.parquet`` from one or more run directories."""
-    return _load(directory, "events.parquet")
 
 
 def _load(directory: Path | str, filename: str) -> pd.DataFrame:
