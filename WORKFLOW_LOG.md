@@ -352,3 +352,130 @@ This required resolving a genuine conflict, and the resolution is now a standing
 Immutability protects a run as *evidence of what happened*. It does not oblige a mislabelled run to keep a label that will actively poison future analysis. A status label is metadata about standing, not a measurement, and correcting it is not falsifying anything. But it is never done silently.
 
 Recorded as **D31**. Executed in segment 5.
+
+---
+
+## Entry 005 — Segment 5: F2, F3, and the Loose Ends
+
+**Phase** 0.5 (Defect triage) · **Segment** 2 of 2 · **PHASE 0.5 CLOSED**
+**Verified** 1 Sept 2026 · **Status** COMPLETE
+**Commit** `20e5bbf` (amended to fold in the addendum's T7)
+
+### What the segment asked for
+
+Close Phase 0.5. Two remaining defects, one reclassification, two carried-forward gaps — then, by addendum, a third defect vClaude found while working.
+
+### What was done
+
+| | |
+|---|---|
+| **F2** | `IncrementalController.propose` now raises on an unknown target, matching `bind()` in `optimizers/spec.py` |
+| **F3** | `cross_evaluate.py` rebuilt against the current scenario definitions; exits readably when the tuned vectors are absent, naming the glob and the Phase 4 step that produces them. Exit 1, no traceback |
+| **F6** | `PrescheduledController` given the same guard (addendum T7) |
+| **T1** | `outputs/2026-09-01/09-29-56` reclassified `manifest` → `exploratory` under D31 |
+| **T4** | `load_events()` given `run_class` filtering, sharing a `_classified()` helper with `load_steps()` |
+| **T5** | The F4 warm-up assertion parametrised across all three windowed signals, with `recency`'s exemption asserted |
+
+**T0, re-measured after the addendum (D29):** `2002 → 2005 / 2100`, margin 95. Projected `+3` before writing — Assign, If, Raise — and it came out at exactly `+3`, counted with the suite's own `_statement_count` rather than a reimplementation of it.
+
+The `+4` for the main block came in under a naive sketch's `+9` because `load_events`'s filtering went into a **shared** `_classified()` helper rather than being duplicated. The reasoning is worth keeping: **provenance filtering that disagreed between the step and event tables would be worse than none**, because the disagreement would only surface when someone joined them.
+
+### The reclassification, and D31's amendment
+
+Digests identical before and after, both tables. Applied at the Arrow level so the `map<string,double>` columns survive — carrying forward segment 4's fixture lesson.
+
+**vClaude found the flaw in D31 as written.** `outputs/` is gitignored, so `RECLASSIFIED.md` lives where version control cannot see it — *the trace was as ephemeral as the thing it described.*
+
+**D31 amended:** the correction is recorded in two places doing two jobs — `RECLASSIFIED.md` in the run directory as the local warning for whoever opens that folder, and **this log entry as the authoritative, tracked, durable record.**
+
+> **Authoritative record of the reclassification.** On 1 Sept 2026, in segment 5, `outputs/2026-09-01/09-29-56` was reclassified from `run_class: manifest` to `run_class: exploratory` in `manifest.json`, `steps.parquet` and `events.parquet`. **Reason:** the run was generated before F1's fix, so its `num_events` column is permanently misaligned by one timestep and it is not reportable for anything disruption-related. **No measurement column was altered** — digests of the quality columns are identical before and after, verified at the Arrow level.
+
+### The record check — the standard this project should hold to
+
+The question was whether F2 ever contaminated a run. The easy answer was *"the RUNBOOK and the deck both show `targets=[aco_fraction]` was passed."* vClaude did not take it.
+
+> All five runs used `targets: ['rho']` — **the inert configuration** — but **none used a controlled arm.** `astar`, `aco`, `pso` and `hybrid` carry no controller, so `IncrementalController.propose` was never constructed and never called.
+
+So the finding is not *"we got lucky with a flag"* but **"the code path could not execute"** — established from the configs themselves rather than from documentation about them. Those are different strengths of claim, and only the second survives a viva.
+
+### F6 — what the guard was hiding
+
+The new test fails against unfixed code (`DID NOT RAISE KeyError`). The artefact worth reading is the consequence, reproduced from the pre-fix `propose` in the configuration that actually triggers it — a 1.0 → 2.0 sweep on `targets=("rho",)` against a hybrid's `aco_`-prefixed vector:
+
+```
+every timestep identical to the frozen vector: True
+  t=0: {'aco_fraction': 0.5, 'aco_rho': 0.08, 'aco_alpha': 1.0}
+  t=9: {'aco_fraction': 0.5, 'aco_rho': 0.08, 'aco_alpha': 1.0}
+```
+
+**Not approximately the frozen arm — byte-identical to it, at every timestep, while the multiplier ran to 2.0.** Nothing downstream could have distinguished `ScheduledAllocation` from its own control.
+
+### The demonstration that was wrong first, and why that matters
+
+vClaude's first attempt at that reproduction passed the target into `current`, so membership succeeded and the sweep worked correctly.
+
+> "I had built a demo of the code not failing, and it looked convincing until I read the numbers."
+
+**This is the same failure as segment 4's fixture, in a different costume.** A reproduction that differs from reality in one detail tests the reproduction. Twice now the detail was small, plausible, and would have produced a confident wrong conclusion. The habit that caught both was reading the output rather than trusting the setup.
+
+### The family audit — and `NullController`'s exemption done properly
+
+Five sites checked. `bind()` is the reference; both controllers now match it.
+
+`NullController` is exempt **by construction**, and vClaude asserted the construction rather than the behaviour:
+
+```python
+assert not hasattr(NullController(), "targets")
+```
+
+The reasoning is the point: *a test that merely checked `propose` returns its input would still pass in a world where someone added target handling without a guard — which is exactly how F2 and F6 got in.* Assert the property that makes the bug impossible, not the symptom of its absence.
+
+### F7 — the fourth site, and it is worse than the bug it was found beside
+
+`harness/arm.py:228` builds the prescheduled controller as `make_controller(spec.controller)` — **no arguments**. It therefore takes every default: `control.targets` is silently discarded, and `start == end == 1.0` makes the multiplier **identically 1.0**, so it varies nothing even on a target it does have.
+
+> **F6 needed a misconfiguration to bite. This needs nothing.** And the new guard does not protect it, because `("rho",)` is legitimately declared by an ACO arm.
+
+**Not fixed, and correctly so.** Choosing `start`, `end` and `horizon` is a Phase 3 science decision, not a defect repair — half-fixing a component whose correct behaviour is undefined would be worse than leaving it named.
+
+Neither F6 nor F7 can have touched a run on disk: **no registered arm requests `prescheduled` at all.**
+
+**Ruled:** logged as F7. Phase 3 must address it when `ScheduledAllocation` is designed, and **`ScheduledAllocation` cannot be considered complete until a test asserts it actually varies something.** That constraint goes into Phase 3's spec.
+
+### The dead fallback — deferred, deliberately
+
+Mirroring F2 exactly left `current.get(name, 0.0)` and `if name in proposed:` unreachable behind the new guard. The `.get` is now not merely redundant but misleading: **it encodes `0.0` as an initial value**, which would come alive as a wrong default if the guard were ever relaxed.
+
+**Ruled: leave it, and fix it in Phase 3** — where both controller classes are restructured into `allocation/` anyway. Touching them twice for tidiness is worse than touching them once for design. Logged so Phase 3 inherits it rather than rediscovering it.
+
+vClaude's reason for leaving it was also right: *"two fixes for one bug should read identically."* Symmetry between F2 and F6 was worth more than removing an unreachable line.
+
+### A counting correction, and a convention
+
+The "313 tests" reported at the close of the first block was the `-m "not slow"` figure given **without the marker qualification**. The full suite stood at 318.
+
+Flagged by vClaude precisely because this log records those counts, and *a number that quietly excludes five tests is the kind of thing that survives a phase unnoticed.*
+
+**Convention from here: always record both, always qualified.** This segment closes at **321 passed, 316 not-slow, 5 slow.** Lint clean across `src/`, `tests/` and `scripts/`. Surface `2005 / 2100`.
+
+### One unasked edit, correctly flagged
+
+vClaude amended the commit line describing D31, which still said the reason was "recorded in the run directory" — D31's superseded form, and the exact claim R1 had corrected. Small, correct, and flagged rather than slipped in. **Approved.**
+
+---
+
+## PHASE 0.5 CLOSED
+
+**Every known defect is fixed or repaired.** F1, F2, F3, F5 and F6 closed. F4 and F7 recorded, scoped and assigned to Phase 3 with the reasons they were not fixed here.
+
+Two segments bought:
+
+- **F1** — the off-by-one that made every component read one timestep into the future, and voided every recency-driven result the project had
+- **F5** — `mean_recovery` reading a constant 0.000, a dead instrument that would have reported a *flattering* result nobody would have interrogated
+- **F2 and F6** — two controllers reporting themselves active while adapting nothing
+- **F3** — the script behind the project's key explanatory finding, restored to runnable
+- **Three Layer 1 invariants**, one of them observed failing before its defect was fixed
+
+And two habits that generalise: **observe the effect, not the call** — and **read the output, do not trust the setup.**
+
+Phase 1 next. The first thing built rather than repaired.
