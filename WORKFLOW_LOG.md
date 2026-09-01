@@ -237,3 +237,118 @@ vClaude has now found **five errors in Architect specifications** across three s
 It has twice declined to proceed on instructions it judged wrong — once refusing to produce the blank-figure run, once refusing to re-do work the Architect wrongly believed unfinished. Both refusals were correct.
 
 **Three conventions now permanent, all originating with vClaude:** the two-scoped-diff acceptance form (Entry 002), the T0 measurement before any `src/` change (D29), and re-measuring when scope changes mid-segment (this entry).
+
+---
+
+## Entry 004 — Segment 4: The Invariants, and F1
+
+**Phase** 0.5 (Defect triage) · **Segment** 1 of 2
+**Verified** 1 Sept 2026 · **Status** COMPLETE
+**Commit** `e7cdffd`
+
+### What the segment asked for
+
+Write the three Layer 1 invariants, **watch I2 fail on the unfixed code**, then fix F1 and watch it pass. The fix is one line; the ordering was the deliverable.
+
+### The sequence, as evidence
+
+**T0 — `+0` statements.** Everything went test-side: the timeline observed by substituting a recording subclass where the harness builds it, optimizers by walking their object graphs from outside. No hook in `src/`. The F1 fix modifies one statement rather than adding any. Surface unchanged at **1998 / 2100**.
+
+**I2's failure, before the fix:**
+
+```
+AssertionError: 60 future-state read(s) out of 71; first at timestep t=0 reading
+schedule[0], which is the transition from state 0 to 1 and has not been applied
+yet. A component is reading the future.
+```
+
+Four failures, all in the I2 family. **I1 and I3 passed on unfixed code**, as required — a failure there would have meant either a wrong test or an undiscovered defect.
+
+**The fix:**
+
+```diff
+-        return self.schedule[t] if 0 <= t < len(self.schedule) else ()
++        return self.schedule[t - 1] if 1 <= t <= len(self.schedule) else ()
+```
+
+`1 <= t`, not `0 <= t`, because `schedule[-1]` is a valid Python index that would have handed back the final timestep's events. `changed_edges()` already used the correct convention and is now pinned to agree.
+
+**After: 9 passed.**
+
+### Why I2 worked — the transferable lesson
+
+> The violation is invisible in `events_at`'s argument. `events_at(t)` at timestep `t` looks innocent. It is visible in **which schedule index is read**. An observer watching arguments would have passed.
+
+**Observe the effect, not the call.** This generalises to I1 and I3, and it will apply again to the allocation governor's saturation checks in Phase 3.
+
+### Blast radius — inherited, not compensating
+
+```
+flagged steps before: [1, 2, 5, 6, 7, 8, 9, 10, 12, 17, 22, 23]
+flagged steps after : [2, 3, 6, 7, 8, 9, 10, 11, 13, 18, 23, 24]
+after == before shifted by +1 ? True
+```
+
+Both consumers read `num_events`; neither does index arithmetic that could offset the error. `recovery.py`'s window is correct given aligned data. **The fix propagates. Neither file needed changing.**
+
+### F5 — the metric that was reading a constant
+
+`mean_recovery` was **identically 0.000** — every arm, every disruption, every scenario. `excess[t]` was the pre-disruption reading, so it always already sat inside the recovery band and everything scored as recovering instantly.
+
+Not a distortion. **A measurement instrument reading a constant** — and one that would have looked entirely plausible in a report, because "the hybrid recovers immediately" is a flattering result nobody interrogates.
+
+`ARCHITECTURE.md` §11.2 makes recovery analysis a first-class experiment precisely because Claim 1's mechanism predicts the advantage lives just after a disruption. **That experiment was going to be run on a dead instrument.**
+
+Same data after the fix: ACO 0.475 steps, hybrid 3.350.
+
+### F4 — the warm-up transient F1 was concealing
+
+Every windowed signal reads low for its first `window` steps, and controllers act from `t=0`. A systematic early-life bias in every adaptive arm, present for the project's entire history, hidden because F1 made `t=0` falsely report a disruption.
+
+Scoped precisely: it affects `edge_ratio`, `volatility` and `lambda_branch` — the **evidence set** behind Claim 2. It does **not** affect `recency`, which is a decay rather than a mean and carries no window. **Claim 3, the allocation thesis, is untouched.**
+
+### R1 — the test was strengthened, not relaxed
+
+The literal `min(readings) > 0.99` could not survive; it asserted a falsehood that only F1 made true. What replaced it asserts strictly more:
+
+| | before | after |
+|---|---|---|
+| Saturation | `min(readings) > 0.99` | `min(readings[window:]) == 1.0` — narrower range, exact value |
+| Warm-up ramp | unasserted | asserted exactly, against a rolling mean derived from observed events |
+| `t=0` | unasserted | asserted quiet |
+| Rates | pooled into one list | checked per rate, so neither can mask the other |
+
+The expectation is **derived from the event series rather than hard-coded**, so it tests the signal rather than this seed's draw. F4's explanation lives in the docstring.
+
+302 passed. Lint clean.
+
+### Check 9 could not run — and that is the finding
+
+The specified guard was `mean_recovery` non-zero on `outputs/2026-08-30/22-53-36`. It is 0.0, and **always will be**.
+
+> All five stored runs predate the fix, so their `num_events` is **recorded data — permanently misaligned**. The fix corrects what new runs write. It cannot repair a parquet.
+
+vClaude implemented the *intent* instead: a permanent test pooling transients across six trials and two arms, asserting not all recovered instantly. Proof it bites, via in-process revert:
+
+```
+WITH F1: 42 recovered, any(>0) = False  max=0
+FIXED  : 44 recovered, any(>0) = True   max=10
+```
+
+**The pooling is the part worth keeping.** `medium200` at 40 steps yields `mean_recovery = 0.0` legitimately on three disruptions, so a per-arm assertion would go red for innocent reasons — and that is exactly how a guard gets weakened later by someone who assumes it is flaky. A guard that cries wolf is a guard that gets removed.
+
+### Ruling — the pre-fix runs, and a new principle
+
+**All five stored runs are permanently unusable for anything disruption-aligned.** Their quality columns (`excess`, `optimum`, `best_cost`) are fine — those derive from `state_at()`, which was always correct. Only `num_events`, and therefore every disruption-relative analysis, is off by one.
+
+`outputs/2026-09-01/09-29-56` — the only `manifest`-class run in existence — carries that misalignment. **Ruled: reclassify it to `exploratory`.**
+
+`manifest` means *reportable*. A run whose disruption alignment is permanently wrong is not reportable for anything touching disruptions, and a class meaning "reportable for some columns but not others" is not a class — it is a footnote nobody reads. Phase 4 regenerates everything at ≥100 trials regardless.
+
+This required resolving a genuine conflict, and the resolution is now a standing principle:
+
+> **A run's measurement data is immutable. Its `run_class` may be corrected — but only with a written reason left in the run directory itself.**
+
+Immutability protects a run as *evidence of what happened*. It does not oblige a mislabelled run to keep a label that will actively poison future analysis. A status label is metadata about standing, not a measurement, and correcting it is not falsifying anything. But it is never done silently.
+
+Recorded as **D31**. Executed in segment 5.
