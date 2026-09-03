@@ -337,3 +337,59 @@ Seeds are the trial's entropy, not a label, so the same seed gives the
 same graph and the same event sequence. Two runs of the same config
 produce byte-identical `steps.parquet` — `test_trials_reproduce_exactly`
 enforces it, excluding only wall-clock timings.
+
+---
+
+## 6. The dashboard
+
+A **local development server**. Not hosted, not exposed, not deployed —
+web deployment is out of scope (synopsis O1), and this stays inside that
+boundary by binding to the loopback address only.
+
+**Install the extra** (it is not part of `dev` — the core installs and
+tests without a web stack):
+
+```bash
+./.venv/bin/pip install -e ".[dashboard]"
+```
+
+**Start it:**
+
+```bash
+./.venv/bin/python -m dashboard.server
+```
+
+Then open <http://127.0.0.1:8000>. Stop it with Ctrl-C.
+
+The port is **8000** and the host is **127.0.0.1**, both fixed in
+`dashboard/server.py:main()`. Nothing outside this machine can reach it.
+
+### What it shows today
+
+As of segment 6 the dashboard is a **scaffold**: it proves the pipe, and
+draws nothing. The page renders, as text, one `medium200` graph built by
+the real engine — node and edge counts, the endpoints `build()` chose,
+and the true shortest-path cost from `core.oracle` — plus which run
+classes exist under `outputs/`. Graph rendering arrives in segment 7.
+
+Two endpoints back it:
+
+```bash
+curl -s localhost:8000/api/graph          # one graph, described
+curl -s localhost:8000/api/runs           # run classes present, plus the D32 caveat
+```
+
+`/api/graph` takes `?seed=` and `?tier_name=` if you want a different
+graph; the defaults are seed 1000 (trial 0's evaluation seed) and
+`medium200`. **`small30` carries no coordinates** — it is Erdős–Rényi —
+so anything visual built on it is a meaningless tangle. That is why the
+research tier is the default and not a convenience.
+
+### The one rule
+
+The dashboard **imports `dynaswarm`; `dynaswarm` never imports the
+dashboard**, and it computes nothing for itself — every number it shows
+is asked of the core. `tests/test_dashboard.py` enforces both, including
+a test that compares the endpoint's A\* expansion count against the
+core's. That count depends on the search's own tie-breaking, so it
+catches a *plausible* reimplementation, not merely a missing route.

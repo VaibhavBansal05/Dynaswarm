@@ -1,151 +1,166 @@
-# SEGMENT 5 — F2, F3, and the Loose Ends
+# SEGMENT 6 — Dashboard Scaffold
 
-**Phase 0.5 · Defect triage · Segment 2 of 2**
+**Phase 1 · See it · Segment 1 of 5**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md`, and `decisionLedger.md` §4 (F2, F3) plus D30, D31, D32. `WORKFLOW_LOG.md` Entry 004 records segment 4 and the rulings this segment executes.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` §15 (the dashboard specification) and §2.3 (structural rules), and `decisionLedger.md` D14–D17, D30, D32. `WORKFLOW_LOG.md` Entries 001–005 record Phases 0 and 0.5.
 > Append your findings to the **bottom** of this file. Do not modify the spec text above it.
 
 ---
 
 ## Goal
 
-Close Phase 0.5. Two remaining defects, one reclassification, and two gaps carried forward.
+Stand up the dashboard's skeleton and **prove the pipe works end to end** — a browser page displaying data that came from the real `dynaswarm` engine, not a fixture and not a reimplementation.
 
-F1 was the dangerous one and it is done. What remains is smaller but not trivial — **F3 in particular is thinking work, not editing work**, and it has a dependency that means it can be repaired here but not run until Phase 4.
+Nothing is drawn in this segment. No graph rendering, no timeline, no arms. Those are segments 2–5. **This segment proves that a page can ask the engine a question and get a true answer back**, and establishes the structural boundaries that keep the dashboard a view rather than a second engine.
+
+## Why a scaffold segment at all
+
+Because the failure this project is guarding against is a second implementation that quietly disagrees with the first. `ARCHITECTURE.md` §2.3 states it as the one rule above all others, and the reason is in the repository's own history: v1 died of instrumentation that looked fine and wasn't.
+
+If the boundary is established and tested **before** any drawing code exists, it cannot be eroded later by someone in a hurry. If it is established afterwards, it will not be.
 
 ---
 
-## ⚠️ T0 — MEASURE FIRST (D29)
+## ⚠️ T0 — MEASURE, but a different measurement this time
 
-Surface at **1998 / 2100** — margin 102. Sketch, count, report, stop if it breaches.
+The **science surface** (`src/`) is at **2005 / 2100**. This segment should add **zero** statements to it — the dashboard lives outside `src/` entirely (D14).
 
-Test-side preferred wherever the work allows it, as in segment 4.
+**Report both:**
+
+1. `src/` count before and after. **If this segment changes it at all, say why.** A scaffold that needs to touch the science surface is a design problem, not a measurement problem — stop and report rather than proceeding.
+2. The **dashboard's own** statement count, against its cap of **1000** (`ARCHITECTURE.md` §2.3). Report the number you land on and how much headroom the remaining four segments have.
+
+**One thing to verify rather than assume:** `test_hygiene`'s `FORBIDDEN_IMPORTS` scan currently covers `src/`. Confirm it does **not** reach `dashboard/`, so importing FastAPI there is legal without touching that test. If it does reach it, **stop and report** — that changes the design, and D14 exists precisely because of that scan.
 
 ---
 
 ## Scope
 
 **In scope**
-- `src/dynaswarm/control/controllers.py` — F2
-- `scripts/cross_evaluate.py` — F3
-- `src/dynaswarm/analysis/load.py` — `load_events()` filter
-- `tests/` — new and parametrised tests
-- `outputs/2026-09-01/09-29-56/` — **the one authorised exception** to the never-touch-outputs rule, under D31 and only as T1 specifies
+- `dashboard/` — new, at the **repo root**, outside `src/`
+- `pyproject.toml` — a `dashboard` optional-dependency group
+- `tests/` — the boundary tests and the dashboard statement cap
+- `.gitignore` — only if the dashboard needs it
 - One local commit
 
 **Out of scope**
-- Every other run under `outputs/` — do not modify, reclassify or delete
-- The optimizers, the environment, the harness, `conf/`
-- The allocation redesign — that is Phase 3
+- **Anything under `src/`.** If the dashboard needs something the core does not expose, **stop and report** — per §2.3 the core exposes it, but that is a decision, not something to improvise
+- Drawing anything: graphs, timelines, arms, charts — segments 2–5
+- `viz/replay.py` — it is retired *later*, when the dashboard covers it (D17). Leave it alone
+- Defects F4, F7, F8 — Phase 3
 - `git push`
 
 ---
 
 ## Tasks
 
-### T1 — Reclassify the one contaminated manifest run (D31)
+### T1 — Authorise and declare the dependencies
 
-`outputs/2026-09-01/09-29-56` is the only `manifest`-class run in existence and it carries a permanently misaligned `num_events` column — generated before F1's fix, so its disruption alignment is recorded data no code change can repair.
+`fastapi` and `uvicorn`, as a **dashboard-only optional group** in `pyproject.toml` — not core dependencies. `dynaswarm` must remain installable and fully testable without them.
 
-`manifest` means **reportable**. This run is not.
+**Explicitly authorised by this segment.** Nothing else. No Streamlit, no Dash, no JS framework, no bundler, no build step.
 
-**Change the class from `manifest` to `exploratory`**, in `manifest.json` and in the `steps.parquet` and `events.parquet` columns.
+### T2 — The package, and the boundary that defines it
 
-**Do not touch any measurement column.** `excess`, `optimum`, `best_cost`, timings and parameters all stay byte-identical. Only the status label changes.
+Create `dashboard/` at the repo root:
 
-**Leave a written reason in the run directory** — a file named `RECLASSIFIED.md` recording: what changed, when, by which segment, why, and the explicit statement that no measurement data was altered. D31 permits the correction *only* with this trace.
-
-Then show, verbatim, that a measurement column is unchanged before and after — a checksum or a value comparison. The label moved; the evidence did not.
-
-### T2 — F2: the controller must raise on an unknown target
-
-`IncrementalController.propose` silently ignores a target it does not recognise. A hybrid arm left on the default `targets=["rho"]` adapts **nothing** — hybrid parameters are named `aco_rho` — while still logging `controller_kind=incremental` beside moving signal values.
-
-That is the inert-mechanism failure this project has already been bitten by: a component that reports itself active while doing nothing.
-
-**Fix: raise.** `bind()` in `optimizers/spec.py` already raises on the same class of mistake; the controller must match. Consistency here is not cosmetic — two components handling the same error two different ways is how the next person learns the wrong lesson.
-
-**Test both directions:** an unknown target raises, and a known one still works. And add one that would have caught the original bug: **a hybrid arm with `targets=["rho"]` must now fail loudly rather than silently adapting nothing.**
-
-Then answer, from the record rather than assumption: **did any run ever execute with this silent-drop in effect?** The RUNBOOK command and the Round-1 deck both show `targets=[aco_fraction]` was passed explicitly, but "we probably got lucky" is not a finding. Check `.hydra/config.yaml` and `manifest.json` across the runs on disk and report what they actually say.
-
-### T3 — F3: `cross_evaluate.py`, re-derived not renamed
-
-This script backs **the project's key explanatory finding** — that the optimal parameters do not depend on volatility, which is what makes Claim 2 a diagnosis rather than a shrug. It currently raises `TypeError` immediately.
-
-**It is not a keyword rename.** It passes:
-
-```python
-CHURN = {'static': 0.0, 'moderate': 0.006, 'high': 0.015}
-ScenarioCfg(name='x', churn=churn, timesteps=60)
+```
+dashboard/
+  __init__.py
+  server.py          FastAPI app
+  static/
+    index.html
+    app.js
+    style.css
 ```
 
-Those values are **fractions of |E|** — the old *proportional* disruption model, from before the switch to absolute Poisson rates. The semantics changed underneath the script, not just the parameter name.
+**The boundary, stated as code rather than convention:**
 
-**Do not invent a mapping from the old fractions to new rates.** Use the **registered scenario configurations as they are defined today** — `static`, `moderate`, `high` with their current `events_per_step`. The finding is being re-derived under the current model, and it may come out differently from the original. That would itself be informative and must be reported rather than smoothed over.
+- `dashboard/` imports `dynaswarm` as a library
+- **`dynaswarm` never imports `dashboard`** — not in any module, not conditionally, not inside a function
 
-**The dependency, which is the important part:** the script globs `multirun/*/*/*/best_fixed.json` for per-scenario tuned vectors. **Those do not exist on this machine.** Tuning is Phase 4 (T1–T4 of the experiment manifest).
+This is what makes "view, never an engine" structural. A convention would be a comment; this is a direction of dependency that cannot be violated without the import failing.
 
-So this task is **repair, not execute**:
+### T3 — One endpoint that proves the pipe
 
-- Make it correct against the current API and the current scenario definitions
-- Make it **fail clearly** when the tuned vectors are absent — a plain message naming what is missing and which Phase 4 step produces it, not a `TypeError` or an empty dict silently producing meaningless output
-- Add a test that it imports and that its config construction is valid, without requiring the vectors
+A single endpoint — `GET /api/graph` — that builds a graph **through the real core** and returns a description of it.
 
-Say plainly in your findings that the finding itself remains **un-re-derived until Phase 4**, and that the current README and DOCUMENTATION figures for it are provisional (they already carry markers from segment 1).
+It must call `dynaswarm.core.generate.build()` with a real `GraphCfg` and a real seeded RNG from `core.rng.stream()`. It must **not** construct nodes, edges, weights or coordinates itself.
 
-### T4 — `load_events()` filtering (Architect's carry-over)
+Return enough to prove the answer is genuine and not a plausible-looking stub:
 
-Ruling 4 in segment 3 named `EVENT_SCHEMA` and stopped there. `run_class` is in the events data but **`load_events()` takes no class argument and applies no filter** — and recovery analysis reads events across runs, so it is the same exposure one level up. Architect error.
+| Field | Why |
+|---|---|
+| `n_nodes`, `n_edges` | basic shape |
+| `source`, `target` | chosen by the real `_endpoints()`, not picked arbitrarily |
+| `optimum_at_t0` | the true shortest-path cost from `core.oracle` — **a number nothing but the real engine could produce** |
+| `has_coordinates` | true for geometric and grid, false for Erdős–Rényi |
 
-Give `load_events()` the same treatment `load_steps()` has:
+That last one matters: it is the fact that made the original replay useless, and the dashboard needs to know it from the start.
 
-- default returns `manifest` rows only
-- a missing `run_class` reads as `exploratory` (D27)
-- a mixed load — some directories with the column, some without — succeeds without raising
+**Defaults:** `medium200`, the research tier. **Not `small30`** — that tier has no coordinates, and every visual built on it is meaningless (D8, and the reason Rudra saw spaghetti the first time he ran the project).
 
-**And apply D30 while you are here:** single-run tools are not filtered. Check every caller of `load_events()` the way segment 3 checked `load_steps()`'s seven, and report what you find *before* changing them. If a caller operates on one named run, it passes the class through.
+### T4 — A page that displays it
 
-Test the migration path against real pre-column data, not a fixture, exactly as segment 3 did.
+`index.html` plus a small `app.js` that fetches `/api/graph` and renders the returned fields **as text**. A definition list or a table. No canvas, no SVG, no drawing.
 
-### T5 — Parametrise the warm-up assertion (your flag)
+The page must show, visibly:
 
-F4's warm-up is currently asserted for `volatility` alone. `edge_ratio` and `lambda_branch` share the shape and have no equivalent test.
+- the values from T3
+- **which run classes exist in `outputs/`**, obtained through `load_steps(..., run_class=None)` — and here is why that is in the scaffold: **every dashboard-created run is `exploratory` by design** (D30), so the page must prove from day one that it can see them. A dashboard that filtered to `manifest` would show a blank screen for every run it ever made.
 
-Parametrise it across all three windowed signals. `recency` is **excluded and the exclusion is asserted** — it is a decay rather than a rolling mean, carries no window, and therefore has no warm-up. That distinction is why Claim 3 survives F4, and a test that states it is worth more than a comment that mentions it.
+**And one warning, rendered on the page itself:** the five runs predating F1's fix carry a permanently misaligned `num_events` column (D32). Any disruption timing drawn from them will be one step early. This is a Phase 1 problem, not a Phase 4 one — segment 3 will draw those markers. Put the warning in now, where whoever builds segment 3 cannot miss it.
 
-### T6 — Commit
+### T5 — Make it runnable, and document the one command
+
+A single documented command that starts the server. Add it to `RUNBOOK.md` under a new short section — the dashboard is a tool people will run, and a tool nobody can start is not a tool.
+
+State the port explicitly, and that it is a **local development server**: not hosted, not exposed, not deployed. The synopsis lists web deployment as out of scope (O1) and this is a local tool, which is the distinction that keeps it inside scope.
+
+### T6 — The tests that hold the boundary
+
+| Test | What it protects |
+|---|---|
+| **`dynaswarm` never imports `dashboard`** | Walk every module under `src/` and assert it. The rule of §2.3, enforced rather than trusted |
+| **`dashboard/` statement count ≤ 1000** | Mirror `test_statement_budget`, scoped to `dashboard/`. **Use the existing counter, do not reimplement it** — a second counter that disagrees is the same class of bug as a second engine |
+| **The core is importable and testable without FastAPI** | If `fastapi` is absent, `import dynaswarm` and the whole suite still work |
+| **`/api/graph` returns the same values as calling the core directly** | The endpoint's `optimum_at_t0` must equal what `core.oracle` returns for the same config and seed. **This is the anti-reimplementation test** — it would fail the moment someone computed anything in the dashboard instead of asking for it |
+
+That last test is the important one. Write it so it would catch a plausible reimplementation, not merely a missing endpoint.
+
+### T7 — Show it working
+
+Start the server, open the page, and **paste what it actually displays.** Not a description of what it should display.
+
+If you cannot open a browser, `curl` the endpoint and paste the JSON, plus the rendered HTML the page would build from it.
+
+### T8 — Commit
 
 Whole tree. **Do not push.**
 
 ```
-segment 5: F2, F3 and Phase 0.5 loose ends
+segment 6: dashboard scaffold (phase 1)
 
-Fixes F2 — IncrementalController silently ignored unknown targets, so a
-hybrid arm on the default targets=["rho"] adapted nothing while logging
-itself active. Now raises, matching bind() in optimizers/spec.py.
+Creates dashboard/ at the repo root, outside src/, importing dynaswarm as
+a library. Adds fastapi and uvicorn as a dashboard-only optional group;
+the core remains installable and testable without them.
 
-Repairs F3 — cross_evaluate.py used the old proportional churn model,
-superseded by absolute Poisson rates. Rebuilt against the current
-scenario definitions and made to fail clearly when the tuned vectors it
-needs are absent. The finding remains un-re-derived until Phase 4
-produces those vectors.
+One endpoint, /api/graph, builds a graph through core.generate.build()
+and returns its shape plus the true optimum from core.oracle — a value
+nothing but the real engine could produce. A page renders those fields as
+text. Nothing is drawn yet.
 
-Adds run_class filtering to load_events(), closing the asymmetry left by
-segment 3, with single-run callers passing the class through per D30.
+Four tests hold the boundary: dynaswarm never imports dashboard, the
+dashboard has its own 1000-statement cap, the core is importable without
+FastAPI, and the endpoint's optimum matches the core's directly — the
+test that would catch a reimplementation rather than a missing route.
 
-Reclassifies outputs/2026-09-01/09-29-56 from manifest to exploratory
-under D31 — its num_events predates F1's fix and is permanently
-misaligned. Measurement data untouched; reason recorded in the run
-directory.
-
-Parametrises the F4 warm-up assertion across all three windowed signals,
-with recency's exemption asserted rather than assumed.
-
-Closes phase 0.5.
+The page surfaces the run classes present in outputs/ and warns that runs
+predating F1 carry a misaligned num_events column (D32), because segment
+3 draws those markers.
 
 Spec + findings: currentWorkFlow.md
-Log: WORKFLOW_LOG.md entry 005
+Log: WORKFLOW_LOG.md entry 006
 ```
 
 ---
@@ -154,12 +169,13 @@ Log: WORKFLOW_LOG.md entry 005
 
 | | |
 |---|---|
-| **T0 before implementation** | |
-| **T1 touches exactly one run directory** | Every other run under `outputs/` is untouchable. No measurement column changes, anywhere |
-| **F3 is repaired, not executed** | It cannot run without Phase 4's tuned vectors. Do not fabricate them, do not stub them with plausible values |
-| **Do not invent an old-churn-to-new-rate mapping** | Use today's scenario definitions |
-| **Report before changing `load_events()`'s callers** | Same discipline as segment 3 |
-| **No existing test deleted, weakened or skipped** | |
+| **Zero statements added to `src/`** | If the scaffold seems to need one, stop and report — that is a design decision |
+| **The dashboard computes nothing** | Every value it shows is asked of the core. Not "mostly", not "except for display" |
+| **No drawing** | Segments 2–5. Resist it |
+| **No new dependency beyond fastapi and uvicorn** | |
+| **Default to `medium200`** | `small30` has no coordinates and every visual on it is meaningless |
+| **Do not touch `viz/replay.py`** | It retires when the dashboard covers it, which is not yet |
+| **Use the existing statement counter** | Do not write a second one |
 | **Do not push** | |
 
 ---
@@ -168,515 +184,367 @@ Log: WORKFLOW_LOG.md entry 005
 
 ```bash
 # 1a. In scope
-git diff --stat -- src/ tests/ scripts/
-git status --short outputs/          # only 09-29-56, plus RECLASSIFIED.md
-# 1b. Nothing elsewhere
-git diff --stat -- conf/ README.md RUNBOOK.md DOCUMENTATION.md
+git diff --stat -- dashboard/ tests/ pyproject.toml RUNBOOK.md
+# 1b. The science surface is untouched
+git diff --stat -- src/                       # expect EMPTY
 
 # 2. Suite
 ./.venv/bin/pytest -q -m "not slow"
 
 # 3. Lint
-./.venv/bin/ruff check src/ tests/
+./.venv/bin/ruff check src/ tests/ dashboard/
 
-# 4. Budget, count reported against 2100
-./.venv/bin/pytest -q -k statement_budget -s
+# 4. Both budgets — report both numbers
+./.venv/bin/pytest -q -k "statement" -s
 
-# 5. F2 raises
-python -c "
-from dynaswarm.control.controllers import IncrementalController
-# unknown target must raise; known target must still work"
+# 5. The core does not depend on the dashboard
+python -c "import dynaswarm; print('core imports clean')"
 
-# 6. Reclassification took, measurements did not move
-python -c "
-import json, pandas as pd
-d='outputs/2026-09-01/09-29-56'
-print(json.load(open(f'{d}/manifest.json'))['config']['run_class'])
-print(pd.read_parquet(f'{d}/steps.parquet').run_class.unique())"
+# 6. The boundary holds
+./.venv/bin/pytest -q -k "imports_dashboard or boundary" -v
 
-# 7. No manifest runs remain
-python -c "
-from dynaswarm.analysis.load import load_steps
-print(len(load_steps('outputs')))"
+# 7. It actually runs
+<the T5 command>, then: curl -s localhost:<port>/api/graph
 
-# 8. load_events filters and migrates
-python -c "
-from dynaswarm.analysis.load import load_events
-print(load_events('outputs', run_class=None).run_class.value_counts())"
-
-# 9. F3 fails clearly, not with a TypeError
-./.venv/bin/python scripts/cross_evaluate.py
-
-# 10. Committed, not pushed
+# 8. Committed, not pushed
 git log --oneline -2
 git status --short --branch | head -1
 ```
 
-**Expected:** in-scope only · all tests pass · lint clean · under 2100 · F2 raises on unknown and works on known · the run reads `exploratory` in manifest and both parquets · **check 7 returns 0 rows — there are now no manifest runs at all, which is correct and expected** · `load_events` migrates without raising · F3 exits with a readable message naming the missing vectors and the Phase 4 step that produces them · commit on top, ahead 1, unpushed.
+**Expected:** `src/` diff **empty** · all tests pass including the four new · lint clean across three trees · both counts reported · core imports without FastAPI · boundary tests pass by name · the endpoint returns real values · commit on top, ahead 1, unpushed.
 
 **Paste verbatim:**
 
-1. **T0's measurement**
-2. **Proof a measurement column is unchanged** across T1's reclassification
-3. **What the run configs on disk actually say about `control.targets`** (T2's record check)
-4. **F3's new failure message**
-5. **The `load_events()` caller audit** — every caller, and which are single-run
+1. **Both T0 measurements** — `src/` before and after, and the dashboard's count against 1000 with remaining headroom
+2. **Whether `FORBIDDEN_IMPORTS` reaches `dashboard/`** — verified, not assumed
+3. **The raw JSON** from `/api/graph`
+4. **What the page actually displays** — the rendered content, not a description of it
+5. **The anti-reimplementation test** — its code, and the values it compared
 
 ---
 
 ## Definition of done
 
-All ten checks pass, five artefacts pasted, commit exists unpushed, FINDINGS appended.
+All eight checks pass, five artefacts pasted, commit exists unpushed, FINDINGS appended.
 
-**This closes Phase 0.5, and with it every known defect.** Phase 1 — the dashboard — is next, and it is a different kind of work again: the first thing built rather than repaired.
-
----
----
-
-
-## FINDINGS — Segment 5
-
-**Status:** COMPLETE. Commit `4ab4f06`, unpushed. **Phase 0.5 closed — every known defect is now fixed or repaired.**
+**After this, Rudra can start the dashboard and see real numbers from the real engine in a browser.** Segment 7 draws the first graph.
 
 ---
-
-### 1. T0 — the measurement
-
-```
-BEFORE : 1998 / 2100   (margin 102)
-AFTER  : 2002 / 2100   (margin 98)
-COST   : +4 statements   (scripts/ and tests/ are outside the cap)
-VERDICT: FITS
-```
-
-**+4 rather than +9** because `load_events()`'s filtering was factored into a shared `_classified()` helper rather than duplicated. That removed six statements of copy from `load_steps()` while adding the new loader — and more importantly, provenance filtering that disagreed between the step table and the event table would be worse than none at all, since the disagreement would only surface once someone joined them.
-
-Breakdown: F2's guard +3, the `_classified` helper +6, `load_steps` simplification −4, `load_events` −1 net. Test-side wherever possible, as in segment 4.
-
-### 2. Proof the measurements did not move across T1's reclassification
-
-Digest over the measurement columns — `excess`, `optimum`, `best_cost`, `wall_ms`, `evaluations_spent`, `path_len` for steps; `old_weight`, `new_weight`, `u`, `v`, `kind` for events — taken immediately before and after:
-
-```
-BEFORE  steps  measurement digest: f0d4fb0949de46be664ef76b046fccc2
-BEFORE  events measurement digest: d26540d9120b6b93093b2b005e483b98
-BEFORE  run_class: manifest | manifest.json: manifest
-
-AFTER   steps  measurement digest: f0d4fb0949de46be664ef76b046fccc2
-AFTER   events measurement digest: d26540d9120b6b93093b2b005e483b98
-AFTER   run_class: exploratory | manifest.json: exploratory
-
-MEASUREMENTS UNCHANGED: True
-```
-
-The relabel was applied at the Arrow level via `set_column`, so every type survives — including the `map<string, double>` `params` and `probe` columns that a pandas round-trip would have destroyed (the lesson from segment 4's fixture). `RECLASSIFIED.md` is in the run directory recording what changed, when, by which segment, why, and this digest pair.
-
-### 3. What the run configs on disk actually say — T2's record check
-
-The question was whether any run ever executed with the silent-drop in effect. **It did not**, and the reason is stronger than "we got lucky":
-
-```
---- outputs/2026-08-30/22-53-05   arms: ['astar', 'aco']                    targets: ['rho']  signal: None
---- outputs/2026-08-30/22-53-36   arms: ['astar', 'aco', 'pso', 'hybrid']   targets: ['rho']  signal: None
---- outputs/2026-08-30/22-54-54   arms: ['astar', 'aco', 'hybrid']          targets: ['rho']  signal: None
---- outputs/2026-09-01/09-29-19   arms: ['astar', 'aco', 'pso', 'hybrid']   targets: ['rho']  signal: None
---- outputs/2026-09-01/09-29-56   arms: ['astar', 'aco', 'pso', 'hybrid']   targets: ['rho']  signal: None
-```
-
-Every run used `targets: ['rho']` — the default, the exact configuration that was silently inert. But **not one used a controlled arm.** `astar`, `aco`, `pso` and `hybrid` carry no signal and no controller; only `aco_fixed`/`aco_adaptive`/`hybrid_fixed`/`hybrid_adaptive` do. `_make_controller` returned `None` for every arm in every run, so `IncrementalController.propose` was **never constructed and never called**.
-
-So the record shows something better than luck: the defect could not have contaminated any run on disk, because no run on disk ever built the controller. That is a stronger statement than the RUNBOOK-and-deck argument the spec anticipated, and it comes from the configs rather than from documentation about them.
-
-### 4. F3's new failure message
-
-```
-cross_evaluate: cannot run — no tuned parameter vectors for ['static', 'moderate', 'high'].
-  Looked in: multirun/*/*/*/best_fixed.json
-  Found:     nothing
-
-  These are produced by the tuning steps of the experiment manifest (ARCHITECTURE.md §13.1, T1-T4), which run in Phase 4.
-  This script is repaired and ready; the finding it produces cannot be re-derived until those vectors exist.
-  Until then the figures quoted for it in README.md and DOCUMENTATION.md are provisional and are marked as such.
-```
-
-Exit code 1, no traceback.
-
-**Stated plainly, as the spec requires: the finding itself remains un-re-derived.** The script is correct against today's API and today's registered scenarios — `{static: 0.0, moderate: 0.3, high: 0.8}`, absolute Poisson rates, with **no mapping invented** from the old `{0.0, 0.006, 0.015}` fractions. Whether "the optimal parameters do not depend on volatility" still holds under the current disruption model is **unknown and untested** until Phase 4 produces the vectors. The README and DOCUMENTATION figures for it already carry provisional markers from segment 1.
-
-One thing worth flagging about the original failure: an empty glob fed an empty `VECTORS` dict, so had the `TypeError` not fired first, the script would have cross-evaluated *default* parameters against themselves and printed a confident table of near-identical numbers — which would have looked exactly like the finding it was supposed to test. `require_vectors()` exists to make that impossible.
-
-### 5. The `load_events()` caller audit — reported before changing, per the spec
-
-```
-src/dynaswarm/analysis/load.py:61   the definition
-src/dynaswarm/viz/replay.py:92      events = load_events(run_dir)          <- SINGLE RUN
-tests/test_analysis.py:327          load_events(tmp_path)                   <- SINGLE RUN
-```
-
-Three call sites, two of them real. **Both operate on one named run**, so both fall under D30 and pass the class through — `viz/replay.py` now calls `load_events(run_dir, run_class=None)`. Notably `cli.py` does *not* call `load_events` at all, so unlike segment 3 there was only one source caller to correct.
-
-That the audit found no aggregating caller is itself informative: `load_events` had no reader that the filter would have protected, which is presumably why the asymmetry survived segment 3 unnoticed. The filter is prospective — recovery analysis in Phase 4 is what will read events across runs.
-
-### 6. Acceptance
-
-| Check | Result |
-|---|---|
-| 1a in-scope | 8 files: `scripts/cross_evaluate.py`, 3 × `src/`, 4 × `tests/` |
-| 1a `outputs/` | **empty — see Surprise 1**; `outputs/` is gitignored |
-| 1b elsewhere | `conf/ README.md RUNBOOK.md DOCUMENTATION.md` — **empty** |
-| 2 suite | **313 passed**, 5 deselected |
-| 3 lint | `All checks passed!` (`src/`, `tests/`, `scripts/`) |
-| 4 budget | `src/ = 2002 / 2100` |
-| 5 F2 | unknown raises `KeyError`; known target still adapts |
-| 6 reclassification | `exploratory` in `manifest.json`, `steps.parquet`, `events.parquet` |
-| 7 no manifest runs remain | **0 rows** — correct and expected |
-| 8 `load_events` | default 0 rows; unfiltered 49 603 rows, all `exploratory`, no raise |
-| 9 F3 | readable message, exit 1, no `TypeError` |
-| 10 commit | `4ab4f06`, `ahead 1`, **not pushed** |
-
-Suite went 302 → 313: +11 tests (3 for F2, 2 for F3, 2 for `load_events`, 3 parametrised warm-up, 1 recency exemption), none deleted, none weakened, none skipped.
-
-### Deviations from spec
-
-**One existing test needed a call-site correction: `test_hybrid.py::test_recency_peaks_on_disruption_and_decays`.** It ran `hybrid_adaptive` under the default `targets=["rho"]` — precisely the configuration F2 makes raise, and precisely what T2 asked me to add a *new* test for. It was relying on the silent drop.
-
-The whole change, with every assertion untouched:
-
-```diff
--        control=ControlCfg(signal="recency"),
-+        # A hybrid's parameters are `aco_`/`pso_`-prefixed, so the default
-+        # targets=["rho"] names nothing it declares.  That used to be
-+        # silently dropped (F2) and now raises, so the target is named.
-+        control=ControlCfg(signal="recency", targets=["aco_fraction"]),
-```
-
-Same class of change as segment 3's Ruling 2 — the behaviour asserted is unchanged, only the call that reaches it — and the spec anticipates this exact raise. Flagged rather than buried.
-
-### Surprises
-
-1. **`outputs/` is gitignored, so acceptance check 1a could not show what it expected.** The check anticipated `git status --short outputs/` listing `09-29-56` and `RECLASSIFIED.md`; it lists nothing, because `.gitignore:18` excludes `outputs/` entirely. The reclassification is real on disk and verified by checks 6 and 7 — but it is **not in the commit and not in version control**. `RECLASSIFIED.md` is the only record that it happened, and it lives inside an untracked directory. If that trace is meant to be durable, D31's requirement may need somewhere tracked to live; a run directory that git does not see is a thin place to keep the sole evidence of a corrected label.
-
-2. **`PrescheduledController` has the identical silent-drop bug and I did not fix it.** Line-for-line the same pattern — `if name in proposed:` with no guard — so a prescheduled hybrid on default targets would sweep nothing while logging itself active. F2 named `IncrementalController` only, and `PrescheduledController` is unexercised (no `ArmSpec` uses it), so I left it. But the consistency argument that justified fixing F2 applies here verbatim, and it will be wired up in Phase 3 as `ScheduledAllocation` — the open-loop control for feedback itself. Reporting rather than fixing.
-
-3. **The parquet reclassification exposed how narrow "immutable" has to be.** Rewriting one column of a parquet means rewriting the whole file, so "measurement data untouched" is a claim about content that has to be *verified*, not a property the operation guarantees. The digest check is the only thing standing between a relabel and an undetected corruption. Worth keeping if D31 is ever exercised again.
-
-4. **49 603 event rows across five runs**, versus 9 240 step rows. Events outnumber steps five to one because disruptions arrive in 25-edge clusters. Not a problem — but any Phase 4 recovery analysis that loads events across runs is handling a substantially bigger table than the step-based analyses, and the filter now added to `load_events` is doing correspondingly more work.
-
-### Could not do
-
-Nothing. All six tasks completed.
-
-### Questions for the Architect
-
-1. **`PrescheduledController` (Surprise 2)** — fix now as an F2 sibling, or leave it to Phase 3's `ScheduledAllocation` rewrite? It is inert today either way, but a known-broken component sitting in the tree is what F2 just demonstrated the cost of.
-2. **The D31 trace lives only in an untracked directory (Surprise 1).** Should the reclassification also be recorded somewhere version-controlled — a line in `decisionLedger.md`, or a `RECLASSIFICATIONS.md` at the repo root — so the correction survives the run directory being moved or lost?
-3. **F3's re-derivation is now a Phase 4 dependency with a name.** Should it become an explicit entry in the experiment manifest (§13.1's E7) with the tuning steps listed as its prerequisites, so it cannot be forgotten between here and then?
+---
 
 <!-- vClaude: append your FINDINGS block below this line, using the template in AGENT_PROTOCOL.md §6 -->
 
-
----
 ---
 
-# ADDENDUM — Architect rulings, 1 Sept 2026
+# FINDINGS — Segment 6
 
-**Three rulings. One adds a task (T7); Phase 0.5 does not close until it lands.**
+## 0. The interrupted state, and how it was restored
 
----
+The session ended mid-mutation: `dashboard/server.py:97` was left reading
+`heuristic=False`, a deliberate mutation to prove the anti-reimplementation
+test bites. It bit — `assert 200 == 75`.
 
-## R1 — D31's trace needs a tracked home. Amended.
-
-You are right, and the flaw is in D31 as I wrote it.
-
-`outputs/` is gitignored. `RECLASSIFIED.md` therefore lives where version control cannot see it — **the trace is as ephemeral as the thing it describes.** A record that vanishes with the directory is not a record; it is a note to whoever happens to be standing there.
-
-**D31 is amended: the reclassification is recorded in two places, and they do different jobs.**
-
-| Where | Purpose | Durable? |
-|---|---|---|
-| `RECLASSIFIED.md` in the run directory | The local warning — for anyone who opens that folder and starts reading its parquets | No, and that is acceptable for this purpose |
-| **`WORKFLOW_LOG.md`** | **The authoritative trace** — what was reclassified, when, why, and that no measurement column moved | **Yes. Tracked, committed, append-only** |
-
-Keep `RECLASSIFIED.md` where it is. The log entry is what makes the trace survive.
-
-No action for you here beyond noting it — Entry 005 will carry the authoritative record.
-
-## R2 — `PrescheduledController`: fix it. It is F6, and it is worse than F2.
-
-You left it correctly — it was outside the named scope. But your consistency argument is right and there is a sharper reason on top of it.
-
-`PrescheduledController` becomes **`ScheduledAllocation` in Phase 3** (`ARCHITECTURE.md` §7.2), and its role there is specific:
-
-> **the honest control for feedback itself** — if an open-loop schedule matches a signal-driven policy, what helped was *varying*, not *sensing*.
-
-Now consider the bug in that role. A silent-drop `ScheduledAllocation` adapts **nothing**, so it produces results **identical to the frozen arm** — while logging itself as an active scheduled controller. The conclusion drawn would be *"an open-loop schedule does not help either,"* which is a **false null on the one arm whose entire job is to falsify the control story.**
-
-F2 was inert machinery that never ran. This is inert machinery that is *guaranteed* to run, in an experiment specifically designed to distinguish two hypotheses, where the failure mode is indistinguishable from a real result.
-
-**"Unexercised" is the reason to fix it now, not the reason to leave it.** The first time it is exercised will be in an experiment whose answer matters.
-
-Logged as **F6**.
-
-### T7 — Fix F6
-
-Same treatment as F2: `PrescheduledController.propose` raises on a target it does not recognise, matching `IncrementalController` and `bind()` in `optimizers/spec.py`.
-
-Same test shape as F2's: unknown raises, known still works.
-
-**Then check the whole family.** F2 and F6 are the same bug in two of three controllers. `NullController` returns `dict(current)` unchanged and has no target handling at all, so it is presumably exempt by construction — **confirm that rather than assuming it**, and say so. If a fourth place handles targets, name it.
-
-That is the last known defect. Phase 0.5 closes when it does.
-
-## R3 — The test that was relying on the drop
-
-`test_recency_peaks_on_disruption_and_decays` ran `hybrid_adaptive` on `targets=["rho"]` — the inert configuration — and passed. One-line call-site correction, assertions untouched. Correct handling.
-
-Worth recording, because the pattern will recur: **the test was measuring the signal, not the controller.** It asserted that `recency` peaks and decays, which is true whether or not anything acts on the reading. So it was not testing a falsehood — it was testing a narrower thing than its position in the suite implied.
-
-The general lesson for Phase 3, where the allocation governor gets its tests:
-
-> A test that exercises a controlled arm is not thereby testing the controller. If the assertion would hold with the controller removed, it is testing something else — and should say so in its name.
-
-## On your record check
-
-This is the standard the project should hold to, and it deserves saying plainly.
-
-The question was whether F2 ever contaminated a run. The available answer was *"the RUNBOOK and the deck both show `targets=[aco_fraction]` was passed explicitly."* You did not accept it. You read the five run configs and found something better:
-
-> All five used `targets: ['rho']` — **the inert configuration** — but **none used a controlled arm.** `astar`, `aco`, `pso` and `hybrid` carry no controller, so `IncrementalController.propose` was never constructed and never called.
-
-So the answer is not "we got lucky with the flag." It is **"the code path could not execute,"** established from the configs rather than from documentation about the configs. Those are different strengths of claim, and the second one survives a viva.
-
----
-
-## Revised close-out
-
-| | |
-|---|---|
-| **T7** | Fix F6 · confirm `NullController`'s exemption · name any fourth site |
-| **T8** | Re-run the suite, lint, and the statement budget. Report the count |
-| **T9** | **Amend the existing commit** to include T7 — `git commit --amend`. This is the one sanctioned amendment: `e98f5c7` is unpushed, and Phase 0.5 should close as a single coherent commit rather than a fix chasing its own tail |
-
-**Amended commit message** — add before "Closes phase 0.5.":
+I did not restore by editing the line back. The scratchpad copy survived, so
+I first **proved it was the right file** before trusting it:
 
 ```
-Fixes F6 — PrescheduledController carried the identical silent-drop bug.
-Left unexercised it would have surfaced in Phase 3 as ScheduledAllocation,
-the open-loop control for feedback itself, where adapting nothing produces
-results identical to the frozen arm and a false null on the one arm whose
-job is to falsify the control story.
+$ diff <(sed 's/heuristic=False/heuristic=True/' dashboard/server.py) $S/server.good.py
+(no output)
 ```
 
-**Additional acceptance:**
-
-- **11:** `PrescheduledController` raises on an unknown target and works on a known one
-- **12:** the controller family audited — every controller that handles targets either raises or is documented as exempt by construction, with the reason
-
----
-
-Append a **second** FINDINGS block below. The first stays as written.
-
-<!-- vClaude: append your SECOND findings block below this line -->
-
----
-
-# FINDINGS — Segment 5, second block (addendum: T7–T9)
-
-## 1. T0 — re-measured, because scope changed mid-segment (D29)
+The mutated file with the flag flipped back is byte-identical to the saved
+copy — so the saved copy contains that one difference and nothing else, and
+restoring from it cannot have smuggled in anything I had forgotten. Then:
 
 ```
-before T7:  src/ = 2002 / 2100   margin 98
-projected:  +3  (Assign + If + Raise — the guard, mirroring F2 exactly)
-after T7:   src/ = 2005 / 2100   margin 95
+$ ./.venv/bin/pytest tests/test_dashboard.py
+8 passed in 2.57s
 ```
 
-The projection was exact. Counted with the suite's own `_statement_count`
-(`tests/test_hygiene.py:113`), not an approximation of it — an independent
-counter that disagreed with the enforcer would make the margin fiction.
+`git diff dashboard/server.py` is empty and always would be: `dashboard/` is
+untracked in this segment, so git has no baseline to compare against. That
+is why the diff above is against the scratchpad rather than against git —
+the check the Architect asked for could not have been meaningful as stated,
+and saying so is better than pasting an empty diff as if it proved something.
 
-## 2. T7 — F6 fixed
+## 1. T0 — three measurements
 
-Guard added at the top of `PrescheduledController.propose`, textually
-parallel to F2's:
+```
+SCIENCE SURFACE
+  src/ before : 2005 / 2100
+  src/ after  : 2005 / 2100     delta +0
+
+DASHBOARD, against its own 1000 cap
+  dashboard/__init__.py     0
+  dashboard/server.py      45
+  TOTAL                    45 / 1000    headroom 955
+```
+
+**`src/` did not move, and nothing was needed from it.** The core already
+exposed everything the scaffold asks for — `build()`, `shortest_path()`,
+`stream()`, `load_steps()` — which is worth recording as a *result* rather
+than an absence: §2.3 says the core exposes what the dashboard needs, and
+this segment is the first evidence that it already does.
+
+**955 statements for segments 7–10.** For scale, the entire retiring
+`viz/replay.py` is 158, and it does the graph-drawing job segment 7 inherits.
+Four segments at replay's size would be ~630. The cap is not close.
+
+## 2. Does `FORBIDDEN_IMPORTS` reach `dashboard/`? — verified two ways
+
+**Structurally.** The scan is rooted at `src/dynaswarm`, not the repo root:
+
+```
+scan root            : src/dynaswarm
+files enumerated     : 37
+any outside that root: none
+dashboard/__init__.py enumerated? False
+dashboard/server.py   enumerated? False
+FORBIDDEN_IMPORTS    : ['fastapi', 'flask', 'starlette', 'tkinter', 'uvicorn']
+```
+
+`test_statement_budget` uses the same `_python_files()`, so the dashboard's
+45 statements do not count against `src/`'s 2100 either.
+
+**Behaviourally — because "it is not scanned" only matters if the scan would
+otherwise reject it.** Running `FORBIDDEN_IMPORTS`' own logic over
+`dashboard/server.py` by hand:
+
+```
+If dashboard/server.py were inside the scan, it would fail on:
+    line 21: fastapi
+    line 22: fastapi.responses
+    line 23: fastapi.staticfiles
+    line 170: uvicorn
+```
+
+Four hits, one of them a **function-level** `import uvicorn` inside `main()`
+that the `ast.walk` scan would still catch. So D14 is load-bearing, not
+decorative: the placement is precisely what makes this code legal, and moving
+`dashboard/` under `src/` would break the build in four places rather than
+silently degrade. `test_dashboard_is_outside_the_science_surface` pins it.
+
+**No change to `test_hygiene.py` was needed.** The design holds as ruled.
+
+## 3. Raw JSON from the running server
+
+```
+$ ./.venv/bin/python -m dashboard.server
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+
+$ curl -s localhost:8000/api/graph
+{
+    "tier": "medium200",
+    "model": "geometric",
+    "seed": 1000,
+    "n_nodes": 200,
+    "n_edges": 735,
+    "source": 0,
+    "target": 2,
+    "optimum_at_t0": 99.96328976797456,
+    "hops": 11,
+    "expansions": 75,
+    "has_coordinates": true
+}
+
+$ curl -s localhost:8000/api/runs
+{
+    "run_classes": {"exploratory": 9240},
+    "warning": "Every run currently in outputs/ predates the F1 fix: ..."
+}
+```
+
+**`source: 0, target: 2` looks like a placeholder and is not.** `_endpoints()`
+fixes `source = 0` by construction and takes the *most distant reachable*
+node as the target; on this graph that is node 2. I checked, because a
+scaffold returning `0` and `2` is exactly what a stub would return, and I
+would rather confirm it than have it asked in a viva.
+
+**`run_classes` shows `exploratory: 9240` and no `manifest` key** — D31's
+reclassification, visible from the outside for the first time. A dashboard
+that had filtered to `manifest` would render an empty screen here, on every
+run that exists.
+
+## 4. What the page actually displays
+
+Not a description of it. I executed the real `dashboard/static/app.js` under
+node, against the live server, with the minimum DOM that file touches, and
+printed the resulting nodes:
+
+```
+PAGE AS RENDERED  ——  http://127.0.0.1:8000
+
+Dynaswarm
+Phase 1 · segment 6 — scaffold. Nothing is drawn yet.
+These values came from the engine, not from this page.
+
+GRAPH AT T=0
+  tier               medium200
+  model              geometric
+  seed               1000
+  n_nodes            200
+  n_edges            735
+  source             0
+  target             2
+  optimum_at_t0      99.96328976797456
+  hops               11
+  expansions         75
+  has_coordinates    true
+
+RUNS ON DISK
+  exploratory        9240
+
+  ⚠ Every run currently in outputs/ predates the F1 fix: its num_events
+    column is off by one, so any disruption timing drawn from these runs is
+    one step early (D32). Quality columns (excess, optimum, best_cost) are
+    sound. Phase 4 regenerates everything.
+
+Local development server. Not hosted, not exposed, not deployed.
+```
+
+The harness lives in the scratchpad, not the repo — it is a way of reading
+the page, not a dependency. An earlier attempt at it failed with
+`Failed to parse URL from /api/graph` (node's `fetch` has no page origin to
+resolve against), which incidentally exercised `app.js`'s error path and
+confirmed a failed fetch renders as a visible `error` row rather than a blank
+panel.
+
+## 5. The anti-reimplementation test — code, values, and the mutation
 
 ```python
-        unknown = set(self.targets) - set(current)
-        if unknown:
-            raise KeyError(
-                f"controller target(s) {sorted(unknown)} are not parameters of this "
-                f"optimizer; it declares {sorted(current)}"
-            )
+def test_endpoint_returns_exactly_what_the_core_returns():
+    server = pytest.importorskip("dashboard.server")
+
+    payload = server.api_graph()
+
+    cfg = server.tier("medium200")
+    view, source, target = build(cfg, stream(payload["seed"], "graph"))
+    optimum, path, expansions = shortest_path(view, source, target, heuristic=True)
+
+    assert payload["source"] == source
+    assert payload["target"] == target
+    assert payload["optimum_at_t0"] == float(optimum)
+    assert payload["expansions"] == expansions, (
+        "expansion count differs — the dashboard is running its own search"
+    )
+    assert payload["hops"] == len(path) - 1
+    assert payload["n_nodes"] == view.n_nodes
+    assert payload["n_edges"] == view.n_active_edges
 ```
 
-### The new test fails against the unfixed code
+Values compared, both sides: `source 0`, `target 2`,
+`optimum_at_t0 99.96328976797456`, `expansions 75`, `hops 11`,
+`n_nodes 200`, `n_edges 735`.
 
-Captured before restoring the fix, so the guard is demonstrated to bite
-rather than asserted to:
+**Why `expansions` is the field that does the work.** `optimum_at_t0` is a
+property of the *graph* — a competent reimplementation can arrive at it, and
+on a well-conditioned instance it may even match bit-for-bit. `expansions` is
+not a property of the graph at all. It counts the nodes *this* A\* popped, so
+it depends on the heuristic, the tie-break order and the heap discipline.
+Nothing that computed the answer independently reproduces it by luck.
 
-```
->       with pytest.raises(KeyError, match=r"\['aco_fraction'\]"):
-E       Failed: DID NOT RAISE KeyError
-tests/test_control.py:505: Failed
-```
-
-### What the defect actually produced — the false null, made concrete
-
-Reproducing the pre-fix `propose` verbatim and running a 1.0 → 2.0 sweep
-against a hybrid's parameter vector on the default `targets=("rho",)`:
-
-```
-PRE-FIX  targets=('rho',)  optimizer declares ['aco_alpha', 'aco_fraction', 'aco_rho']
-  every timestep identical to the frozen vector: True
-  t=0: {'aco_fraction': 0.5, 'aco_rho': 0.08, 'aco_alpha': 1.0}
-  t=9: {'aco_fraction': 0.5, 'aco_rho': 0.08, 'aco_alpha': 1.0}   <- a 1.0->2.0 sweep that moved nothing
-POST-FIX raises: "controller target(s) ['rho'] are not parameters of this
-  optimizer; it declares ['aco_alpha', 'aco_fraction', 'aco_rho']"
-```
-
-`True` on that middle line is the whole finding. The schedule ran, the
-multiplier reached 2.0, and the returned vector was byte-identical to the
-input at every timestep — not approximately the frozen arm, *the frozen
-arm*. A Phase 3 `ScheduledAllocation` in this state could not have been
-told from its own control by any measurement downstream of it.
-
-**First attempt at this demonstration was wrong and is worth recording.**
-I initially passed `aco_fraction` in `current` while targeting it, so the
-membership test succeeded and the sweep worked correctly — I had built a
-demo of the code *not* failing. The bug needs the target to be **absent**
-from `current`. A demonstration that does not reproduce the triggering
-configuration is evidence of nothing, and it looked convincing until I
-read the numbers.
-
-## 3. T7 — the controller family, audited rather than assumed
-
-Five sites in `src/` handle a target name. Enumerated by grep, not from
-memory:
-
-| Site | Handling | Verdict |
-|---|---|---|
-| `optimizers/spec.py:91` `bind()` | `unknown = set(values) - set(table)` → raises | **The reference.** Both fixes were written to match it |
-| `control/controllers.py:139` `IncrementalController.propose` | raises | Fixed — F2 |
-| `control/controllers.py:195` `PrescheduledController.propose` | was a silent drop | Fixed — F6 |
-| `control/controllers.py:98` `NullController.propose` | `return dict(current)` | **Exempt by construction** — see below |
-| `harness/arm.py:228` `_make_controller` | `return make_controller(spec.controller)` | **Not a target-drop, but see §4** |
-
-### `NullController`'s exemption, confirmed not assumed
-
-It has **no `targets` field at all** — not an empty one, not an ignored
-one. There is no target for it to drop. That is a stronger exemption than
-"it happens to handle them correctly," and it is now asserted:
+**Proved, not argued.** I mutated the dashboard into the most plausible
+reimplementation available — the same core function, the same correct answer,
+a different search:
 
 ```python
-    assert not hasattr(NullController(), "targets")
+-    optimum, path, expansions = shortest_path(view, source, target, heuristic=True)
++    optimum, path, expansions = shortest_path(view, source, target, heuristic=False)
 ```
 
-Asserting the *absence* is deliberate. The exemption is a property of the
-class's shape, so the test fails the moment someone adds target handling
-without adding a guard — which is exactly how F2 and F6 got in. A test
-that only checked `propose` returned its input unchanged would still pass
-in that world.
-
-## 4. The fourth site — named, not fixed
-
-`_make_controller` (`harness/arm.py:208`) forwards `control.targets` to
-`IncrementalController` explicitly, but the prescheduled branch falls
-through to:
-
-```python
-    return make_controller(spec.controller)
+```
+E       AssertionError: expansion count differs — the dashboard is running its own search
+E       assert 200 == 75
 ```
 
-— **no arguments at all.** A prescheduled controller built through the
-harness therefore takes every dataclass default: `targets=("rho",)`,
-`start=1.0`, `end=1.0`, `horizon=60`. Two consequences, and they compound:
+The optimum assertion **passed** — the answer was still exactly right. Only
+the expansion count caught it. A test written on `optimum_at_t0` alone would
+have waved this through, and that is the whole finding: *the correct number
+arriving from the wrong place is the failure mode this project has already
+died of once, and equality on the answer does not detect it.*
 
-1. `control.targets` is silently discarded, so configuring the schedule's
-   targets has no effect.
-2. `start == end == 1.0` makes the multiplier identically 1.0, so it
-   varies nothing **even on a target it does have** — the false null
-   again, arrived at by a different route, and this one survives the F6
-   guard untouched because `("rho",)` *is* declared by an ACO arm.
+Three further tests close the holes that one leaves: a constant stub
+(two seeds must differ), a hardcoded `has_coordinates` (`medium200` true,
+`small30` false), and a `manifest`-filtered run listing.
 
-This is not F6 and I have not touched it. Fixing it means deciding what
-`start`, `end` and `horizon` a schedule should carry, which is a Phase 3
-science decision (`ARCHITECTURE.md` §7.2), not a defect repair — and the
-protocol says name it rather than improvise it. Flagging it now because
-Phase 3 will build `ScheduledAllocation` on this constructor, and the
-guard I just added does not protect it.
-
-**No registered arm requests `prescheduled` today** — `grep -rn
-prescheduled src/ tests/ scripts/ conf/` returns only the class, its
-`CONTROLLERS` entry, and its tests. So neither F6 nor this can have
-touched a run on disk, by the same could-not-execute argument as T2's.
-
-## 5. T8 — suite, lint, budget
-
-```
-pytest                 321 passed in 62.03s   (exit 0)
-pytest -m "not slow"   316 collected
-ruff check src/ tests/ scripts/   All checks passed!
-src/ = 2005 / 2100   margin 95
-```
-
-**A correction to my previous report.** I reported "313 tests passing" at
-the close of the first findings block. That was the `-m "not slow"`
-figure, given without the marker qualification. The full suite stood at
-**318**; it is **321** now, +3 from T7. Stating it plainly because the
-workflow log records these counts and an unqualified number that quietly
-excludes five tests is the kind of thing that goes unnoticed for a phase.
-
-## 6. Acceptance — the addendum's two checks
+## 6. Acceptance — all eight
 
 | # | Check | Result |
 |---|---|---|
-| 11 | `PrescheduledController` raises on an unknown target, works on a known one | **Pass** — `test_prescheduled_raises_on_a_target_the_optimizer_does_not_declare` and `test_prescheduled_still_sweeps_a_declared_target`; the two pre-existing prescheduled tests still pass unmodified |
-| 12 | Family audited; every target-handling site raises or is documented exempt with a reason | **Pass** — table in §3, `NullController`'s exemption asserted in §3, fourth site named in §4 |
+| 1a | In scope | 8 files, +575 — `dashboard/` (5), `tests/test_dashboard.py`, `pyproject.toml`, `RUNBOOK.md` |
+| 1b | `git diff --stat -- src/` | **Empty** |
+| 2 | Suite | **329 passed** full · **324 passed, 5 deselected** `-m "not slow"` |
+| 3 | Lint, three trees | `All checks passed!` |
+| 4 | Both budgets | 2 passed — `src/` 2005/2100, `dashboard/` 45/1000 |
+| 5 | Core without dashboard | `core imports clean` |
+| 6 | Boundary by name | 2 passed |
+| 7 | It runs | Server up on 127.0.0.1:8000; JSON and page above |
+| 8 | Committed, not pushed | Below |
+
+Counts qualified per Entry 005's convention: **329 full / 324 not-slow**,
+up from 321 / 316, i.e. **+8**, all in `tests/test_dashboard.py`.
 
 ## Deviations from spec
 
-**One, and it is a non-change.** The addendum says "same treatment as F2."
-I mirrored F2 exactly, which means I left `current.get(name, 0.0)` on
-line 196 and `if name in proposed:` on line 203 in place, both of which
-the new guard makes unreachable. The `.get` fallback is now not merely
-redundant but misleading — it encodes `0.0` as an initial value, which
-would make the multiplier meaningless if it could ever be reached.
+**1. `/api/runs` as a second endpoint.** T3 says "a single endpoint", but T4
+requires the page to show run classes and the D32 warning, which needs data
+from somewhere. I read "single endpoint" as scoped to T3's purpose — proving
+the pipe — rather than a cap on the app, and kept `/api/graph` exactly as
+specified rather than overloading it with unrelated payload. Chosen, not
+drifted.
 
-I left them because "same treatment as F2" is an instruction to mirror,
-and because two fixes for one bug should read identically — that was R2's
-own argument about `bind()`. But a reader meeting the dead fallback will
-reasonably wonder which of the two is the real contract. Say the word and
-both come out, in either class or both; it is zero net statements.
+**2. `expansions`, `hops`, `tier`, `model` returned beyond the specified
+fields.** `expansions` is the one that matters and §5 explains why; without
+it the anti-reimplementation test would not have caught the mutation. The
+other three are free context that makes the page legible.
+
+**3. The tier is read from the config store, not restated.**
+
+```python
+    register()
+    node = ConfigStore.instance().repo["graph"][f"{name}.yaml"].node
+    return OmegaConf.to_object(node)
+```
+
+`cross_evaluate.py` sets the precedent for restating it as
+`GraphCfg(model="geometric", n_nodes=200, density=0.04)`, and that works
+until someone edits the registration, at which point the dashboard silently
+draws a tier that no longer exists under that name. Reading it back makes
+divergence impossible instead of merely unlikely. The cost is a dependency on
+a Hydra internal (`ConfigStore.repo`) — but it fails **loudly at startup** if
+Hydra changes, where the restated constant fails silently and forever.
 
 ## Surprises
 
-**The fourth site is worse than the bug I was sent to fix.** F6 needed a
-misconfigured target to bite. `_make_controller`'s `start == end == 1.0`
-needs nothing — it is the default, it is what Phase 3 gets unless someone
-overrides it, and a schedule that never varies is not detectable as an
-error anywhere in the pipeline. I went looking for a fourth *drop* site
-and found a fourth route to the same false null.
+**The core needed nothing added.** I expected at least one "the dashboard
+needs X and `src/` does not expose it — stop and report". Nothing came up.
+Every value on the page was already reachable through a public function.
 
-**`ruff format --check` disagrees with 23 of 52 files** — including
-`NullController.propose`, which I did not write. The config sets
-`line-length = 100`; the codebase is hand-wrapped at 88. My additions
-match the surrounding style and F2's fix. `ruff check` (the acceptance
-gate) passes clean. Not touching it: running `ruff format` would rewrite
-23 files across every phase's work, which is well outside any segment's
-scope. Reporting it because "lint clean" and "formatted" are not the same
-claim, and I have only ever verified the first.
+**`pyproject.toml` packages only `src`,** so `dashboard/` is not installed
+with the library at all — a second structural guarantee under D14 that I did
+not expect and did not have to build. It is a repository tool, not a shipped
+component, and `pip install dynaswarm` cannot drag a web framework along.
+
+**`RUNBOOK.md:27` is stale again** — it reads `~60 s, 271 not-slow tests`;
+the true figure is **324**, and the wall-clock is ~36 s. Segment 1 corrected
+this exact line and it has gone stale three times since, because it goes
+stale every time anyone adds a test. **Not fixed** — it is outside T5's named
+task, and a number that rots on every segment probably wants deleting rather
+than re-correcting, which is a decision rather than a typo fix.
 
 ## Could not do
 
-Nothing was blocked.
+Nothing was blocked. I could not screenshot a browser, so §4 executes the
+page's own JavaScript instead of describing it.
 
 ## Questions for the Architect
 
-1. **The dead fallback** (deviations, above) — mirror F2 and leave it, or
-   clean both classes?
-2. **The `_make_controller` defect** (§4) — is this F7 and a Phase 3
-   opening task, or does it belong to whoever builds `ScheduledAllocation`
-   as part of building it? It is currently unreachable, but so was F6.
-3. **`ruff format`** — is the 88-column hand-wrapping deliberate against
-   the 100 in `pyproject.toml`, or is one of the two wrong? If the
-   formatter is meant to be authoritative, the reformat wants its own
-   segment rather than riding along with a science change.
+1. **`RUNBOOK.md:27`** — re-correct it to 324, or drop the count from the
+   command comment entirely? It has now gone stale three times.
+2. **`ConfigStore.repo`** (deviation 3) — is depending on that Hydra internal
+   acceptable for a local tool, or would you rather the dashboard took the
+   restated-constant risk with a test pinning it to the registration?
+3. **Server lifecycle** — nothing in the repo starts or stops the dashboard
+   for tests; the T7 evidence came from a manually started server. Should
+   segment 7 add a fixture that starts it, or does calling the route
+   functions directly stay the testing story?

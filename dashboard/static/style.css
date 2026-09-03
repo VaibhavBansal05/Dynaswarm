@@ -1,0 +1,18 @@
+:root { color-scheme: light dark; }
+body {
+  margin: 0 auto; padding: 2rem 1.5rem; max-width: 46rem;
+  font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.01em; }
+h2 { margin: 2rem 0 0.5rem; font-size: 0.95rem; text-transform: uppercase;
+     letter-spacing: 0.08em; opacity: 0.6; }
+.sub { margin: 0.4rem 0 0; opacity: 0.7; }
+dl { display: grid; grid-template-columns: 12rem 1fr; gap: 0.15rem 1rem; margin: 0; }
+dt { opacity: 0.65; }
+dd { margin: 0; font-weight: 600; }
+dd.pending { grid-column: 1 / -1; opacity: 0.5; font-weight: 400; }
+.warning {
+  margin-top: 1rem; padding: 0.75rem 0.9rem; border-left: 3px solid #c47f00;
+  background: color-mix(in srgb, #c47f00 12%, transparent); font-weight: 400;
+}
+footer { margin-top: 2.5rem; opacity: 0.5; font-size: 0.85rem; }

@@ -22,6 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 viz = ["pygame>=2.5"]
 dev = ["pytest>=8", "ruff>=0.6"]
+# Dashboard only, and deliberately not a core dependency: `dynaswarm` must
+# stay installable and fully testable without a web stack. test_hygiene
+# bans both names throughout src/, so nothing under the science surface
+# can import them even by accident.
+dashboard = ["fastapi>=0.115", "uvicorn>=0.30"]
 
 [project.scripts]
 dpo = "dynaswarm.cli:main"
