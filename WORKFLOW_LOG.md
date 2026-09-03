@@ -479,3 +479,113 @@ Two segments bought:
 And two habits that generalise: **observe the effect, not the call** — and **read the output, do not trust the setup.**
 
 Phase 1 next. The first thing built rather than repaired.
+
+---
+
+## Entry 006 — Segment 6: Dashboard Scaffold
+
+**Phase** 1 (See it) · **Segment** 1 of 5 · **Overall segment** 6
+**Verified** 3 Sept 2026 · **Status** COMPLETE
+**Commit** `c253e2a`, ahead 1, unpushed
+
+### What the segment asked for
+
+Stand up the dashboard and prove the pipe — a browser page showing numbers that came from the real engine. Draw nothing. Establish the boundary that keeps the dashboard a view **before** any drawing code exists, on the reasoning that a boundary asserted afterwards is one somebody has already had a reason to cross.
+
+### Architect verification
+
+Read off disk, not taken from the report:
+
+| Claim | Verified |
+|---|---|
+| `server.py:97` restored to `heuristic=True` | Yes — read the file |
+| `RUNBOOK.md` §6 "The dashboard" exists, port and host stated | Yes — lines 343–392 |
+| `pyproject.toml:29` dashboard group, fastapi + uvicorn only | Yes |
+| `dashboard/` statement count = 45 | **Recomputed independently** with `_statement_count`'s own logic: `__init__.py` 0, `server.py` 45, total **45 / 1000**, headroom 955. Exact match |
+| `FORBIDDEN_IMPORTS` does not reach `dashboard/` | Yes — `test_hygiene.py:16` roots `SRC` at `src/dynaswarm`; `_python_files()` is `SRC.rglob` |
+| FINDINGS appended | Yes, complete |
+
+**Independent evidence the report did not have.** vClaude could not screenshot a browser and rendered the page by executing `app.js` under node. Rudra opened `127.0.0.1:8000` in Chrome and the browser render matches the node harness field for field — `optimum_at_t0 99.96328976797456`, `expansions 75`, `exploratory 9240`, the D32 warning, the footer. **The pipe is confirmed from outside the process that built it.**
+
+### The result worth naming: `src/` did not move
+
+`2005 / 2100`, delta **+0**. The spec said a scaffold needing the science surface is a design problem, not a measurement problem — stop and report. Nothing came up. Every value on the page was already reachable through a public function: `build()`, `shortest_path()`, `stream()`, `load_steps()`.
+
+That is a *result*, not an absence. §2.3 asserts the core exposes what the dashboard needs; this is the first segment that could have falsified it, and did not.
+
+**955 statements for segments 7–10.** The retiring `viz/replay.py` is 158 and does the graph-drawing job segment 7 inherits. The cap is not close.
+
+### The mutation — the finding of the segment
+
+vClaude mutated the dashboard into the most plausible reimplementation available: the same core function, the same correct answer, a different search (`heuristic=True → False`).
+
+```
+E   AssertionError: expansion count differs — the dashboard is running its own search
+E   assert 200 == 75
+```
+
+**The optimum assertion passed. The answer was still exactly right.**
+
+Only `expansions` caught it, and the reason generalises: `optimum_at_t0` is a property of the *graph*, which anything competent can arrive at. `expansions` is a property of *this search* — heuristic, tie-break order, heap discipline — and nothing that recomputed the answer independently reproduces it by luck.
+
+> **The correct number arriving from the wrong place is the failure this project has already died of once, and equality on the answer does not detect it.**
+
+That is the standard every future dashboard test is held to: assert a value the engine's *process* produces, not only the value its *answer* has.
+
+### `FORBIDDEN_IMPORTS`, verified behaviourally rather than structurally
+
+The structural check ("the scan is rooted elsewhere") only matters if the scan would otherwise reject the file. vClaude ran the scan's own logic over `dashboard/server.py`: **four hits** — three `fastapi` imports and a **function-level** `import uvicorn` inside `main()` that `ast.walk` would still catch.
+
+So D14 is load-bearing, not decorative. Moving `dashboard/` under `src/` breaks the build in four places rather than silently degrading. A second structural guarantee turned up unlooked-for: `pyproject.toml` packages only `src`, so `pip install dynaswarm` cannot drag a web framework along.
+
+### My spec error — the fourth of this family
+
+I asked for `git diff dashboard/server.py` as proof of the restore. `dashboard/` was **untracked** this segment, so that diff is empty and always would be. The check could not have proved anything as stated.
+
+vClaude substituted a better one — `diff <(sed 's/False/True/' server.py) $S/server.good.py`, empty — which proves the saved copy differs by exactly that one flag and smuggled nothing in. Then it *said so* rather than pasting an empty diff as evidence.
+
+**Generalised, for every future acceptance block I write:** a diff against git proves something only for tracked files. For new files the baseline has to come from somewhere the segment created deliberately.
+
+### Deviations — all three accepted
+
+1. **`/api/runs` as a second endpoint.** T3's "single endpoint" was scoped to proving the pipe. Overloading `/api/graph` with run provenance would have coupled two unrelated concerns in the one endpoint the anti-reimplementation test pins. Correct reading.
+2. **`expansions`, `hops`, `tier`, `model` returned beyond spec.** `expansions` is not surplus — without it the mutation walks through.
+3. **Tier read from `ConfigStore` rather than restated.** See R2 below.
+
+### Rulings
+
+**R1 — `RUNBOOK.md`'s test count: delete it, don't re-correct it.**
+
+vClaude flagged line 27 (`271 not-slow tests`, actually 324). There is a second, unflagged: **line 38** — `276 collected · 5 slow · 271 not-slow · all passing`. Same rot, same cause.
+
+The count has gone stale three times in six segments because it goes stale every time anyone adds a test — which is every segment. That is not a documentation defect; it is a static file claiming a moving quantity.
+
+**Ruled:** both sites lose the number. Line 27's comment keeps the rough wall-clock and drops the count; line 38 says what the suite is *for* and tells the reader to run it. The authoritative counts live **here**, in `WORKFLOW_LOG.md`, where each is dated and append-only — a number that describes a moment cannot rot, while a number that claims to be current always can.
+
+Assigned to segment 7 as a one-line task.
+
+**R2 — `ConfigStore.repo` is accepted, but the coverage gets a name.**
+
+The argument is right: a restated `GraphCfg(...)` works until someone edits the registration, after which the dashboard silently draws a tier that no longer exists under that name. Reading it back makes divergence impossible rather than unlikely, and a Hydra change fails loudly instead of silently forever.
+
+But the coverage today is **incidental** — `test_has_coordinates_...` would fail if `ConfigStore.repo` moved, while being named for something else entirely. Entry 005's R3 recorded exactly this shape: *a test that exercises a thing is not thereby testing it, and if the assertion would hold with that thing removed, it should say so in its name.* A future segment could rewrite that test for its own reasons and delete the Hydra protection without knowing it existed.
+
+**Ruled:** keep the `ConfigStore` read; segment 7 adds one small test named for the thing it protects — `tier()` returns the fields the registration declares. ~3 statements against 955.
+
+**R3 — Direct route calls stay the testing story. One HTTP test is added, for a reason the direct call cannot reach.**
+
+A fixture that boots uvicorn tests uvicorn. But there is a real gap between calling `api_graph()` and serving it: **JSON serialisation**. `describe_graph` casts numpy scalars by hand today; the day someone adds a field and forgets the cast, the direct call passes and the HTTP response 500s. That is precisely *read the output, do not trust the setup*, one layer out.
+
+**Ruled:** segment 7 adds one `fastapi.testclient.TestClient` smoke test — real routing, real serialisation, no socket, no port, no teardown — asserting 200 and a JSON body that round-trips. `httpx` is **authorised** into the dashboard optional group if TestClient requires it. No live-server fixture.
+
+### Recorded, not acted on
+
+`app.js`'s error path was exercised by accident: an early node harness failed with `Failed to parse URL from /api/graph` and the page rendered a visible `error` row rather than a blank panel. Unplanned, but it is the first evidence the page fails legibly, and segment 7 draws things that can fail.
+
+### Close
+
+**329 full / 324 not-slow** (from 321 / 316, **+8**, all in `tests/test_dashboard.py`). Lint clean across `src/`, `tests/`, `dashboard/`. `src/` **2005 / 2100**. `dashboard/` **45 / 1000**.
+
+Phase 1 opens with the boundary tested before anything is drawn, and with a demonstration that the boundary's test catches a *plausible* violation rather than an obvious one.
+
+Segment 7 draws the first graph.
