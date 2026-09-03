@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import subprocess
 import sys
 import textwrap
@@ -386,3 +387,233 @@ def test_a_tier_without_coordinates_answers_and_refuses():
     assert geo["positions"] == []
     assert geo["edges"], "the graph still exists; only its geometry is missing"
     assert geo["path"][0] == geo["source"]
+
+
+# ---------------------------------------------------------------------------
+# The second budget (Entry 007 R1)
+# ---------------------------------------------------------------------------
+
+#: Ceiling on the dashboard's browser-side surface, in **non-blank,
+#: non-comment lines** of ``.js``, ``.css`` and ``.html``.
+MAX_STATIC_LINES = 1200
+
+STATIC = DASHBOARD / "static"
+STATIC_SUFFIXES = {".js", ".css", ".html"}
+
+
+def _static_lines(path: Path) -> int:
+    """Count non-blank, non-comment lines.
+
+    **This is a cruder instrument than ``_statement_count`` and must not
+    be reasoned about as if it were the same measure.** That one parses
+    Python and counts AST statements, so reformatting cannot move it.
+    This one counts lines, so it *can* be moved by wrapping differently,
+    and it says nothing about how much behaviour a line carries.
+
+    Counting JavaScript statements properly needs a JavaScript parser,
+    and this repository will not take a dependency to enforce a budget.
+    The point of a blunt number here is that it is **not zero**: the
+    statement counter globs ``*.py`` and reported 0 for a file that grew
+    to 142 lines, which is a brake reporting comfortable headroom while
+    the growing half of the dashboard went unmeasured — F5's shape, a
+    dead instrument returning a flattering number.
+    """
+    count, in_block = 0, False
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if in_block:
+            in_block = "*/" not in line
+            continue
+        if path.suffix in {".js", ".css"} and line.startswith("/*"):
+            in_block = "*/" not in line
+            continue
+        if path.suffix == ".js" and line.startswith("//"):
+            continue
+        if path.suffix == ".html" and line.startswith("<!--"):
+            continue
+        count += 1
+    return count
+
+
+def _static_files() -> list[Path]:
+    return sorted(p for p in STATIC.rglob("*") if p.suffix in STATIC_SUFFIXES)
+
+
+def test_dashboard_static_line_budget():
+    """*Has the dashboard become an application?*
+
+    A different question from the Python cap's *has it become a second
+    engine?*, which is why they are two budgets and not one stretched
+    over both. See :func:`_static_lines` on why this one is deliberately
+    the cruder measure.
+    """
+    total = sum(_static_lines(p) for p in _static_files())
+    assert total < MAX_STATIC_LINES, (
+        f"dashboard/static/ is {total} lines, ceiling is {MAX_STATIC_LINES}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Time — the layer F1 could come back in
+# ---------------------------------------------------------------------------
+
+
+def _timeline() -> dict:
+    server = pytest.importorskip("dashboard.server")
+    return server.describe_timeline()
+
+
+def _rebuild(run: dict):
+    """The core's own timeline for the run the endpoint just described."""
+    from dynaswarm.core.timeline import GraphTimeline, build_schedule
+
+    server = pytest.importorskip("dashboard.server")
+    scenario = server._registered("scenario", run["scenario"])
+    view, source, target = build(server.tier(run["tier"]), stream(run["seed"], "graph"))
+    schedule = build_schedule(view, scenario, stream(run["seed"], "events"), source, target)
+    return GraphTimeline(view, schedule), source, target
+
+
+def test_marker_time_equals_engine_time_at_every_timestep():
+    """**The F1 test for the visual layer.**
+
+    A marker drawn one step early crashes nothing and looks like nothing.
+    The demo simply shows an edge snapping at the wrong moment beside a
+    correct cost — a lie you can point at, in the artefact built to
+    convince an examiner.
+
+    So this compares the endpoint's events against
+    ``GraphTimeline.events_at`` at **every** ``t``, not a sampled few.
+    An off-by-one is invisible at ``t = 0`` when both are empty.
+    """
+    run = _timeline()
+    timeline, _, _ = _rebuild(run)
+
+    for step in run["steps"]:
+        expected = timeline.events_at(step["t"])
+        assert len(step["events"]) == len(expected), f"t={step['t']}"
+        for sent, event in zip(step["events"], expected, strict=True):
+            assert (sent["kind"], sent["u"], sent["v"]) == (event.kind, event.u, event.v), (
+                f"t={step['t']}"
+            )
+
+
+def test_the_optimum_at_every_timestep_is_the_oracles():
+    """The anti-reimplementation test, extended across time.
+
+    One matching optimum proves a lucky index. Sixty proves the endpoint
+    is asking the engine at each state rather than answering for it.
+    """
+    run = _timeline()
+    timeline, source, target = _rebuild(run)
+
+    for step in run["steps"]:
+        optimum, _, _ = shortest_path(
+            timeline.state_at(step["t"]), source, target, heuristic=True
+        )
+        if step["reachable"]:
+            assert step["optimum"] == pytest.approx(float(optimum)), f"t={step['t']}"
+        else:
+            assert not np.isfinite(optimum), f"t={step['t']}"
+
+
+def test_every_path_is_a_real_walk_in_the_graph_as_it_stands_then():
+    """A path valid at t=0 and invalid at t=30 is what a stale cache is.
+
+    Checked against **that timestep's** active mask, not the initial one:
+    an edge closed at t=12 must not still be carrying the route at t=13.
+    """
+    run = _timeline()
+    timeline, source, target = _rebuild(run)
+
+    for step in run["steps"]:
+        if not step["reachable"]:
+            assert step["path"] == [], f"t={step['t']}"
+            continue
+        state = timeline.state_at(step["t"])
+        assert step["path"][0] == source and step["path"][-1] == target
+        for u, v in zip(step["path"], step["path"][1:], strict=False):
+            slot = state.find_slot(u, v)
+            assert slot >= 0 and state.active[slot], f"dead edge {u}-{v} at t={step['t']}"
+
+
+def test_every_paths_weights_sum_to_that_timesteps_optimum():
+    """Segment 7's strongest test, run at every step.
+
+    The picture and its caption must come from one computation at each
+    ``t``, not only at the first — a cached path beside a live optimum
+    would pass a t=0-only check and diverge the moment anything breaks.
+    """
+    run = _timeline()
+    timeline, _, _ = _rebuild(run)
+
+    for step in run["steps"]:
+        if not step["reachable"]:
+            continue
+        state = timeline.state_at(step["t"])
+        walked = sum(
+            float(state.weight[state.find_slot(u, v)])
+            for u, v in zip(step["path"], step["path"][1:], strict=False)
+        )
+        assert walked == pytest.approx(step["optimum"]), f"t={step['t']}"
+
+
+def test_the_timeline_endpoint_is_stateless():
+    """No cursor lives on the server, so nothing can disagree about ``t``.
+
+    Two identical calls must be identical, and calls for other runs in
+    between must not perturb them — the shape a cached "current step"
+    would break.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    first = server.describe_timeline()
+    server.describe_timeline(seed=1001)
+    server.describe_timeline(scenario_name="high")
+    assert server.describe_timeline() == first
+
+
+def test_unreachability_is_represented_rather_than_crashed_on():
+    """A disruption can disconnect the graph; that is a result, not an error.
+
+    The decision pinned here: ``optimum`` is ``None``, ``path`` is empty,
+    ``reachable`` is ``False``, and the step still exists so playback
+    continues through it. Exercised on a scenario violent enough to make
+    it possible rather than asserted only in the abstract.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    run = server.describe_timeline(scenario_name="high")
+    assert len(run["steps"]) == run["horizon"]
+    for step in run["steps"]:
+        assert step["reachable"] is (step["optimum"] is not None)
+        if not step["reachable"]:
+            assert step["path"] == []
+
+
+def test_the_dashboard_never_derives_event_timing_itself():
+    """``events_at()`` is the only source of event timing, in any language.
+
+    A grep, deliberately: the rule is that the index arithmetic exists in
+    exactly one place, and the way it comes back is somebody writing
+    ``schedule[t]`` somewhere convenient. That is not visible in a unit
+    test of the endpoint's output, because the wrong index still returns
+    a real, well-formed event list.
+    """
+    for path in sorted(DASHBOARD.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Subscript):
+                continue
+            target = node.value
+            name = getattr(target, "attr", None) or getattr(target, "id", None)
+            assert name != "schedule", f"{path.name}:{node.lineno} indexes the schedule"
+
+    # JavaScript has no AST here, so strip comments and search the rest.
+    # Textual matching alone would flag the docstrings that *quote* the
+    # contract, which is the opposite of what this guards.
+    for path in sorted(STATIC.rglob("*.js")):
+        code = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
+        code = re.sub(r"//.*", "", code)
+        assert "schedule" not in code, f"{path.name} references the schedule directly"

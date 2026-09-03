@@ -1,60 +1,70 @@
-# SEGMENT 7 — Draw the Graph
+# SEGMENT 8 — Make It Move
 
-**Phase 1 · See it · Segment 2 of 5**
+**Phase 1 · See it · Segment 3 of 5**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` §15 (dashboard spec) and §2.3 (structural rules), and `decisionLedger.md` D8, D14–D17, D30, D32. `WORKFLOW_LOG.md` **Entry 006** rules on segment 6 and carries three decisions that appear below as T1 — read it before starting.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` §4.4 (**the temporal contract — the single most important section for this segment**), §15, §2.3, and `decisionLedger.md` D8, D14–D17, D30, D32. `WORKFLOW_LOG.md` **Entry 007** rules on your three questions; R1 is T1 below.
 > Append your findings to the **bottom** of this file. Do not modify the spec text above it.
 
 ---
 
 ## Goal
 
-**Put the graph on screen.** 200 nodes at their real coordinates, 735 edges, and the optimal path lit up across them.
+**Put time on the screen.** Roads break, the graph changes, and the optimal path re-routes in front of you — step by step, with playback you control.
 
-Segment 6 proved a number could travel from the engine to a browser. This segment proves a *picture* can — and picture-drawing is where the temptation to compute locally becomes real for the first time. Every visual decision below is chosen to make that temptation structurally impossible rather than merely discouraged.
+This is the segment where Dynaswarm stops being a picture and becomes the thing the project is actually about: **a shortest path that will not hold still.**
 
-Still no timeline, no disruptions, no arms. One graph, one moment, drawn honestly.
+Still no arms, no algorithms racing, no charts. Segments 9–10. This segment shows the *problem* moving; the next one shows the solvers chasing it.
 
-## Why this is the segment that can go wrong quietly
+## The one thing that can go wrong, and it is invisible
 
-A wrong number looks wrong. **A wrong picture looks fine.**
+**F1 was an off-by-one in time.** Every component read one timestep into the future, and it voided every recency-driven result the project had. It was fixed in Phase 0.5 and the fix is pinned by tests.
 
-If the browser lays out nodes itself, you get a plausible, pretty, completely fictional graph — and nothing in the test suite objects, because every number is still correct. That is exactly what Rudra saw the first time he ran v1: a spaghetti tangle that *looked* like a result.
+**This segment can reintroduce it in a place no test currently looks: the picture.**
 
-So the rule for this segment is sharper than §2.3's general one:
+If the page draws a disruption marker one step early or late, nothing crashes, nothing looks wrong, and the demo shows an edge snapping at the wrong moment while quoting a correct cost. It would be a lie you could point at, in the artefact built to convince your examiner.
 
-> **The browser receives geometry. It never invents geometry.**
-> Positions come from `view.topology.pos`. Edges come from the core's edge list. The path comes from `core.oracle`. The browser's entire job is to convert numbers it was given into pixels — scaling and centring, nothing else.
+`ARCHITECTURE.md` §4.4 and `timeline.events_at()` define the contract:
+
+> `schedule[k]` is the transition from state *k* to state *k+1*, so the events that **produced** state `t` are `schedule[t-1]`.
+
+**Do not re-derive that indexing anywhere.** Not in Python, not in JavaScript, not "just for the marker." Ask `events_at()`, every time. And T7 makes you prove a shifted marker is caught.
+
+## What the browser may and may not do with time
+
+Segment 7's rule stands and gets one careful extension.
+
+**The browser may reconstruct which edges are currently changed**, by applying the event list it was given, in order. That is *visual* state — what to grey out — and it is the only way to avoid shipping 735 edges per timestep.
+
+**The browser may not compute any number.** Every optimum, every path, every cost at every `t` is precomputed by `core.oracle` server-side and sent. The page looks them up; it never solves.
+
+That line is the whole design: **the browser reconstructs appearance, the engine owns every quantity.** If the browser's reconstruction ever drifts from the engine's state, the two disagree visibly — the highlighted path runs through an edge the page has greyed out — which is a failure you can *see*, and that is deliberate.
 
 ---
 
-## ⚠️ T0 — MEASURE, and project before you measure
+## ⚠️ T0 — MEASURE — three numbers now, not two
 
-Same two surfaces as segment 6.
+**T1 lands first**, then measure against both dashboard budgets.
 
-1. **`src/` — expect `2005 / 2100`, delta `+0`.** If the drawing needs something the core does not expose, **stop and report**. §2.3 says the core exposes it, but that is a ruling to be made, not a change to be improvised.
-2. **`dashboard/` — currently `45 / 1000`, headroom 955.**
+1. **`src/`** — expect `2005 / 2100`, delta `+0`. If the timeline drawing needs something the core does not expose, **stop and report.** Third segment running; if it breaks here that is worth knowing loudly.
+2. **`dashboard/**/*.py`** — currently `56 / 1000`.
+3. **`dashboard/static/**`** — the new budget. **Report the opening figure**, since nobody has ever measured it.
 
-**Do this first, before writing:** project the dashboard delta, in statements, from the tasks below. Then report the actual. Entry 005 established the habit and it paid — a projection that misses badly is telling you the design drifted while you were typing.
-
-Report the number segments 8–10 are left with.
+Project all three before writing. Report actual beside projection.
 
 ---
 
 ## Scope
 
 **In scope**
-- `dashboard/server.py` — one new endpoint
-- `dashboard/static/` — the drawing
-- `tests/test_dashboard.py` — new tests
-- `RUNBOOK.md` — T1.1 only
-- `pyproject.toml` — only if T1.3 needs `httpx`
+- `dashboard/server.py`, `dashboard/static/`
+- `tests/test_dashboard.py`, `tests/test_hygiene.py` (T1 only)
 - One local commit
 
 **Out of scope**
 - **Anything under `src/`**
-- Timeline, disruptions, playback, arms, charts — segments 8–10
-- `viz/replay.py` — retires when the dashboard covers it, which is not yet (D17)
+- Arms, algorithms, ACO/PSO/hybrid, charts — segments 9–10
+- **Reading timelines from `outputs/`** — see T2's ruling
+- Clicking or selecting nodes — segment 9, and it needs the hit-target policy Entry 007 recorded
 - F4, F7, F8 — Phase 3
 - `git push`
 
@@ -62,129 +72,133 @@ Report the number segments 8–10 are left with.
 
 ## Tasks
 
-### T1 — The three rulings from Entry 006
+### T1 — Entry 007's R1: the second budget
 
-Small, and they go first so they are not squeezed at the end.
+The Python cap counts `*.py` and nothing else. `app.js` grew 36 → 142 lines last segment and counted **zero**, while segments 8–10 are the JavaScript-heavy ones. A brake reporting comfortable headroom while the growing half is unmeasured is **F5 again** — a dead instrument returning a flattering number.
 
-**T1.1 — `RUNBOOK.md`: delete the test count, do not re-correct it.**
+Two budgets, two distinct questions. Do not merge them.
 
-Two sites, not one:
-- **line 27** — `# ~60 s, 271 not-slow tests`
-- **line 38** — `**276 collected · 5 slow · 271 not-slow · all passing.**` — you did not flag this one; it carries the same rot
-
-The count has gone stale three times in six segments because it goes stale every time anyone adds a test, which is every segment. **A static file cannot hold a moving quantity honestly.**
-
-Line 27 keeps a rough wall-clock and drops the count. Line 38 says what the suite is *for* and tells the reader to run it for the number. The authoritative counts live in `WORKFLOW_LOG.md`, where each is dated and append-only — **a number describing a moment cannot rot; a number claiming to be current always can.**
-
-**T1.2 — Give the Hydra dependency a test named for what it guards.**
-
-`tier()` reads `ConfigStore.instance().repo["graph"][...]`. That was the right call. But today the only thing that would catch a Hydra change is `test_has_coordinates_is_read_from_the_topology_not_assumed`, which is named for something else entirely — so a future segment could rewrite it for its own reasons and silently delete the protection.
-
-Entry 005's R3 recorded this shape exactly: *if a test would catch something its name does not mention, the protection is incidental and one edit from gone.*
-
-Add a test that says so in its name: `tier("medium200")` returns the fields the registration declares. Assert against the registration, not against restated literals — a test that hardcodes `n_nodes=200` reintroduces the drift `tier()` exists to prevent.
-
-**T1.3 — One HTTP smoke test.**
-
-Every dashboard test today calls the route function directly. Your browser does not — it goes over HTTP and receives JSON, and **numpy scalars are the classic thing that works in Python and 500s on serialisation.** `describe_graph` casts by hand today; the day someone adds a field and forgets, the direct call passes and the page breaks.
-
-Use `fastapi.testclient.TestClient` — real routing, real serialisation, no socket, no port, no teardown. **No live-server fixture.** Assert 200 and a body that round-trips through `json.loads`.
-
-**`httpx` is authorised** into the `dashboard` optional group if `TestClient` requires it. Nothing else is.
-
-### T2 — The geometry endpoint
-
-**A new endpoint. Do not modify `/api/graph`** — it is pinned by the anti-reimplementation test and its stability is worth more than tidiness.
-
-`GET /api/graph/geometry`, returning everything needed to draw and **nothing that has to be worked out**:
-
-| Field | Source | Why it is here and not computed in the browser |
+| Budget | Question | Cap |
 |---|---|---|
-| `positions` | `view.topology.pos` | The one field that makes the picture true rather than plausible |
-| `edges` | the core's active edge list, as `[u, v]` index pairs | The browser must not decide which edges exist |
-| `weights` | per edge, aligned to `edges` | So the drawing can show cost without asking a second time |
-| `path` | `core.oracle`'s node sequence | **The browser highlights this sequence. It never searches for a path** |
-| `optimum`, `source`, `target` | oracle / `_endpoints()` | So the quoted cost and the drawn path come from one call |
-| `has_coordinates` | `view.topology.pos is not None` | Drives T4 |
+| `dashboard/**/*.py` statements | *Has the dashboard become a second engine?* | **1000** |
+| `dashboard/static/**` non-blank, non-comment lines — `.js`, `.css`, `.html` | *Has the dashboard become an application?* | **1200** |
 
-Order matters: `edges[i]` and `weights[i]` describe the same edge, and the page will trust that. Say in the docstring that they are parallel arrays, because the day they silently desynchronise nothing visible breaks.
+**The unit is deliberately cruder than the Python one, and the test must say so in its docstring.** Counting JS statements needs a JS parser and this repo will not take a dependency for a budget. Line-counting is blunt and mildly gameable — and it is *not zero*, which is the entire property the current instrument lacks. Say that plainly where the next reader will see it, so nobody mistakes it for the AST count and reasons from a false equivalence.
 
-### T3 — Draw it
+Report the opening number. If `static/` is already close to 1200, **say so rather than raising the cap** — that is a finding, not a configuration problem.
 
-**Inline SVG, built in `app.js` from the endpoint's data.** Not canvas: SVG elements are inspectable in devtools, so "is that node really where the engine put it" is answerable by right-clicking, and this segment is as much a verification instrument as a demo.
+### T2 — The timeline endpoint
 
-- edges as lines, thin and low-contrast — 735 of them, they are context
-- nodes as small circles
-- **the optimal path highlighted** — its edges thicker and brighter, drawn *on top* of the rest
-- source and target marked distinctly from each other, not just from the crowd
-- the optimum cost and hop count shown as text beside the drawing, **taken from the same response** that produced the highlighted path
+`GET /api/timeline` — one call, the whole run, no server state.
 
-**The browser may do exactly one geometric thing: scale and centre the given coordinates to fit the viewport.** That is presentation. It may not lay out, spring, force-direct, jitter, cluster, or reposition anything.
+**Stateless by construction.** The server holds no cursor, no "current step", no session. The page asks once for everything and scrubs locally. A stateful server would make "which step are we on" a thing that can disagree between the page and the process, which is a bug surface this project does not need.
 
-**Banned, explicitly:** d3, cytoscape, vis.js, sigma, any graph or layout library, and any new dependency at all. They are banned not for weight but because every one of them ships a layout algorithm, and a layout algorithm is a second opinion about where the nodes are.
+**Build the timeline live from the core. Do not read `outputs/`.** Every run on disk predates F1's fix and carries a permanently misaligned `num_events` column (D32). Drawing disruption markers from those files would draw them one step early — **the exact bug this segment must not reintroduce, reintroduced by trusting stored data instead of the engine.** Stored-run replay waits for Phase 4's regenerated runs.
 
-Keep it legible on a normal laptop screen. 200 nodes and 735 edges is a lot of ink — if it reads as a tangle, say so in FINDINGS rather than quietly making the edges invisible to hide it.
+Return, per timestep `t` from 0 to the horizon:
 
-### T4 — Refuse to draw what has no coordinates
+| Field | Source | Note |
+|---|---|---|
+| `events` | **`timeline.events_at(t)`** | The contract. Never `schedule[t]`, never a re-derived index |
+| `optimum` | `core.oracle` at state `t` | The moving optimum — the quantity the entire project measures against |
+| `path` | the oracle's node sequence at `t` | What gets highlighted |
+| `reachable` | whether target is still reachable | A disruption can disconnect the graph. **Decide what the page shows then, and say what you decided** |
 
-`small30` is Erdős–Rényi. It has **no positions.** Anything drawn from it is a picture of the layout algorithm, not of the graph — and it is the specific thing that made v1's replay worthless.
+Plus the horizon and the scenario name once, at the top.
 
-When `has_coordinates` is false the page **shows a clear message and draws nothing.** Not a fallback layout, not a circle arrangement, not a random scatter. A blank panel and a sentence explaining why.
+Report the payload size. If it is unreasonable, say so and propose — do not silently thin it.
 
-This is a feature, not a limitation, and the page should say which: *this tier has no coordinates, so there is no honest way to draw it.*
+**First, report what the core actually exposes**: the real names and signatures of the timeline/scenario API, and how a state at `t` is obtained. If applying the timeline requires something not public, **stop and report** before writing around it.
 
-### T5 — The tests
+### T3 — Draw the disruptions
+
+On the graph from segment 7:
+
+- **changed edges are visibly changed** — colour or weight, and consistent from the moment they change onward, not only on the step they happen
+- **the step where a change lands is marked distinctly** — the difference between "this edge is broken" and "this edge just broke" is the difference between state and event, and both belong on screen
+- **the optimal path re-routes** as `t` advances, drawn from the endpoint's `path` for that `t`
+
+Keep segment 7's rule: geometry is received, never invented. Nodes do not move. Ever.
+
+### T4 — Playback
+
+- **step back / step forward**, one timestep
+- **play / pause**, at a speed that is watchable rather than impressive
+- **a scrubber** — drag to any `t`
+- **the current `t` displayed as a number**, always, unambiguously
+
+**Scrubbing must be exact.** Landing on `t` shows state `t` — not `t±1`, not an interpolation. If the scrubber and the step buttons can ever disagree about which step is showing, that is the off-by-one wearing a different hat.
+
+Keyboard: arrow keys step, space toggles play. Cheap and it makes the demo one-handed.
+
+### T5 — Show the moving optimum as a number
+
+Beside the graph, always visible:
+
+```
+t = 14 / 60      optimum 104.23      hops 13      2 edges changed this step
+```
+
+This is the sentence your examiner needs to understand the entire project. **The optimum moves. That is the problem.** Show it moving.
+
+Every number on that line comes from the endpoint. None is computed in the browser.
+
+### T6 — Tests
 
 | Test | What it catches |
 |---|---|
-| **The path is the oracle's, and it is a real walk** | Starts at `source`, ends at `target`, and **every consecutive pair is an active edge**. A returned path that is merely a plausible node list fails this |
-| **The path's summed weights equal `optimum`** | The strong one. It proves the drawn path and the quoted cost came from the *same* computation. If someone ever recomputes either independently, these two drift and this test is what notices |
-| **`positions` are the core's, not a copy that drifted** | Compare against `view.topology.pos` directly, element-wise |
-| **`edges` count equals `view.n_active_edges`** | The browser draws what the core says exists, no more and no less |
-| **`edges` and `weights` are the same length** | The parallel-array assumption, asserted rather than trusted |
-| **`small30` reports `has_coordinates: false`** and the endpoint still answers | T4's contract, server-side |
-| **T1.2's Hydra test** | named for what it guards |
-| **T1.3's HTTP test** | serialisation over the real route |
+| **Marker time equals engine time, at every `t`** | The endpoint's `events` at `t` are exactly `timeline.events_at(t)`. **The F1 test for the visual layer** |
+| **The optimum at every `t` equals the oracle's at that state** | Not the first, not the last — **every** one. This is the anti-reimplementation test for this segment |
+| **Every `path` is a real walk in the graph as it stands at that `t`** | A path valid at `t=0` and invalid at `t=30` is what a stale cache looks like |
+| **Every `path`'s summed weights equal that `t`'s `optimum`** | Segment 7's strongest test, extended across time |
+| **The timeline is stateless** | Two identical requests return identical payloads; requests in any order return the same thing |
+| **Unreachability is represented, not crashed on** | Whatever T2 decided, pinned |
+| **T1's static budget** | with its docstring stating its own imprecision |
 
-**Then mutate, as you did in segment 6 — and pick the mutation that would pass the weak tests.** The interesting one is not a broken path; it is a *valid* path that is not the optimal one, or positions that are shuffled but still 200 coordinates. Paste the mutation and the failure. If a mutation you expected to be caught slips through, **that is the most valuable thing you can report this segment.**
+### T7 — Mutations — two required
 
-### T6 — Show it
+**The specified one: shift the markers by one.** Make the endpoint return `schedule[t]` instead of `events_at(t)`. That is F1, reintroduced in the visual layer, and it is the mutation this whole segment is built around. **Paste the failure.** If it does not fail, you have found something far more important than a passing test — report it as the headline.
 
-Screenshot is Rudra's job and he will take it. Yours:
+**And at least one nobody specified.** Entry 007 made this a standing rule: the commissioned mutation confirmed a prediction, the uncommissioned one found a real defect. Pick something plausible that the weak version of a test would wave through — a stale path cached from an earlier `t`, an optimum array off by one against the events array, a scrubber that lands on `t-1`.
 
-1. `curl -s localhost:8000/api/graph/geometry` — **truncated sensibly**; do not paste 735 edges. First few of each array, plus every length, plus the full `path`
-2. The SVG the page actually builds — element counts by type, and the first path segment's real coordinates. Execute it, do not describe it
-3. **State plainly whether it is legible.** If 735 edges is visual mud, say so — segment 8 inherits that problem and would rather know now
+Report what you tried, what caught it, and — most valuable of all — **anything you expected to be caught that was not.**
 
-### T7 — Commit
+### T8 — Show it
+
+1. `/api/timeline` truncated sensibly — the top-level fields, the full first three timesteps, the full timestep with the most events, and total payload size
+2. The page as it renders at three different `t`: **0, a step where a disruption lands, and the horizon.** Execute it, do not describe it
+3. **State whether the movement is legible.** Does a re-route read as a re-route, or as a flicker? Segment 9 puts four algorithms on this same canvas and inherits whatever you say here
+
+### T9 — Commit
 
 Whole tree. **Do not push.**
 
 ```
-segment 7: draw the graph (phase 1)
+segment 8: make it move (phase 1)
 
-Adds GET /api/graph/geometry, returning positions from view.topology.pos,
-the core's active edge list, and the oracle's path — everything needed to
-draw, and nothing the browser has to work out. The page builds inline SVG
-from it: edges as context, the optimal path highlighted on top, source and
-target marked. The browser scales and centres the given coordinates and
-does nothing else geometric; no layout library is present to tempt it.
+Adds GET /api/timeline: one stateless call returning, for every timestep,
+the events that produced that state via timeline.events_at(), the oracle's
+optimum and path at that state, and whether the target is still reachable.
+Built live from the core rather than read from outputs/, whose stored runs
+predate F1 and carry a misaligned num_events column (D32).
 
-Tiers without coordinates are refused rather than drawn. small30 is
-Erdos-Renyi and any picture of it is a picture of a layout algorithm, which
-is what made v1's replay worthless.
+The page plays it: disruptions land on the graph, changed edges stay
+changed, and the optimal path re-routes as t advances, with step, play and
+scrub controls and the moving optimum shown as a number. The browser
+reconstructs which edges have changed so it knows what to grey out; every
+quantity it displays is the engine's.
 
-Tests assert the path is a real walk over active edges from source to
-target and that its summed weights equal the quoted optimum — the pair that
-drift apart the moment either is recomputed independently.
+Tests pin marker time to engine time at every timestep, and every path to a
+real walk whose summed weights equal that step's quoted optimum. Returning
+schedule[t] instead of events_at(t) — F1 reintroduced in the visual layer —
+is caught.
 
-Also lands Entry 006's three rulings: the stale test count is removed from
-RUNBOOK rather than corrected a fourth time, the Hydra config-store
-dependency gets a test named for what it guards, and one TestClient smoke
-test covers JSON serialisation over the real route.
+Also lands Entry 007's R1: dashboard/static/ gets its own line budget, since
+the statement counter globs *.py and had been reporting zero for a file that
+grew to 142 lines.
 
 Spec + findings: currentWorkFlow.md
-Log: WORKFLOW_LOG.md entry 007
+Log: WORKFLOW_LOG.md entry 008
 ```
 
 ---
@@ -193,14 +207,15 @@ Log: WORKFLOW_LOG.md entry 007
 
 | | |
 |---|---|
-| **Zero statements added to `src/`** | If the drawing seems to need one, stop and report |
-| **The browser receives geometry, never invents it** | Scale and centre. Nothing else |
-| **No graph or layout library** | Every one ships a second opinion about where the nodes are |
-| **No new dependency** | Except `httpx`, and only if `TestClient` requires it |
-| **Do not modify `/api/graph`** | It is pinned. Add, do not edit |
-| **No timeline, no disruptions, no arms** | Segments 8–10 |
-| **Do not touch `viz/replay.py`** | |
-| **Use the existing statement counter** | |
+| **Zero statements added to `src/`** | Stop and report if the drawing needs one |
+| **`events_at()` is the only source of event timing** | No re-derived index, anywhere, in any language |
+| **The browser computes no quantity** | It reconstructs appearance. Every number is the engine's |
+| **No server state** | Stateless endpoint, client-side playback |
+| **Do not read timelines from `outputs/`** | D32. Live from the core |
+| **Nodes never move** | Geometry received, never invented |
+| **No new dependency** | |
+| **Do not modify `/api/graph` or `/api/graph/geometry`** | Both are pinned. Add, do not edit |
+| **No clicking the graph** | Segment 9, and it needs a hit-target policy first |
 | **Do not push** | |
 
 ---
@@ -209,7 +224,7 @@ Log: WORKFLOW_LOG.md entry 007
 
 ```bash
 # 1a. In scope
-git diff --stat -- dashboard/ tests/ pyproject.toml RUNBOOK.md
+git diff --stat -- dashboard/ tests/
 # 1b. The science surface is untouched
 git diff --stat -- src/                       # expect EMPTY
 
@@ -219,34 +234,34 @@ git diff --stat -- src/                       # expect EMPTY
 # 3. Lint
 ./.venv/bin/ruff check src/ tests/ dashboard/
 
-# 4. Both budgets
-./.venv/bin/pytest -q -k "statement" -s
+# 4. All three budgets — report each
+./.venv/bin/pytest -q -k "statement or budget" -s
 
-# 5. The stale counts are gone
-grep -n "271\|276 collected" RUNBOOK.md        # expect NO test-count hits
+# 5. No re-derived event indexing anywhere
+grep -rn "schedule\[" dashboard/                        # expect NONE
+grep -rn "t - 1\|t-1\|t + 1\|t+1" dashboard/static/     # inspect every hit, justify or remove
 
-# 6. No layout library reached the page
-grep -rn "d3\|cytoscape\|vis\.js\|sigma\|force" dashboard/static/   # expect none
+# 6. Nothing reads stored runs for timing
+grep -rn "load_events\|load_steps" dashboard/           # only run_classes(), nothing timeline-related
 
 # 7. It runs
-./.venv/bin/python -m dashboard.server, then:
-curl -s localhost:8000/api/graph/geometry | head -c 400
+curl -s "localhost:8000/api/timeline" | head -c 400
 
 # 8. Committed, not pushed
 git log --oneline -2
 git status --short --branch | head -1
 ```
 
-**Expected:** `src/` diff empty · all tests pass · lint clean across three trees · both counts reported with the projection beside them · no stale count survives in `RUNBOOK.md` · no layout library anywhere in `static/` · the endpoint answers · commit on top, ahead 1, unpushed.
+**Expected:** `src/` diff empty · all tests pass · lint clean across three trees · three budgets reported with projections · no `schedule[` in the dashboard and every arithmetic-on-`t` hit justified · no stored-run read in the timeline path · endpoint answers · commit on top, ahead 1, unpushed.
 
 **Paste verbatim:**
 
-1. **T0** — projection, then actual, for both surfaces, and headroom left for segments 8–10
-2. **The truncated geometry JSON** — array lengths in full, contents sampled, `path` complete
-3. **The SVG as built** — element counts, first path segment's coordinates
-4. **The mutation** — what you broke, which test caught it, and anything you expected to be caught that was not
-5. **`small30`** — what the page shows when it refuses
-6. **Your honest read on legibility** at 200 nodes / 735 edges
+1. **T0** — projection then actual, all three surfaces, plus `static/`'s opening figure against 1200
+2. **What the core exposes for timelines** — real names and signatures
+3. **The truncated timeline JSON** — top-level fields, first three steps, busiest step, total size
+4. **The page at `t` = 0, a disruption step, and the horizon**
+5. **Both mutations** — the specified shift and your own — what caught each, and anything that slipped through
+6. **Your honest read on legibility of movement**, and what you decided for unreachable states
 
 ---
 
@@ -254,7 +269,7 @@ git status --short --branch | head -1
 
 Eight checks pass, six artefacts pasted, commit exists unpushed, FINDINGS appended.
 
-**After this, Rudra opens a browser and sees the actual graph his experiments run on, with the optimal path lit across it.** Segment 8 makes it move.
+**After this, Rudra can hit play and watch the problem his project exists to solve.** Segment 9 puts the algorithms on it.
 
 ---
 ---
@@ -263,280 +278,321 @@ Eight checks pass, six artefacts pasted, commit exists unpushed, FINDINGS append
 
 ---
 
-# FINDINGS — Segment 7
+# FINDINGS — Segment 8
 
-## 1. T0 — projection, then actual
-
-```
-                projected        actual       delta
-src/            2005  (+0)       2005 / 2100   +0
-dashboard/        61 (+16)         56 / 1000  +11    headroom 944
-```
-
-**`src/` did not move.** Nothing the drawing needs was missing from the core.
-The one thing I expected to need a ruling was the active edge list — the core
-exposes no accessor for it — but `viz/replay.py:238` already walks the CSR the
-same way, and that file retires into the dashboard under D17. So the dashboard
-inherited an existing in-repo pattern rather than inventing one, and `active`
-still decides which edges exist. I read that as reading the core's structure,
-not computing; flagging it because it is the closest this segment came to the
-line.
-
-**The projection missed by 5, high.** I counted a `pos is None` guard as an
-if/else (2) and the return dict as several; both collapsed — the guard became
-a ternary inside the dict literal, which `ast` counts once. Erring high is the
-harmless direction, but the habit is worth keeping precisely because it caught
-nothing this time: a projection that only ever matches is not being tested.
-
-**Headroom 944 for segments 8–10**, and one caveat below that number.
-
-### The cap does not measure the thing that grew
-
-`_python_files()` globs `*.py`. `app.js` went from **36 lines to 142** this
-segment and contributes **zero** to the 56. The statement brake watches Python;
-the dashboard's behaviour is now mostly JavaScript, and segments 8–10 (timeline,
-playback, controls) are all JS-heavy.
-
-Not proposing a change — the cap is the Architect's. Reporting it because "56 /
-1000, plenty of room" is a true sentence that describes less than half of what
-the dashboard now is.
-
-## 2. Geometry JSON, truncated
+## 1. T0 — three surfaces, projection then actual
 
 ```
-lengths : {'positions': 200, 'edges': 735, 'weights': 735, 'path': 12}
-scalars : {'tier': 'medium200', 'seed': 1000, 'n_nodes': 200,
-           'has_coordinates': True, 'optimum': 99.96328976797456,
-           'source': 0, 'target': 2}
+surface                    projected        actual      delta
+src/                      2005  (+0)    2005 / 2100      +0
+dashboard/**/*.py           81 (+25)      76 / 1000     +20
+dashboard/static/**        340 (+172)    246 / 1200     +78
 
-positions[:3] : [[0.49735, 0.66644], [0.05068, 0.70986], [0.99452, 0.17153]]
-edges[:5]     : [[0, 35], [0, 40], [0, 89], [0, 116], [0, 119]]
-weights[:5]   : [3.6655, 5.0396, 5.0278, 8.3822, 5.6629]
-path (full)   : [0, 198, 141, 64, 164, 181, 14, 133, 195, 16, 132, 2]
+   app.js       156        headroom: python 924
+   index.html    45                  static 954
+   style.css     45
 ```
 
-735 edges equals `view.n_active_edges` exactly, and `optimum` is byte-identical
-to `/api/graph`'s — the two endpoints are asking the same engine the same
-question and neither was touched to make that true.
+**`src/` did not move, third segment running.** Everything the timeline needed
+was already public: `build_schedule()`, `GraphTimeline`, `events_at()`,
+`state_at()`, `shortest_path()`, and `Event`'s `kind/u/v/old_weight/new_weight`
+— which is exactly the set a browser needs to reconstruct appearance without
+being told anything it could get wrong.
 
-## 3. The SVG as built
+**`static/`'s opening figure was 168 / 1200.** Not close to the cap, so nothing
+to report there beyond the number. I over-projected its growth by 94 lines,
+mostly because I budgeted for per-frame edge classification that turned out to
+be one precomputed pass.
 
-Executed, not described — the real `app.js` run under node against the live
-server, with the minimum DOM it touches:
+**Both budgets are in `tests/test_dashboard.py`, and `test_hygiene.py` was not
+touched.** The spec allowed editing it for T1; I did not, because the two
+dashboard budgets answer questions about the dashboard and reading them side by
+side is worth more than proximity to the counter they borrow. Flagging it since
+the scope line offered otherwise.
 
-```
-SVG AS BUILT BY app.js
-  root attrs        : {"viewBox":"0 0 900 620"}
-  top-level groups  : edges, nodes, path, ends
-  <g class="edges">    {"line":735}
-  <g class="nodes">    {"circle":200}
-  <g class="path">     {"line":11}
-  <g class="ends">     {"circle":1,"rect":1}
-  total elements    : 948
-
-  first path segment (real pixel coords):
-    x1=444.38 y1=406.50  ->  x2=454.95 y2=356.19
-
-  summary rendered beside the drawing:
-    optimum          99.9633
-    hops             11
-    source → target  0 → 2
-    nodes / edges    200 / 735
-```
-
-**And the pixels are the engine's coordinates.** Recomputing the scale-and-centre
-transform independently in Python from the raw JSON:
-
-```
-node 0   at [0.49735, 0.66644] -> pixel (444.38, 406.5)
-node 198 at [0.5157,  0.5791 ] -> pixel (454.95, 356.19)
-app.js drew : x1=444.38 y1=406.50 -> x2=454.95 y2=356.19
-```
-
-Exact. 735 + 11 = 746 lines, one per edge and one per hop — the browser drew
-what it was handed and nothing more.
-
-**One deliberate omission: no vertical flip.** SVG's y grows downward and the
-spec permits two operations, scale and centre. A y-flip is a third, so the
-picture is a vertical mirror of a conventional maths plot. A random geometric
-graph has no inherent up, so it is faithful either way — but if you would
-rather it matched a scatter plot's orientation, that is a one-line ruling, not
-a redesign.
-
-## 4. The mutations
-
-Three, all reverted, each verified byte-identical against a pre-mutation copy
-before moving on.
-
-### Mutation 1 — a *valid* path that is not the *optimal* one
-
-The one the spec asked for. Routed source → midpoint → target, so every
-consecutive pair is still a live edge and it still runs end to end:
+## 2. What the core exposes — reported before writing
 
 ```python
-+    detour = view.n_nodes // 2
-+    _, leg1, _ = shortest_path(view, source, detour, heuristic=True)
-+    _, leg2, _ = shortest_path(view, detour, target, heuristic=True)
-+    path = leg1 + leg2[1:]
+build_schedule(base: GraphView, cfg: ScenarioCfg, rng, source: int,
+               target: int, preserve_connectivity: bool = True)
+        -> tuple[tuple[Event, ...], ...]
+
+class GraphTimeline:
+    base: GraphView
+    schedule: tuple[tuple[Event, ...], ...]
+    timesteps  -> int                      # property; len(schedule)
+    events_at(t: int)   -> tuple[Event, ...]
+    state_at(t: int)    -> GraphView       # pure, cached
+    changed_edges(t: int) -> int
+
+@dataclass(frozen=True)
+class Event:
+    kind: EventKind; slot: int; u: int; v: int
+    old_weight: float; new_weight: float
 ```
 
-```
-E   assert 171.74759783120726 == 99.96328976797456 ± 1.0e-04
-FAILED test_the_paths_weights_sum_to_the_quoted_optimum
-1 failed, 15 passed
-```
+Nothing was missing and nothing needed writing around.
 
-**`test_the_path_is_a_real_walk_from_source_to_target` passed.** It is a real
-walk. The drawing would have rendered perfectly — a longer blue line, still
-connected, still ending on the target — beside a caption reading 99.96 for a
-route that costs 171.75. Only summing the weights along the drawn path noticed.
+**One thing found while reading, reported not touched.**
+`GraphTimeline.changed_edges` (`core/timeline.py:272`) is
+`len(self.schedule[t - 1])` — it re-derives the index rather than calling
+`events_at(t)`. It is **correct today** and agrees with the contract. But the
+constraint for this segment is that the arithmetic exists in exactly one place,
+and in `src/` it exists in two. A future edit to one and not the other is F1's
+whole shape. `src/` is out of scope and it is not broken, so: named, not fixed.
 
-That is the segment's point in one failure: **the picture and its caption can
-disagree while both look correct, and only a test that forces them through one
-computation sees it.**
+**Also worth knowing before segment 9: `events_per_step` counts *clusters*, not
+edges.** `build_schedule` draws `Poisson(events_per_step)` **clusters**, and
+`_draw_cluster` returns "a coherent group of edges, all of the same kind and
+centred on one node" — in practice 25. At `moderate` this run has **12
+disrupted steps out of 60** (80 % quiet against the predicted `exp(-0.3)` =
+74 %, fine for n=60) and **284 events**. The registration comment's claim about
+quiet fractions is about *timesteps*, and is correct; the field name reads like
+it is about edges, and is not. This is why T5's line says "25 edges changed
+this step" rather than the spec's illustrative "2".
 
-### Mutation 2 — positions rolled by 3
-
-Still 200 real coordinates, just not the right ones per node.
-`test_positions_are_the_cores_own_coordinates` failed on **400 / 400 mismatched
-elements**. Everything else passed, including every path and weight test — as
-expected, since the graph is still correct, only its picture is fiction.
-
-### Mutation 3 — the one that got through
-
-Weights rolled by one against `edges`. Same length, every value a real weight,
-every edge labelled with its neighbour's cost.
+## 3. The timeline JSON
 
 ```
-FAILED test_the_paths_weights_sum_to_the_quoted_optimum
-1 failed, 15 passed
+TOP LEVEL
+   tier               medium200        horizon   60
+   seed               1000             source    0
+   scenario           moderate         target    2
+   events_per_step    0.3              steps     60
+
+   payload 33.9 KB
 ```
 
-**`test_edges_and_weights_are_parallel` passed** — the test named for exactly
-this, defending exactly this array pair. It only compared lengths, which is
-what "parallel arrays" invites you to write. The mutation was caught downstream
-by the weight-sum test: incidental protection under a name promising the real
-thing, which is the shape Entry 005 R3 and Entry 006 R2 both ruled on.
-
-**Fixed rather than only reported.** The check is now per edge against the
-core's own weight for that exact pair, via `view.find_slot(u, v)`. Re-applying
-mutation 3 afterwards:
+33.9 KB for a whole 60-step run is not a problem and needs no thinning.
 
 ```
-FAILED test_the_paths_weights_sum_to_the_quoted_optimum
-FAILED test_edges_and_weights_are_parallel
-2 failed, 14 passed
+FIRST THREE STEPS
+   t=0  events=0   optimum=99.96328976797456  hops=11  reachable=True
+   t=1  events=0   optimum=99.96328976797456  hops=11  reachable=True
+   t=2  events=25  optimum=99.96328976797456  hops=11  reachable=True
+
+BUSIEST STEP — t=2, 25 events
+   kinds: {'traffic_up': 25}
+   traffic_up    23-31   10.727 -> 21.453
+   traffic_up    23-50    5.072 -> 10.144
+   traffic_up    23-100   8.810 -> 17.619   …
+
+disrupted steps: [2, 5, 8, 9, 14, 19, 21, 28, 35, 47, 54, 57]
+optimum range  : 99.96 .. 110.54
 ```
 
-It now fails by name. Restored, byte-identical, 16 passed.
-
-I fixed it rather than filing it because the test was written *this* segment and
-the name was mine — leaving a test whose name overstates it would have been
-adding the defect the last two entries ruled against, in the same commit that
-quotes them.
-
-## 5. `small30` — what the page shows when it refuses
+**Note t=2: 25 edges break and the optimum does not move.** The cluster is
+centred on node 23, which is not on the route. That is correct and it is the
+honest case — a disruption that costs nothing because it happened somewhere
+else. Four steps actually move the number:
 
 ```
-svg attrs      : {"hidden":"hidden"}
-svg children   : 0 (nothing drawn)
-refusal hidden : false
-
-The small30 tier carries no node coordinates — it is an Erdős–Rényi graph,
-so the engine never generated positions for it. Drawing it would mean
-inventing a layout, and the picture would show the layout algorithm rather
-than the graph. Nothing is drawn on purpose.
+t= 5   99.96 -> 102.02    11 hops
+t= 8  102.02 -> 103.25    11 hops
+t=21  103.25 -> 110.54    11 -> 12 hops     <- a real re-route
+t=57  110.54 -> 103.25    12 -> 11 hops     <- and a recovery
 ```
 
-The endpoint still answers: `has_coordinates: false`, `positions: []`, and the
-edges and path present and correct. The graph exists; only its geometry does
-not, and the page says which.
+## 4. The page at t = 0, 21, 59
 
-## 6. Legibility — measured, not eyeballed
+Executed, not described — the real `app.js` under node against the live server:
 
 ```
-drawing area   : 562 x 572 px
-nodes          : 200   -> mean spacing ~40 px
-mean degree    : 7.35
-edge length px : min 0  p25 31  median 46  p75 56  max 65
-edges > 100 px : 0  (0.0%)
+=== t = 0 ===
+  t = 0 / 59      optimum 99.96      hops 11      0 edges changed this step
+  svg groups : {"e-base":735,"e-changed":0,"e-gone":0,"nodes":200,
+                "e-hit":0,"path":11,"ends":2}
+
+=== t = 21 ===
+  t = 21 / 59      optimum 110.54      hops 12      25 edges changed this step
+  svg groups : {"e-base":610,"e-changed":125,"e-gone":25,"nodes":200,
+                "e-hit":25,"path":12,"ends":2}
+
+=== t = 59 ===
+  t = 59 / 59      optimum 103.25      hops 11      0 edges changed this step
+  svg groups : {"e-base":566,"e-changed":178,"e-gone":66,"nodes":200,
+                "e-hit":0,"path":11,"ends":2}
 ```
 
-**It is legible, and the numbers say why.** The longest edge on a 570 px canvas
-is **65 px** — no edge crosses the picture. A geometric graph connects near
-neighbours only, so 735 edges read as a *fabric* with local texture, not as
-spaghetti. The 11-hop path at 2.6 px opaque blue sits on top of 0.6 px grey at
-13 % opacity and is unmissable.
+Damage accumulates as it should: 0 changed at t=0, 150 by t=21, 244 by t=59,
+and `e-hit` is non-zero **only** on a step where something actually lands. The
+path is 11 hops, 12 at the re-route, 11 again after the recovery — matching the
+endpoint exactly. The scrubber reads 0, 21, 59 with max 59; it sets `t` to its
+own value and nothing adjusts it.
 
-This also retroactively explains the v1 tangle Rudra saw. On Erdős–Rényi the
-same 735 edges would be drawn uniformly at random and the median edge would
-span roughly a third of the canvas — every edge crossing every other. The
-difference is not the drawing code; it is the tier. Which is D8's argument,
-arrived at from the pixel side.
+Edge totals exceed 735 later on because `add` events create edges the base list
+never had. The browser draws them from `event.u`, `event.v` and the node
+positions it already has — no geometry is invented, only edges the engine said
+appeared.
 
-**One thing segment 8 should know:** the minimum edge length is **sub-pixel** —
-at least one node pair is effectively coincident on screen. Anything that
-asks the user to click a node needs a hit-target policy for that.
+### The browser's reconstruction agrees with the engine
+
+The design's claim is that if the page's greyed-out set ever drifts from the
+engine's active set, the highlighted path visibly crosses a broken edge. Tested
+that directly across the whole run:
+
+```
+696 path edges checked across 60 timesteps
+drawn as removed while carrying the route: 0
+-> the page's greyed-out set and the engine's active set agree everywhere
+```
+
+## 5. Both mutations
+
+### A — the specified one: F1, reintroduced in the visual layer
+
+```python
+-                for event in timeline.events_at(t)
++                for event in timeline.schedule[t]
+```
+
+**Caught by two tests, and the failure names the timestep:**
+
+```
+E  AssertionError: t=1
+E  assert 25 == 0
+FAILED test_marker_time_equals_engine_time_at_every_timestep
+
+E  AssertionError: server.py:245 indexes the schedule
+FAILED test_the_dashboard_never_derives_event_timing_itself
+```
+
+It fails at **t=1**, not t=0 — both are empty at t=0, which is precisely why
+the test walks every timestep rather than sampling. The disruption really lands
+at t=2; the mutation would have drawn it at t=1, one step early, with a correct
+optimum beside it.
+
+### B — mine: the same off-by-one, one layer out, where nothing was looking
+
+```javascript
+-  const step = run.steps[t];
++  const step = run.steps[Math.max(0, t - 1)];
+```
+
+Server untouched. The drawing stays current; only the numbers and the
+highlighted route go one step stale.
+
+```
+24 passed
+```
+
+**The entire Python suite is blind to it.** Every endpoint test still passes,
+because the endpoint is still perfect. What the page then shows at t=21:
+
+```
+mutated : t = 21 / 59   optimum 103.25   hops 11   0 edges changed this step
+correct : t = 21 / 59   optimum 110.54   hops 12   25 edges changed this step
+```
+
+It reports **"0 edges changed this step"** on the exact step where 25 edges
+break and the route re-routes — while the picture beside it shows the break
+happening. That is the segment's stated nightmare, produced by a two-character
+edit in a file no test reads.
+
+**What did catch it — partly.** The design's self-disagreement property fired:
+
+```
+696 path edges checked across 60 timesteps
+drawn as removed while carrying the route: 3
+  t=5 path uses 64,164: { gone: true, hit: 5 }
+  t=5 path uses 164,181: { gone: true, hit: 5 }
+-> DISAGREEMENT: the visible failure this design was built to expose
+```
+
+So a human watching t=5 would see a blue route crossing two red broken roads.
+**But 3 out of 696**, on one step out of sixty. It is a real property and it
+worked; it is not a safety net. You would have to be looking at the right
+frame.
+
+And acceptance check 5b — `grep "t - 1" dashboard/static/` — flags it on line
+80. So the thing standing between this defect and the demo is **a human reading
+grep output once, at the end of a segment.**
+
+## 6. Legibility, and the unreachable decision
+
+**Movement reads as movement.** The re-route at t=21 is unmistakable: the blue
+line visibly takes a different corridor, the hop count ticks 11 → 12, and 25
+edges go bright red at once. Because a disruption is a *cluster* centred on one
+node, a break reads as a neighbourhood going dark rather than a single hairline
+changing — much easier to see than I expected, and the reason is the core's
+clustering, not the drawing.
+
+`e-hit` (bright red, this step) versus `e-changed` (amber, earlier) is the
+distinction that makes it work. Without it, a step where damage lands looks
+identical to a step where damage merely persists.
+
+**Two honest caveats for segment 9:**
+
+1. **Quiet steps look like nothing is happening, because nothing is** — 48 of
+   60. At 320 ms a frame the run plays in 19 s and most of it is still. That is
+   the truth of the scenario, not a rendering problem, but four algorithms
+   racing on the same canvas will want a way to skip to the next event.
+2. **244 of 810 edges are amber by t=59.** Damage accumulates and never clears
+   visually, so late steps are busier than early ones. Legible now; adding four
+   coloured arm-paths on top of that is the thing most likely to tip it.
+
+**Unreachable states — decided and pinned:** `optimum: null`, `path: []`,
+`reachable: false`, the step still present so playback runs through it, and the
+readout shows `optimum unreachable` / `hops —` in red rather than a number.
+Never an exception, never a skipped step. It did not occur in this run —
+`preserve_connectivity` rejects severing events — so the test exercises
+`scenario_name="high"` and asserts the representation holds for whatever
+happens there.
 
 ## 7. Acceptance — all eight
 
 | # | Check | Result |
 |---|---|---|
-| 1a | In scope | 7 files, +367 −12 |
+| 1a | In scope | 5 files, +534 −107 |
 | 1b | `git diff --stat -- src/` | **Empty** |
-| 2 | Suite | **337 full** · **332 not-slow, 5 deselected** |
+| 2 | Suite | **345 full** · **340 not-slow, 5 deselected** |
 | 3 | Lint, three trees | `All checks passed!` |
-| 4 | Both budgets | 2 passed — `src/` 2005/2100, `dashboard/` 56/1000 |
-| 5 | Stale counts gone | No hits for `271` or `276 collected` |
-| 6 | No layout library | No hits in `dashboard/static/` |
-| 7 | It runs | Endpoint answers over HTTP |
+| 4 | Three budgets | 8 passed — 2005/2100 · 76/1000 · 246/1200 |
+| 5a | No `schedule[` in dashboard code | Two hits, both in the header comment quoting §4.4; the AST/comment-stripping test asserts the real thing |
+| 5b | Every `t ± 1` in `static/` | 5 hits, all **playback navigation** (`show(state.t ± 1)`) — moving the cursor, never indexing an event list |
+| 6 | No stored-run reads | `load_steps` appears twice, both in `run_classes()`; nothing timeline-related |
+| 7 | It runs | 33.9 KB payload over HTTP |
 | 8 | Committed, not pushed | Below |
 
-**337 full / 332 not-slow**, from 329 / 324 — **+8**, all in
-`tests/test_dashboard.py`.
+**345 full / 340 not-slow**, from 337 / 332 — **+8**.
 
 ## Deviations from spec
 
-**1. `httpx` was authorised; the error message demanded `httpx2`.**
-
-```
-RuntimeError: The starlette.testclient module requires the httpx2 package
-    $ pip install httpx2
-```
-
-I did not install it. Reading `starlette/testclient.py:33-45`, the import is
-`try httpx2 / except ModuleNotFoundError: try httpx` — the fallback to plain
-`httpx` is still there, and starlette's own `full` extra declares both. So the
-authorised package works and the message is simply out of date. Installed
-`httpx>=0.27`; nothing else. **It emits a deprecation warning** and will stop
-working whenever starlette drops the fallback — see question 2.
-
-**2. `test_edges_and_weights_are_parallel` was strengthened after writing it**
-(§4). In-scope file, my own test, same segment.
+**None.** T1's placement (§1) was a choice the spec permitted either way.
 
 ## Surprises
 
-**The failing error message told me to install the wrong package.** Had I
-trusted it I would have installed something the segment did not authorise, and
-had I trusted it the other way I would have reported T1.3 blocked. Neither was
-true; the source said so and the message did not.
+**The uncommissioned mutation found the hole again, and it is the same hole in a
+new place.** Segment 7's lesson was that a test can be named for a guarantee it
+does not provide. This one is worse: the guarantee has no test at all in the
+language that half the dashboard is now written in. 246 lines of JavaScript are
+covered by exactly two greps and my ad-hoc node harness, which is not in the
+repository and runs only when I choose to run it.
 
-**Mutation 3 is the finding I did not expect.** I wrote that test, named it for
-the invariant, and it did not test the invariant — in the same segment whose
-briefing quotes two prior rulings about exactly that pattern. Knowing the rule
-is evidently not the same as not breaking it, which is presumably why the
-mutation step exists.
+**A break that costs nothing is common.** At t=2, 25 edges break and the
+optimum does not move — the cluster landed off-route. I had assumed disruption
+implied cost. Most of them do not, and that is worth knowing before segment 9
+tries to show algorithms *reacting* to disruptions: many of the reactions will
+be to events that never mattered.
 
 ## Could not do
 
-Nothing was blocked. No screenshot — §3 executes the page's own code instead.
+Nothing was blocked.
 
 ## Questions for the Architect
 
-1. **The y-flip** (§3) — leave the drawing in SVG's native orientation, or is a
-   vertical mirror a third permitted presentation transform?
-2. **`httpx` is deprecated for starlette's TestClient.** Migrate to `httpx2`
-   when it breaks, or pin `starlette` now while the fallback exists?
-3. **The statement cap counts no JavaScript** (§1). Segments 8–10 are the
-   JS-heavy ones. Does the dashboard's brake want a second measure, or is the
-   1000 explicitly a Python-only limit?
+1. **The headline (§5B): should the browser be tested, and with what?** Options
+   as I see them, cheapest first — (a) extend the existing textual guard to
+   assert every `run.steps[...]` index is bare `t`, which is brittle and
+   segments 9–10 will fight it; (b) admit `node` as a **dev-only test
+   dependency** and run the existing harness under pytest with
+   `pytest.importorskip`-style skipping when node is absent; (c) accept the
+   grep and the visible-disagreement property as sufficient, and record that
+   the JS is deliberately untested. I lean (b) — the harness already exists and
+   has now caught something twice — but it admits a whole language into the
+   test story, which is a ruling and not mine.
+2. **`changed_edges` duplicates the index arithmetic in `src/`** (§2). Phase 3
+   defect, or leave it — it is correct and the segment that would touch it has
+   no other reason to?
+3. **Quiet steps** (§6) — should segment 9 get a "jump to next event" control,
+   or does watching 48 still frames honestly represent the problem?

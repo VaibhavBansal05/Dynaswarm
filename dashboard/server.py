@@ -26,10 +26,11 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 
 from dynaswarm.analysis.load import load_steps
-from dynaswarm.config import GraphCfg, register
+from dynaswarm.config import GraphCfg, ScenarioCfg, register
 from dynaswarm.core.generate import build
 from dynaswarm.core.oracle import shortest_path
 from dynaswarm.core.rng import stream
+from dynaswarm.core.timeline import GraphTimeline, build_schedule
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
@@ -46,6 +47,12 @@ DEFAULT_TIER = "medium200"
 #: rather than inlined so the value the page shows is traceable to the
 #: pool the experiments actually report on.
 DEFAULT_SEED = 1000
+
+#: The scenario the dashboard opens on.  Moderate rather than high: at
+#: 0.8 events/step roughly 55% of timesteps carry a disruption and the
+#: graph never settles, so nothing reads as an *event*.  At 0.3, 74% of
+#: steps are quiet and a break is visibly a break.
+DEFAULT_SCENARIO = "moderate"
 
 #: Rendered on the page, not buried in a docstring, because segment 3
 #: draws disruption markers and this is the fact that would silently make
@@ -162,6 +169,100 @@ def describe_geometry(seed: int = DEFAULT_SEED, name: str = DEFAULT_TIER) -> dic
     }
 
 
+def _registered(group: str, name: str) -> object:
+    """Read a registered config node back out of the store.
+
+    Args:
+        group: Hydra config group.
+        name: Entry within it.
+
+    Returns:
+        The registered dataclass instance.
+    """
+    register()
+    return OmegaConf.to_object(ConfigStore.instance().repo[group][f"{name}.yaml"].node)
+
+
+def describe_timeline(
+    seed: int = DEFAULT_SEED,
+    name: str = DEFAULT_TIER,
+    scenario_name: str = DEFAULT_SCENARIO,
+) -> dict:
+    """The whole run, in one stateless answer.
+
+    **Built live from the core, never read from ``outputs/``.**  Every run
+    on disk predates F1's fix and carries a permanently misaligned
+    ``num_events`` column (D32), so drawing markers from stored files
+    would reintroduce the exact off-by-one this endpoint exists to avoid
+    — by trusting recorded data instead of the engine.  Stored replay
+    waits for Phase 4's regenerated runs.
+
+    ``events`` comes from :meth:`GraphTimeline.events_at`, and from
+    nothing else.  The contract (`ARCHITECTURE.md` §4.4) is that
+    ``schedule[k]`` is the transition *k -> k+1*, so the events that
+    **produced** state ``t`` are ``schedule[t-1]``.  That arithmetic is
+    written once, in the core, and re-deriving it here — or in the
+    browser, or "just for the marker" — is how F1 comes back somewhere no
+    test is looking.
+
+    The server holds no cursor and no session: the page asks once and
+    scrubs locally, so "which step are we on" cannot disagree between the
+    page and the process.
+
+    Args:
+        seed: Root seed for the ``graph`` and ``events`` streams.
+        name: Graph tier.
+        scenario_name: Registered scenario, setting the disruption rate.
+
+    Returns:
+        A JSON-serialisable run: metadata plus one entry per timestep.
+    """
+    cfg = tier(name)
+    scenario: ScenarioCfg = _registered("scenario", scenario_name)
+    view, source, target = build(cfg, stream(seed, "graph"))
+    schedule = build_schedule(
+        view, scenario, stream(seed, "events"), source, target
+    )
+    timeline = GraphTimeline(view, schedule)
+
+    steps = []
+    # range(timesteps) matches harness.trial exactly, so the dashboard
+    # shows the same steps the experiments run rather than one more.
+    for t in range(timeline.timesteps):
+        state = timeline.state_at(t)
+        optimum, path, _ = shortest_path(state, source, target, heuristic=True)
+        reachable = bool(np.isfinite(optimum))
+        steps.append({
+            "t": t,
+            "events": [
+                {
+                    "kind": event.kind,
+                    "u": int(event.u),
+                    "v": int(event.v),
+                    "old_weight": float(event.old_weight),
+                    "new_weight": float(event.new_weight),
+                }
+                for event in timeline.events_at(t)
+            ],
+            # An unreachable target is a real outcome, not an error: the
+            # page shows the break rather than a cost, and keeps playing.
+            "optimum": float(optimum) if reachable else None,
+            "path": [int(node) for node in path] if reachable else [],
+            "reachable": reachable,
+        })
+
+    return {
+        "tier": name,
+        "seed": seed,
+        "scenario": scenario.name,
+        "events_per_step": float(scenario.events_per_step),
+        "horizon": timeline.timesteps,
+        "source": int(source),
+        "target": int(target),
+        "steps": steps,
+    }
+
+
 def run_classes() -> dict[str, int]:
     """Row counts per ``run_class`` across every run in ``outputs/``.
 
@@ -198,6 +299,16 @@ def api_graph(seed: int = DEFAULT_SEED, tier_name: str = DEFAULT_TIER) -> dict:
 def api_geometry(seed: int = DEFAULT_SEED, tier_name: str = DEFAULT_TIER) -> dict:
     """Coordinates, edges and the optimal path — enough to draw, exactly."""
     return describe_geometry(seed, tier_name)
+
+
+@app.get("/api/timeline")
+def api_timeline(
+    seed: int = DEFAULT_SEED,
+    tier_name: str = DEFAULT_TIER,
+    scenario_name: str = DEFAULT_SCENARIO,
+) -> dict:
+    """One call, the whole run. No cursor lives on this server."""
+    return describe_timeline(seed, tier_name, scenario_name)
 
 
 @app.get("/api/runs")

@@ -3,27 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dynaswarm — graph</title>
+  <title>Dynaswarm — timeline</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header>
     <h1>Dynaswarm</h1>
-    <p class="sub">Phase 1 · segment 7 — the graph at t=0, drawn at the
-       coordinates the engine generated. Nothing here is laid out.</p>
+    <p class="sub">Phase 1 · segment 8 — the shortest path will not hold still.
+       Roads break; the optimum moves. Press space.</p>
   </header>
 
   <section>
+    <p id="readout" class="readout">loading…</p>
+
     <div id="figure">
-      <svg id="canvas" role="img" aria-label="graph at t=0"></svg>
+      <svg id="canvas" role="img" aria-label="graph over time"></svg>
       <p id="refusal" class="refusal" hidden></p>
     </div>
-    <dl id="summary"><dd class="pending">asking the engine…</dd></dl>
-  </section>
 
-  <section>
-    <h2>Graph at t=0</h2>
-    <dl id="graph"><dd class="pending">asking the engine…</dd></dl>
+    <div id="controls" class="controls">
+      <button id="back" type="button" title="previous step (←)">←</button>
+      <button id="play" type="button" title="play / pause (space)">play</button>
+      <button id="fwd" type="button" title="next step (→)">→</button>
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1"
+             aria-label="timestep">
+    </div>
+    <p class="legend">
+      <span class="k-path">━</span> optimal path ·
+      <span class="k-hit">━</span> changed this step ·
+      <span class="k-changed">━</span> changed earlier ·
+      <span class="k-gone">━</span> closed or deleted
+    </p>
   </section>
 
   <section>
