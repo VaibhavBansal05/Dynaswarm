@@ -26,7 +26,11 @@ dev = ["pytest>=8", "ruff>=0.6"]
 # stay installable and fully testable without a web stack. test_hygiene
 # bans both names throughout src/, so nothing under the science surface
 # can import them even by accident.
-dashboard = ["fastapi>=0.115", "uvicorn>=0.30"]
+# httpx is here only because starlette's TestClient needs it for the
+# serialisation smoke test. Its error message tells you to install
+# httpx2; testclient.py falls back to httpx, which is what is
+# authorised, so read the source rather than the message.
+dashboard = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27"]
 
 [project.scripts]
 dpo = "dynaswarm.cli:main"

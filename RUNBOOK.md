@@ -24,8 +24,8 @@ required for the live demo.
 **Verify the install:**
 
 ```bash
-./.venv/bin/pytest -q -m "not slow"     # ~60 s, 271 not-slow tests
-./.venv/bin/ruff check src/ tests/
+./.venv/bin/pytest -q -m "not slow"     # ~35 s
+./.venv/bin/ruff check src/ tests/ dashboard/
 ./.venv/bin/python -m dynaswarm.cli     # smoke run, ~10 s
 ```
 
@@ -35,9 +35,16 @@ If the suite passes, everything below will run.
 
 ## 1. The test suite
 
-**276 collected · 5 slow · 271 not-slow · all passing.** The five `slow` tests
-run tuning searches and are excluded by default; run them with `pytest -q`
-before a release. Counts below are as collected, several files being heavily
+The suite is the project's standing claim that its mechanisms actually run —
+the structural guards, the temporal invariants, and the boundary that keeps
+the dashboard a view. **Run it for the count**; it changes every segment, so a
+number written here would be wrong within the week. The `slow` tests run
+tuning searches and are excluded by default; include them with `pytest -q`
+before a release. The authoritative counts are recorded, dated, in
+`WORKFLOW_LOG.md` — a number describing a moment cannot rot, while a number
+claiming to be current always can.
+
+Counts in the table below are as collected, several files being heavily
 parametrised.
 
 *Counts as collected on 30 Aug 2026. `test_hygiene` and `test_optimizers` are parametrised across source files and `PARAM_SPEC`, so these numbers move whenever a module or a parameter is added. Run `pytest --collect-only -q` for the current figures rather than trusting this table.*

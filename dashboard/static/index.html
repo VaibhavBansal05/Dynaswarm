@@ -3,15 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dynaswarm — scaffold</title>
+  <title>Dynaswarm — graph</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header>
     <h1>Dynaswarm</h1>
-    <p class="sub">Phase 1 · segment 6 — scaffold. Nothing is drawn yet.
-       These values came from the engine, not from this page.</p>
+    <p class="sub">Phase 1 · segment 7 — the graph at t=0, drawn at the
+       coordinates the engine generated. Nothing here is laid out.</p>
   </header>
+
+  <section>
+    <div id="figure">
+      <svg id="canvas" role="img" aria-label="graph at t=0"></svg>
+      <p id="refusal" class="refusal" hidden></p>
+    </div>
+    <dl id="summary"><dd class="pending">asking the engine…</dd></dl>
+  </section>
 
   <section>
     <h2>Graph at t=0</h2>

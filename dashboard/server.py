@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -112,6 +113,55 @@ def describe_graph(seed: int = DEFAULT_SEED, name: str = DEFAULT_TIER) -> dict:
     }
 
 
+def describe_geometry(seed: int = DEFAULT_SEED, name: str = DEFAULT_TIER) -> dict:
+    """Everything needed to draw one graph, and nothing to be worked out.
+
+    The browser receives geometry; it never invents geometry.  Positions
+    are ``topology.pos`` as the generator laid them down, the edge list is
+    whichever slots the ``active`` mask says are live, and ``path`` is the
+    oracle's own node sequence — the page highlights that sequence, it does
+    not search for one.  Every geometric decision has already been made by
+    the time this returns; all that is left is scaling pixels.
+
+    ``edges`` and ``weights`` are **parallel arrays**: ``edges[i]`` and
+    ``weights[i]`` describe the same edge, and the page trusts that
+    without checking.  Nothing visible breaks on the day they
+    desynchronise, which is why ``test_edges_and_weights_are_parallel``
+    exists rather than a comment.
+
+    Args:
+        seed: Root seed for the ``graph`` stream.
+        name: Graph tier.
+
+    Returns:
+        A JSON-serialisable description, with ``positions`` empty when the
+        tier carries no coordinates.
+    """
+    cfg = tier(name)
+    view, source, target = build(cfg, stream(seed, "graph"))
+    optimum, path, _ = shortest_path(view, source, target, heuristic=True)
+    topo = view.topology
+    # Each CSR slot is one direction of one edge.  Taking only the slots
+    # whose owner index is the smaller of the pair yields each undirected
+    # edge exactly once, and the `active` mask — not this function —
+    # decides which of them exist.
+    owner = np.repeat(np.arange(topo.n_nodes), np.diff(topo.indptr))
+    keep = np.asarray(view.active) & (owner < topo.indices)
+    return {
+        "tier": name,
+        "seed": seed,
+        "n_nodes": view.n_nodes,
+        "has_coordinates": topo.pos is not None,
+        "positions": [] if topo.pos is None else topo.pos.tolist(),
+        "edges": np.stack([owner[keep], topo.indices[keep]], axis=1).tolist(),
+        "weights": np.asarray(view.weight)[keep].tolist(),
+        "path": [int(node) for node in path],
+        "optimum": float(optimum),
+        "source": int(source),
+        "target": int(target),
+    }
+
+
 def run_classes() -> dict[str, int]:
     """Row counts per ``run_class`` across every run in ``outputs/``.
 
@@ -142,6 +192,12 @@ app = FastAPI(
 def api_graph(seed: int = DEFAULT_SEED, tier_name: str = DEFAULT_TIER) -> dict:
     """The pipe, end to end: browser to engine and back."""
     return describe_graph(seed, tier_name)
+
+
+@app.get("/api/graph/geometry")
+def api_geometry(seed: int = DEFAULT_SEED, tier_name: str = DEFAULT_TIER) -> dict:
+    """Coordinates, edges and the optimal path — enough to draw, exactly."""
+    return describe_geometry(seed, tier_name)
 
 
 @app.get("/api/runs")

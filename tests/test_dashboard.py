@@ -13,11 +13,13 @@ reason to cross.
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from dynaswarm.core.generate import build
@@ -225,3 +227,162 @@ def test_run_classes_does_not_filter_to_manifest():
     assert "manifest" not in classes, "no manifest runs exist; see D31"
     if classes:
         assert set(classes) <= {"exploratory", "inversion"}
+
+
+# ---------------------------------------------------------------------------
+# Entry 006's rulings
+# ---------------------------------------------------------------------------
+
+
+def test_tier_returns_what_the_config_store_registers():
+    """Named for what it guards: the ``ConfigStore.repo`` read in ``tier()``.
+
+    ``tier()`` deliberately reads the tier back out of Hydra rather than
+    restating ``GraphCfg(model="geometric", n_nodes=200, ...)``, because a
+    restated constant works right up until someone edits the registration
+    and then draws a tier that no longer exists under that name.
+
+    Until now the only thing that would have caught a Hydra change was a
+    test named for coordinates — incidental protection, one refactor from
+    gone (Entry 005 R3). This says so in its name.
+
+    Asserted against the registration itself, never against literals: a
+    test that hardcoded ``n_nodes == 200`` would reintroduce exactly the
+    drift ``tier()`` exists to prevent.
+    """
+    from hydra.core.config_store import ConfigStore
+    from omegaconf import OmegaConf
+
+    from dynaswarm.config import register
+
+    server = pytest.importorskip("dashboard.server")
+
+    register()
+    registered = OmegaConf.to_object(
+        ConfigStore.instance().repo["graph"]["medium200.yaml"].node
+    )
+    assert server.tier("medium200") == registered
+
+
+def test_the_route_serialises_over_real_http():
+    """Direct calls never touch JSON, and the browser only ever touches JSON.
+
+    ``describe_graph`` casts numpy scalars by hand.  The day someone adds
+    a field and forgets the cast, every direct-call test still passes and
+    the page 500s — the failure lands entirely outside what the rest of
+    this file can see.  TestClient covers real routing and real
+    serialisation without a socket, a port or a teardown.
+    """
+    pytest.importorskip("dashboard.server")
+    testclient = pytest.importorskip("fastapi.testclient")
+    from dashboard.server import app
+
+    with testclient.TestClient(app) as client:
+        for route in ("/api/graph", "/api/graph/geometry", "/api/runs"):
+            response = client.get(route)
+            assert response.status_code == 200, route
+            assert json.loads(response.content), route
+
+
+# ---------------------------------------------------------------------------
+# The drawing is the engine's, not the browser's
+# ---------------------------------------------------------------------------
+
+
+def _geometry(name: str = "medium200") -> dict:
+    server = pytest.importorskip("dashboard.server")
+    return server.describe_geometry(name=name)
+
+
+def test_the_path_is_a_real_walk_from_source_to_target():
+    """A plausible node list is not a path.
+
+    Every consecutive pair must be an **active edge** of the graph the
+    endpoint returned.  This is what separates "the oracle's route" from
+    "twelve node indices that look about right".
+    """
+    geo = _geometry()
+    assert geo["path"][0] == geo["source"]
+    assert geo["path"][-1] == geo["target"]
+
+    live = {tuple(sorted(edge)) for edge in geo["edges"]}
+    for a, b in zip(geo["path"], geo["path"][1:], strict=False):
+        assert tuple(sorted((a, b))) in live, f"path uses a dead edge {a}-{b}"
+
+
+def test_the_paths_weights_sum_to_the_quoted_optimum():
+    """The strong one: the drawn path and the quoted cost are one computation.
+
+    The page prints ``optimum`` beside a highlighted route.  If either is
+    ever recomputed independently of the other they drift, and the picture
+    starts disagreeing with its own caption — the failure that looks
+    entirely fine on screen.  Summing the returned weights along the
+    returned path closes that.
+    """
+    geo = _geometry()
+    cost = {tuple(sorted(e)): w for e, w in zip(geo["edges"], geo["weights"], strict=True)}
+    steps = zip(geo["path"], geo["path"][1:], strict=False)
+    walked = sum(cost[tuple(sorted(pair))] for pair in steps)
+    assert walked == pytest.approx(geo["optimum"])
+
+
+def test_positions_are_the_cores_own_coordinates():
+    """Element-wise against ``view.topology.pos``, not merely the right shape."""
+    server = pytest.importorskip("dashboard.server")
+    geo = _geometry()
+
+    view, _, _ = build(server.tier("medium200"), stream(geo["seed"], "graph"))
+    assert np.asarray(geo["positions"]) == pytest.approx(np.asarray(view.topology.pos))
+
+
+def test_edges_are_exactly_what_the_core_says_is_active():
+    """No more and no less than ``n_active_edges``.
+
+    The count is the cheap half.  The expensive half is that the browser
+    must not be choosing: every returned pair has to be a live slot, which
+    the walk test above then relies on.
+    """
+    server = pytest.importorskip("dashboard.server")
+    geo = _geometry()
+
+    view, _, _ = build(server.tier("medium200"), stream(geo["seed"], "graph"))
+    assert len(geo["edges"]) == view.n_active_edges
+
+
+def test_edges_and_weights_are_parallel():
+    """The assumption the page trusts without checking.
+
+    Nothing visible breaks the day these desynchronise — the drawing keeps
+    working and every edge is simply labelled with someone else's cost.
+
+    Written first as a length check, which is what "parallel arrays"
+    invites.  A mutation that rolled ``weights`` by one against ``edges``
+    walked straight through it: same length, every value real, every
+    label wrong.  It was caught downstream by the summed-weights test —
+    incidental protection under a name that promised the real thing.
+    So the check is now per edge, against the core's own weight for that
+    exact pair.
+    """
+    server = pytest.importorskip("dashboard.server")
+    geo = _geometry()
+    assert len(geo["edges"]) == len(geo["weights"])
+
+    view, _, _ = build(server.tier("medium200"), stream(geo["seed"], "graph"))
+    for (u, v), weight in zip(geo["edges"], geo["weights"], strict=True):
+        assert weight == pytest.approx(float(view.weight[view.find_slot(u, v)]))
+
+
+def test_a_tier_without_coordinates_answers_and_refuses():
+    """T4's contract, server-side.
+
+    ``small30`` is Erdos-Renyi and the generator never made positions for
+    it.  The endpoint must still answer — the page needs to know *why* it
+    is not drawing — but it must not manufacture coordinates to fill the
+    field.  Any picture built from invented positions is a picture of the
+    layout algorithm, which is what made v1's replay worthless.
+    """
+    geo = _geometry("small30")
+    assert geo["has_coordinates"] is False
+    assert geo["positions"] == []
+    assert geo["edges"], "the graph still exists; only its geometry is missing"
+    assert geo["path"][0] == geo["source"]
