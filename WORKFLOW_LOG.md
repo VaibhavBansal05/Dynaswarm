@@ -589,3 +589,107 @@ A fixture that boots uvicorn tests uvicorn. But there is a real gap between call
 Phase 1 opens with the boundary tested before anything is drawn, and with a demonstration that the boundary's test catches a *plausible* violation rather than an obvious one.
 
 Segment 7 draws the first graph.
+
+---
+
+## Entry 007 — Segment 7: Draw the Graph
+
+**Phase** 1 (See it) · **Segment** 2 of 5 · **Overall segment** 7
+**Verified** 3 Sept 2026 · **Status** COMPLETE
+**Commit** `050069b`, ahead 1, unpushed
+
+### What the segment asked for
+
+Put the graph on screen — real coordinates, the oracle's path lit across it — under a rule sharper than §2.3's general one: **the browser receives geometry and never invents it.** Plus Entry 006's three rulings as T1.
+
+### Architect verification
+
+Read off disk, not taken from the report:
+
+| Claim | Verified |
+|---|---|
+| `RUNBOOK.md` stale counts removed, both sites | Yes — `grep "271\|276 collected"` returns nothing |
+| No layout library reached `static/` | Yes — `d3\|cytoscape\|vis\.js\|sigma\|force\|spring\|jitter` all absent |
+| `/api/graph` untouched, geometry added alongside | Yes — `describe_graph` intact, `describe_geometry` at `server.py:116`, route at 197 |
+| The transform is scale-and-centre only | Yes — `projector()` at `app.js:43-53`: min/max, one uniform `scale`, one centring offset. No inversion, no per-node adjustment |
+| Refusal path draws nothing | Yes — `app.js:60-66`, SVG hidden, message shown. Not a fallback layout |
+| `dashboard/` = 56 statements | **Recomputed independently.** `__init__.py` 0, `server.py` 56. Exact match |
+
+### The instrument is measuring the wrong thing — and vClaude found it
+
+**This is the entry's most important item.**
+
+`_python_files()` globs `*.py`. `app.js` went 36 → 142 lines this segment and counted **zero**. So "944 headroom" describes the Python half of a component whose growth from here is overwhelmingly JavaScript: segments 8–10 add playback, arms and charts, all of them client-side.
+
+A cap that reports comfortable headroom while the thing it guards grows unmeasured is not a weak brake. **It is F5 again** — `mean_recovery` reading a constant 0.000, a dead instrument returning a flattering number nobody interrogates. Second occurrence in this project of the same species.
+
+**R1 — Ruled: two budgets, two distinct jobs. Do not stretch one to cover both.**
+
+| Budget | Question it answers | Cap |
+|---|---|---|
+| `dashboard/**/*.py` statements | *Has the dashboard become a second engine?* | **1000** (unchanged, at 56) |
+| `dashboard/static/**` non-blank, non-comment lines across `.js`, `.css`, `.html` | *Has the dashboard become an application?* | **1200** |
+
+These are different failure modes and collapsing them would hide both. The Python cap guards the science boundary; the static cap guards scope.
+
+**The unit is deliberately cruder, and the test must say so.** Counting JS statements needs a JS parser, which is a dependency this repo will not take for a budget. Non-blank non-comment lines is blunt and slightly gameable — and it is not zero, which is the entire property the current instrument lacks. **The test's docstring states its own imprecision**, so nobody later mistakes it for the AST count and reasons from a false equivalence.
+
+Segment 8 implements it and reports the opening figure.
+
+**R2 — The y-flip: leave it. And here is the condition that would change that.**
+
+The mirror has no truth value today. `topology.pos` is points in a unit square from a geometric generator; **nothing in the data says which way is up**, so SVG's downward y is a different rendering of the same graph, not a wrong one. vClaude was right not to add a third transform unprompted.
+
+**Revisit the moment anything on the page carries orientation** — printed raw coordinates in a tooltip, an axis, a legend keyed to position, any overlay with a top and a bottom. At that point the mirror stops being a convention and starts being a contradiction between two things on the same screen. Recorded so the trigger is recognised rather than rediscovered.
+
+**R3 — `httpx` / `httpx2`: do not chase it. Logged as F9.**
+
+The error message demanded `httpx2`; the source (`testclient.py:33-45`) still falls back to plain `httpx`. **vClaude trusted the source over the message, which is the correct order** — and worth noting that both available shortcuts were wrong: installing the unauthorised package, or reporting T1.3 blocked.
+
+Neither migrate nor pin now. `starlette` is a **dev-only test dependency of a dev-only tool**; it cannot reach the science surface, and pinning it buys a stale pin in exchange for a warning.
+
+**F9 — `TestClient`'s `httpx` fallback is deprecated and will be removed.** When it goes, the suite breaks for a reason unrelated to anything anyone changed — the expensive kind of failure, because it arrives during Phase 4 or 5 and costs an hour of looking in the wrong place. **The fix is known in advance: authorise `httpx2` into the `dashboard` group.** That sentence is the whole value of this entry; recognition is the cost, not repair.
+
+### Mutation 3 — the finding of the segment
+
+Mutation 1 was the one I specified: a valid path routed via a detour. `assert 171.75 == 99.96`. It behaved exactly as predicted — the real-walk test **passed**, because it *is* a real walk, and the drawing would have rendered a perfectly plausible longer line to the right target beside a caption quoting a different route's cost.
+
+**Mutation 3 was vClaude's own, and it is the one that found a defect.** It rolled `weights` by one against `edges`: same length, every value real, every label wrong. `test_edges_and_weights_are_parallel` **passed** — it compared only lengths.
+
+Incidental protection under a name that promised the real thing — the exact pattern Entry 005's R3 and Entry 006's R2 both ruled on, committed inside the segment whose T1.2 was about that pattern, by the agent that had just read both.
+
+Caught downstream by the summed-weights test, which is luck rather than design. **Fixed properly, not merely filed:** each weight is now checked against `view.find_slot(u, v)` — verified on disk at `tests/test_dashboard.py:352-372` — so the test fails by its own name.
+
+**Two rules out of this:**
+
+> **A test that names a relationship must assert the relationship, not a consequence of it.** Equal lengths are a consequence of parallelism. They are not parallelism.
+
+> **The mutations worth running are the ones nobody specified.** The commissioned mutation confirmed a prediction. The uncommissioned one found a real hole. Every future segment's mutation step must include at least one the spec did not name.
+
+vClaude's own note is worth preserving verbatim: *"Knowing the rule is evidently not the same as not breaking it, which is presumably why the mutation step exists."*
+
+### D8 corroborated from the pixel side
+
+Unasked, and useful:
+
+```
+longest edge : 65 px on a 570 px canvas
+edges > 100px: 0 (0.0%)
+median edge  : 46 px      mean node spacing: 40 px
+```
+
+735 edges read as **fabric, not spaghetti**, because a geometric generator connects near neighbours — no edge crosses the picture. On Erdős–Rényi the median edge would span roughly a third of the canvas.
+
+So **v1's tangle was never a drawing defect. It was the tier.** Same rendering code, different generator. D8 was decided on research grounds; this is the same conclusion reached independently from the rendering side, and it is a better answer to *"why medium200?"* in a viva than the original argument, because it is visible.
+
+### Carried to segment 8
+
+**Minimum edge length is sub-pixel** — at least one node pair is coincident on screen. Anything clickable needs a hit-target policy; nearest-node-within-radius rather than exact hit, and a defined tie-break. Recorded now so segment 8 does not discover it through a control that silently selects the wrong node.
+
+### Close
+
+**337 full / 332 not-slow** (from 329 / 324, **+8**). Lint clean across three trees. `src/` **2005 / 2100**, delta **+0** for the second consecutive segment. `dashboard/` **56 / 1000** Python — and an unmeasured 142 lines of JavaScript, which R1 fixes.
+
+948 SVG elements on screen, every coordinate the engine's own, verified by recomputing the transform independently from raw JSON.
+
+Segment 8 makes it move.
