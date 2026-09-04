@@ -16,6 +16,7 @@ here — see :func:`tier`.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
+from pydantic import BaseModel, Field
 
 from dynaswarm.analysis.load import load_steps
 from dynaswarm.config import GraphCfg, ScenarioCfg, register
@@ -263,6 +265,178 @@ def describe_timeline(
     }
 
 
+class GraphSpec(BaseModel):
+    """What a world is: four parameters and nothing else.
+
+    Deliberately not a tier name.  Stage 1 (§15.3) is "choose model, node
+    count, density, seed", so the picker hands over the parameters
+    themselves; the registered tiers become presets that fill this in
+    rather than a closed set the user must pick from.
+    """
+
+    model: str = "geometric"
+    n_nodes: int = Field(default=200, ge=4, le=2000)
+    density: float = Field(default=0.04, gt=0.0, le=1.0)
+    seed: int = Field(default=DEFAULT_SEED, ge=0)
+
+
+class ScenarioSpec(BaseModel):
+    """How the world breaks.
+
+    Every field is a ``ScenarioCfg`` field, defaulted to ``ScenarioCfg``'s
+    own default, so a request that sets nothing gets exactly what the
+    engine would have used.
+    """
+
+    events_per_step: float = Field(default=0.3, ge=0.0, le=10.0)
+    cluster_size: int = Field(default=25, ge=1, le=200)
+    timesteps: int = Field(default=60, ge=1, le=500)
+    p_closure: float = 0.15
+    p_traffic_up: float = 0.30
+    p_traffic_down: float = 0.20
+    p_reopen: float = 0.10
+    p_delete: float = 0.10
+    p_add: float = 0.15
+    traffic_factor: float = Field(default=2.0, gt=1.0)
+
+
+def graph_id(spec: GraphSpec) -> str:
+    """A graph's identity, **derived from its parameters, never issued.**
+
+    Segment 8 ruled that this server holds no state, and an id handed out
+    from a registry would quietly undo that: a registry needs entries,
+    entries need eviction, eviction needs sessions, and then two viewers
+    can disagree about what a given id means.  A derived id has none of
+    that — any request carrying one rebuilds the identical graph from
+    nothing, on any process, forever.
+
+    ``blake2b`` rather than ``hash()`` because Python salts the latter per
+    process, so the same graph would get a different id on every restart.
+    It is also what ``core/rng.py`` already uses to name streams, so the
+    house convention is content-addressing rather than counters.
+
+    Args:
+        spec: The four parameters that define the world.
+
+    Returns:
+        A 12-character hex digest.
+    """
+    payload = f"{spec.model}|{spec.n_nodes}|{spec.density!r}|{spec.seed}"
+    return hashlib.blake2b(payload.encode(), digest_size=6).hexdigest()
+
+
+def _graph_cfg(spec: GraphSpec) -> GraphCfg:
+    return GraphCfg(model=spec.model, n_nodes=spec.n_nodes, density=spec.density)
+
+
+def build_world(spec: GraphSpec) -> dict:
+    """Generate a graph to order, and describe it.
+
+    No cache, deliberately.  The spec permits one only if evicting it
+    cannot change an answer, and the cheapest way to guarantee that is to
+    have nothing to evict — every response is rebuilt from the parameters
+    in the request.  See the segment's FINDINGS for the timing that made
+    this affordable.
+
+    Args:
+        spec: Model, node count, density and seed.
+
+    Returns:
+        The derived id, the panel statistics, and the geometry needed to
+        draw it — ``positions`` empty when the model carries none.
+    """
+    cfg = _graph_cfg(spec)
+    view, source, target = build(cfg, stream(spec.seed, "graph"))
+    optimum, path, _ = shortest_path(view, source, target, heuristic=True)
+    topo = view.topology
+    owner = np.repeat(np.arange(topo.n_nodes), np.diff(topo.indptr))
+    keep = np.asarray(view.active) & (owner < topo.indices)
+    reachable = bool(np.isfinite(optimum))
+    return {
+        "graph_id": graph_id(spec),
+        "spec": spec.model_dump(),
+        "n_nodes": view.n_nodes,
+        "n_edges": view.n_active_edges,
+        "mean_degree": 2.0 * view.n_active_edges / view.n_nodes,
+        "optimum": float(optimum) if reachable else None,
+        "reachable": reachable,
+        "source": int(source),
+        "target": int(target),
+        "has_coordinates": topo.pos is not None,
+        "positions": [] if topo.pos is None else topo.pos.tolist(),
+        "edges": np.stack([owner[keep], topo.indices[keep]], axis=1).tolist(),
+        "weights": np.asarray(view.weight)[keep].tolist(),
+    }
+
+
+def build_run(graph: GraphSpec, scenario: ScenarioSpec) -> dict:
+    """A world plus a disruption timeline, in one stateless answer.
+
+    The same contract as :func:`describe_timeline` — ``events_at()`` is
+    the only source of event timing — with one addition that earns its
+    place: every step carries the engine's **own** ``n_active_edges``.
+
+    That is what makes §4.3.1's identity checkable rather than decorative.
+    The page tallies adds, reopens, closures and deletes from the events
+    it was given and asserts
+
+        active(t) == active(0) + adds + reopens - closures - deletes
+
+    against *this* number.  Reconciling a browser tally against a browser
+    tally would prove only that the browser is self-consistent, which it
+    would be even if the engine disagreed with both.
+
+    Args:
+        graph: The world.
+        scenario: How it breaks.
+
+    Returns:
+        Metadata, the derived graph id, and one entry per timestep.
+    """
+    cfg = _graph_cfg(graph)
+    view, source, target = build(cfg, stream(graph.seed, "graph"))
+    scenario_cfg = ScenarioCfg(name="custom", **scenario.model_dump())
+    schedule = build_schedule(
+        view, scenario_cfg, stream(graph.seed, "events"), source, target
+    )
+    timeline = GraphTimeline(view, schedule)
+
+    steps = []
+    for t in range(timeline.timesteps):
+        state = timeline.state_at(t)
+        optimum, path, _ = shortest_path(state, source, target, heuristic=True)
+        reachable = bool(np.isfinite(optimum))
+        steps.append({
+            "t": t,
+            "events": [
+                {
+                    "kind": event.kind,
+                    "u": int(event.u),
+                    "v": int(event.v),
+                    "old_weight": float(event.old_weight),
+                    "new_weight": float(event.new_weight),
+                }
+                for event in timeline.events_at(t)
+            ],
+            "optimum": float(optimum) if reachable else None,
+            "path": [int(node) for node in path] if reachable else [],
+            "reachable": reachable,
+            # The engine's own count, not a tally. This is the figure the
+            # ledger reconciles against.
+            "n_active_edges": state.n_active_edges,
+        })
+
+    return {
+        "graph_id": graph_id(graph),
+        "graph": graph.model_dump(),
+        "scenario": scenario.model_dump(),
+        "horizon": timeline.timesteps,
+        "source": int(source),
+        "target": int(target),
+        "steps": steps,
+    }
+
+
 def run_classes() -> dict[str, int]:
     """Row counts per ``run_class`` across every run in ``outputs/``.
 
@@ -309,6 +483,18 @@ def api_timeline(
 ) -> dict:
     """One call, the whole run. No cursor lives on this server."""
     return describe_timeline(seed, tier_name, scenario_name)
+
+
+@app.post("/api/graph")
+def api_build_graph(spec: GraphSpec) -> dict:
+    """Stage 1: generate a world to order. Its id is derived, not issued."""
+    return build_world(spec)
+
+
+@app.post("/api/timeline")
+def api_build_timeline(graph: GraphSpec, scenario: ScenarioSpec) -> dict:
+    """Stage 2: break that world on demand."""
+    return build_run(graph, scenario)
 
 
 @app.get("/api/runs")

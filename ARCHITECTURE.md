@@ -215,7 +215,7 @@ Six event kinds, applied in **spatially coherent clusters**:
 
 | Kind | Effect |
 |---|---|
-| `closure` | weight → effectively infinite |
+| `closure` | deactivates the slot in the CSR mask |
 | `traffic_up` | weight × `traffic_factor` (2.0) |
 | `traffic_down` | weight ÷ `traffic_factor`, floored at free-flow |
 | `reopen` | reactivates an inactive **base** edge |
@@ -236,6 +236,43 @@ Three design decisions that must survive any refactor:
 | `low` | 0.1 | 90% |
 | `moderate` | 0.3 | 74% |
 | `high` | 0.8 | 45% |
+
+### 4.3.1 The edge lifecycle — nothing is ever created or destroyed
+
+Added 4 Sept 2026, because Rudra asked whether a "new road" really adds an edge and whether the model can close a road that was never there. Both are answered by the representation, and the answers were previously only in `core/events.py`'s docstrings. Anything an examiner would ask belongs here.
+
+**There is a fixed pool of slots.** Every edge that could ever exist — original or otherwise — has a permanent slot index, allocated once at graph construction. Events only ever flip `active` and rewrite `weight`. **No slot is created, destroyed, or reindexed at any timestep**, which is what lets a timeline be replayed identically for every arm.
+
+Two masks distinguish the three populations:
+
+| Population | `base_active` | Meaning |
+|---|---|---|
+| **Original road** | `True` | Was in the graph at `t = 0` |
+| **Pool road** | `False` | Never existed at `t = 0`; a latent slot the `add` event may activate |
+| — | | `active` (separate, mutable) says whether it is traversable *right now* |
+
+**Eligibility, and why no event can act on nothing** (`events.candidate_slots`):
+
+| Kind | May target | So it cannot |
+|---|---|---|
+| `closure`, `delete` | `active` | close or delete a road that is not currently there |
+| `traffic_up`, `traffic_down` | `active` | reprice a road that is not currently there |
+| `reopen` | `~active & base_active` | reopen anything that was not an original road |
+| `add` | `~active & ~base_active` | "add" a road that already exists, or re-add an original one |
+
+**Three consequences worth stating explicitly:**
+
+1. **`add` genuinely increases `n_active_edges`.** It is not an overlay on an existing edge — the slot connects a node pair that had no road. The live edge count therefore moves during a run, and the dashboard should show it.
+2. **An added road is a first-class road afterwards.** It is `active`, so it is eligible for closure, deletion and repricing like any other. Deactivated again, it returns to `~active & ~base_active` and is eligible for `add` — **never for `reopen`**, because `reopen` requires `base_active`. Original roads reopen; pool roads re-add. The distinction survives arbitrarily many cycles.
+3. **The population is closed, so the count balances.** At every `t`:
+
+   ```
+   active(t) = active(0) + (adds + reopens) − (closures + deletes)
+   ```
+
+   This is an exact identity, not an approximation. It is worth putting on screen: a running ledger that must balance is an invariant an examiner can watch hold, and a divergence would be visible immediately.
+
+**On `closure` versus `delete`.** Under an active-mask representation they are the same operation — `events.py:76` handles both with one branch, and `new_weight` is meaningless for both. The labels are retained so event-type breakdowns stay faithful to the brief, but **the mechanism is shared**. The §4.3 table above previously described `closure` as "weight → effectively infinite", which the code does not do; corrected. See **F11** — the report must say six kinds, five behaviours, and why the distinction was kept.
 
 ### 4.4 The timeline — and the temporal contract
 
