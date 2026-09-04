@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -617,3 +619,90 @@ def test_the_dashboard_never_derives_event_timing_itself():
         code = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
         code = re.sub(r"//.*", "", code)
         assert "schedule" not in code, f"{path.name} references the schedule directly"
+
+
+# ---------------------------------------------------------------------------
+# The JavaScript layer (Entry 008 R1)
+# ---------------------------------------------------------------------------
+
+JS_TEST_DIR = ROOT / "tests" / "js"
+
+
+def test_the_javascript_suite_runs_under_node():
+    """The render harness, versioned, exercising the real app.js.
+
+    Segment 8's Mutation B was two characters, browser-side, and the
+    entire Python suite passed while the page quoted a wrong number
+    beside a picture of the break it was wrong about. This is what closes
+    that: `node --test` runs both the pure `model.js` unit tests and the
+    harness-driven `app.js` integration tests — the same harness that
+    produced every "what the page actually renders" artefact in Entries
+    006-008, moved out of the scratchpad and into the repository per
+    Entry 008 R1, instead of being rewritten from memory each segment.
+
+    **A skipped test is not a test** — Entry 008's own words. If `node`
+    is genuinely absent this skips loudly, naming what goes untested,
+    rather than passing by doing nothing.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip(
+            "node not found on PATH — dashboard/static/*.js (the render "
+            "logic, the state/event split, the step.t===t guard) is "
+            "UNTESTED this run. See RUNBOOK.md's dashboard section."
+        )
+    # Explicit file list, not a bare directory. `node --test <dir>`'s
+    # default discovery glob is not stable across node versions — it
+    # silently failed to find these files under a newer node than the
+    # one this was written against, with an error naming only the
+    # directory and none of the individual tests. Globbing here, in
+    # Python, removes the dependency on node's own directory-scan rules.
+    js_tests = sorted(JS_TEST_DIR.glob("*.test.mjs"))
+    assert js_tests, f"no *.test.mjs files found under {JS_TEST_DIR}"
+    result = subprocess.run(
+        [node, "--test", *[str(p) for p in js_tests]], capture_output=True, text=True, cwd=ROOT
+    )
+    assert result.returncode == 0, (
+        f"node --test failed:\n{result.stdout}\n{result.stderr}"
+    )
+
+
+def test_the_dashboard_is_testable_with_node_absent():
+    """The boundary, asserted rather than assumed.
+
+    Same shape as `test_the_core_is_importable_and_usable_without_fastapi`:
+    make the dependency genuinely unavailable — a `PATH` with no `node` on
+    it anywhere, not merely an untouched `sys.modules` — then prove real
+    work still happens. Here "real work" is the rest of the dashboard
+    suite passing, with the JS test skipping loudly rather than silently.
+    """
+    # More than one `node` can be on PATH at once (nvm, homebrew, a
+    # system install) — stripping only the one shutil.which happens to
+    # return first would leave the others reachable, and the test would
+    # believe it had made node unavailable while it had not. Every
+    # directory that contains a `node` executable is removed.
+    stripped = os.pathsep.join(
+        segment for segment in os.environ.get("PATH", "").split(os.pathsep)
+        if not (Path(segment) / "node").exists()
+    )
+    env = {**os.environ, "PATH": stripped}
+    assert shutil.which("node", path=stripped) is None, (
+        "node is still reachable; PATH stripping is incomplete"
+    )
+    # Targeted at the one test that touches node, not this file as a
+    # whole — this test lives in that same file, and running the whole
+    # file would re-enter this test inside the subprocess.
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+            "-k", "test_the_javascript_suite_runs_under_node", __file__,
+        ],
+        capture_output=True, text=True, cwd=ROOT, env=env,
+    )
+    assert "node not found on PATH" in result.stdout, (
+        f"expected the JS test to skip with its reason; got:\n{result.stdout}"
+    )
+    assert result.returncode == 0, (
+        f"the rest of the dashboard suite must still pass with node absent:\n"
+        f"{result.stdout}\n{result.stderr}"
+    )

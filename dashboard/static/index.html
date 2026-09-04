@@ -9,8 +9,8 @@
 <body>
   <header>
     <h1>Dynaswarm</h1>
-    <p class="sub">Phase 1 · segment 8 — the shortest path will not hold still.
-       Roads break; the optimum moves. Press space.</p>
+    <p class="sub">Phase 1 · segment 9 — a road's price persists; a road
+       breaking flashes and fades. Press space.</p>
   </header>
 
   <section>
@@ -28,12 +28,20 @@
       <input id="scrub" type="range" min="0" max="0" value="0" step="1"
              aria-label="timestep">
     </div>
-    <p class="legend">
-      <span class="k-path">━</span> optimal path ·
-      <span class="k-hit">━</span> changed this step ·
-      <span class="k-changed">━</span> changed earlier ·
-      <span class="k-gone">━</span> closed or deleted
-    </p>
+
+    <div class="legend">
+      <div class="legend-col">
+        <h3>state — persists</h3>
+        <p><span class="swatch state-dearer"></span> road is dearer than at t=0</p>
+        <p><span class="swatch state-cheaper"></span> road is cheaper than at t=0</p>
+        <p><span class="swatch state-ghost"></span> road is closed right now</p>
+        <p class="hint">(a deleted road is not drawn at all)</p>
+      </div>
+      <div class="legend-col">
+        <h3>event — flashes, then fades</h3>
+        <ul id="legend-events"></ul>
+      </div>
+    </div>
   </section>
 
   <section>
@@ -46,6 +54,6 @@
     <p>Local development server. Not hosted, not exposed, not deployed.</p>
   </footer>
 
-  <script src="/static/app.js"></script>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

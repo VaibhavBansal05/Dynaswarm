@@ -1,204 +1,200 @@
-# SEGMENT 8 — Make It Move
+# SEGMENT 9 — Two Layers: State and Event
 
-**Phase 1 · See it · Segment 3 of 5**
+**Phase 1 · See it · Segment 4 of 6**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` §4.4 (**the temporal contract — the single most important section for this segment**), §15, §2.3, and `decisionLedger.md` D8, D14–D17, D30, D32. `WORKFLOW_LOG.md` **Entry 007** rules on your three questions; R1 is T1 below.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§15.3 and §15.4** (the stages this segment serves), §15.7 (API shape), §2.3, and `decisionLedger.md` D8, D14–D17, D32. `WORKFLOW_LOG.md` **Entry 008** carries R1 (node as a test dependency), which is **T1 here**.
 > Append your findings to the **bottom** of this file. Do not modify the spec text above it.
+
+---
+
+## Why Phase 1 is now six segments, and why this one comes before the pickers
+
+**Rudra opened the browser and asked where the controls were. He was right to.**
+
+`ARCHITECTURE.md` §17 says Phase 1 is *"scaffold, then Stages 1 → 2 → 3 → 4, one segment each."* §15.3's Stage 1 opens with **"Choose model, node count, density, seed. Generate."** The picker *is* Stage 1. §15.4's Stage 2 is **"Choose a scenario preset or set `events_per_step`, `cluster_size`, `timesteps` and the six event probabilities."**
+
+Segments 7 and 8 built the *rendering* half of each stage and dropped the *choosing* half. That was a deliberate sequencing decision — proving the pipe before building controls, which paid: two segments of mutation testing found real defects that a UI would have hidden. **But it was never recorded and never announced, and the person it was built for found out by opening a browser and being confused.** That is the failure the protocol exists to prevent, and it was mine.
+
+**Phase 1 is six segments now:** 6 scaffold · 7 render · 8 playback · **9 rendering model** · 10 pickers (Stage 1 + 2 controls, POST API, graph id) · 11 race (Stage 3) · 12 inspect (Stage 4). *(Counting: 6–12 is seven overall segments, six of them Phase 1 after the scaffold.)*
+
+**Rendering comes before pickers, on merit.** The pickers exist so Rudra can generate different worlds and *look at them*. If the renderer is still mud, every world he picks is mud and he cannot evaluate his own choice. Fix the eye first, then give it things to look at.
 
 ---
 
 ## Goal
 
-**Put time on the screen.** Roads break, the graph changes, and the optimal path re-routes in front of you — step by step, with playback you control.
+**Separate two things the picture currently conflates, and make the result readable across a room.**
 
-This is the segment where Dynaswarm stops being a picture and becomes the thing the project is actually about: **a shortest path that will not hold still.**
+Right now every change to a road is painted the same colour, so *"a new road appeared"* and *"a road closed"* — opposite events — look identical, and the amber accumulates until 244 of 735 edges are lit and the screen is mud.
 
-Still no arms, no algorithms racing, no charts. Segments 9–10. This segment shows the *problem* moving; the next one shows the solvers chasing it.
+The fix is not a better palette. It is recognising that **the picture is showing two different kinds of fact through one channel.**
 
-## The one thing that can go wrong, and it is invisible
+> **A road's price is a STATE.** It is true right now, it stays true, and it is what the algorithms' cost function actually sees.
+>
+> **A road breaking is an EVENT.** It happens at one step and is over, and it is what the **recency signal** sees.
 
-**F1 was an off-by-one in time.** Every component read one timestep into the future, and it voided every recency-driven result the project had. It was fixed in Phase 0.5 and the fix is pinned by tests.
+Two layers. State is quiet and permanent; events are loud and self-clearing. That is what makes mud impossible by construction rather than by tuning.
 
-**This segment can reintroduce it in a place no test currently looks: the picture.**
-
-If the page draws a disruption marker one step early or late, nothing crashes, nothing looks wrong, and the demo shows an edge snapping at the wrong moment while quoting a correct cost. It would be a lie you could point at, in the artefact built to convince your examiner.
-
-`ARCHITECTURE.md` §4.4 and `timeline.events_at()` define the contract:
-
-> `schedule[k]` is the transition from state *k* to state *k+1*, so the events that **produced** state `t` are `schedule[t-1]`.
-
-**Do not re-derive that indexing anywhere.** Not in Python, not in JavaScript, not "just for the marker." Ask `events_at()`, every time. And T7 makes you prove a shifted marker is caught.
-
-## What the browser may and may not do with time
-
-Segment 7's rule stands and gets one careful extension.
-
-**The browser may reconstruct which edges are currently changed**, by applying the event list it was given, in order. That is *visual* state — what to grey out — and it is the only way to avoid shipping 735 edges per timestep.
-
-**The browser may not compute any number.** Every optimum, every path, every cost at every `t` is precomputed by `core.oracle` server-side and sent. The page looks them up; it never solves.
-
-That line is the whole design: **the browser reconstructs appearance, the engine owns every quantity.** If the browser's reconstruction ever drifts from the engine's state, the two disagree visibly — the highlighted path runs through an edge the page has greyed out — which is a failure you can *see*, and that is deliberate.
+**And it is why this segment matters beyond legibility.** Those two layers are precisely the two inputs the allocation controller reads. Put both on screen and the demo stops illustrating the idea and starts showing the mechanism.
 
 ---
 
-## ⚠️ T0 — MEASURE — three numbers now, not two
+## ⚠️ T0 — MEASURE
 
-**T1 lands first**, then measure against both dashboard budgets.
-
-1. **`src/`** — expect `2005 / 2100`, delta `+0`. If the timeline drawing needs something the core does not expose, **stop and report.** Third segment running; if it breaks here that is worth knowing loudly.
-2. **`dashboard/**/*.py`** — currently `56 / 1000`.
-3. **`dashboard/static/**`** — the new budget. **Report the opening figure**, since nobody has ever measured it.
-
-Project all three before writing. Report actual beside projection.
-
----
-
-## Scope
-
-**In scope**
-- `dashboard/server.py`, `dashboard/static/`
-- `tests/test_dashboard.py`, `tests/test_hygiene.py` (T1 only)
-- One local commit
-
-**Out of scope**
-- **Anything under `src/`**
-- Arms, algorithms, ACO/PSO/hybrid, charts — segments 9–10
-- **Reading timelines from `outputs/`** — see T2's ruling
-- Clicking or selecting nodes — segment 9, and it needs the hit-target policy Entry 007 recorded
-- F4, F7, F8 — Phase 3
-- `git push`
+1. **`src/`** — expect `2005 / 2100`, `+0`. Fourth segment running. If the rendering needs something the core does not expose, **stop and report.**
+2. **`dashboard/**/*.py`** — currently `76 / 1000`
+3. **`dashboard/static/**`** — currently `246 / 1200`. **This is the segment that will move it most.** Project honestly; if the projection exceeds ~600 say so before writing, because that changes what segments 10–12 have left
 
 ---
 
 ## Tasks
 
-### T1 — Entry 007's R1: the second budget
+### T1 — Entry 008's R1: test the JavaScript
 
-The Python cap counts `*.py` and nothing else. `app.js` grew 36 → 142 lines last segment and counted **zero**, while segments 8–10 are the JavaScript-heavy ones. A brake reporting comfortable headroom while the growing half is unmeasured is **F5 again** — a dead instrument returning a flattering number.
+Segment 8's Mutation B was two characters, browser-side, and **the entire Python suite passed.** The page showed *"0 edges changed this step"* on the exact step 25 roads broke, beside a picture of the break. 246 lines of JavaScript are currently guarded by two greps and a human reading output once per segment.
 
-Two budgets, two distinct questions. Do not merge them.
+**`node` is admitted as a dev-only test dependency.** The decisive reason is not that JS testing would be nice — it is that **the node harness already exists and has been load-bearing for three segments.** Every "what the page actually renders" artefact in Entries 006–008 came from executing `app.js` under node. The project has been accepting evidence from a tool it refuses to version. This admits an instrument already in use.
 
-| Budget | Question | Cap |
+Terms:
+
+| | |
+|---|---|
+| **Scope** | `tests/` and `dashboard/` only. Nothing under `src/` may require it, ever |
+| **Boundary, asserted** | A test proving the science surface is fully testable with `node` **absent** — same shape as `test_the_core_is_importable_and_usable_without_fastapi`: make it genuinely unavailable, then do real work |
+| **Node missing** | Skip, with a reason **naming what is not being checked** |
+| **`RUNBOOK.md`** | states node is expected for the dashboard suite |
+| **The trap** | **A skipped test is not a test.** Report the skip count in this and every future close, qualified alongside the pass counts. A JS suite silently skipping is Mutation B's defect wearing a third hat |
+
+**Move the harness into the repository.** It has been rewritten from scratch three times in a scratchpad; that is three chances to have rewritten it wrongly and validated nothing.
+
+**Plus the guard that does not wait for a test run.** Every step in the payload carries its own `t`; the renderer asserts `step.t === t` before drawing and throws otherwise. Two lines. It catches Mutation B on the spot — **and it fires in the browser, in front of the examiner**, which no test suite can do.
+
+### T2 — Report what the code actually emits
+
+**Before designing anything**, paste the **real** event kinds from the core — the enum or literals, from source, with file and line.
+
+`ARCHITECTURE.md` §15.4 names six: closure, traffic-up, traffic-down, deleted, added, reopened. **That is the document, not the code.** This project has been wrong about docs-versus-code before; the palette must be built on what actually arrives in the payload.
+
+If the set differs from §15.4, **report the difference and design for the code.** Then say whether §15.4 should be corrected — that is a ruling for the Architect, not an edit for you.
+
+### T3 — The state layer
+
+Every road drawn at **its condition right now**. No history, no accumulation.
+
+| Road's current condition | Drawn as |
+|---|---|
+| unchanged from `t=0` | faint grey, thin — the fabric |
+| **dearer** than at `t=0` | warmer / darker, thicker in proportion |
+| **cheaper** than at `t=0` | cooler / lighter |
+| **closed** | **not drawn as a road.** A faint ghost, or nothing |
+| **deleted** | **not drawn at all** |
+
+That last pair does most of the decluttering on its own: a closed road is not a road, and drawing it as a loud red line is the picture insisting on something that is no longer there.
+
+**Keep the state channel subtle.** Use lightness/opacity and width, **not** hue — hue belongs to events. Subtle-and-busy is legible; loud-and-busy is mud. If most roads end up visibly deviating late in the run, say so — that is a finding about the disruption model, not a styling problem to hide.
+
+**Where the current price comes from — report this before writing.** If an event carries the resulting weight, the browser applies it: that is bookkeeping, not computation, and stays inside segment 8's rule. If it does not, **the server must send the per-step weights**, and you should say what that costs in payload. If neither is possible without touching `src/`, **stop and report.**
+
+### T4 — The event layer
+
+A **flash**: bright, thick, and it fades back to nothing over a short window.
+
+**Colour = is this good or bad for me. Dash = can I use it.**
+
+| Event | Line | Usable after? |
 |---|---|---|
-| `dashboard/**/*.py` statements | *Has the dashboard become a second engine?* | **1000** |
-| `dashboard/static/**` non-blank, non-comment lines — `.js`, `.css`, `.html` | *Has the dashboard become an application?* | **1200** |
+| got slower | **orange**, thick, solid | yes |
+| got faster | **teal**, thick, solid | yes |
+| new road added | **green**, thick, solid | yes |
+| reopened | **green**, thick, dashed | yes |
+| closed | **red**, thick, dashed | no |
+| deleted | **dark red**, faint, dashed | never |
 
-**The unit is deliberately cruder than the Python one, and the test must say so in its docstring.** Counting JS statements needs a JS parser and this repo will not take a dependency for a budget. Line-counting is blunt and mildly gameable — and it is *not zero*, which is the entire property the current instrument lacks. Say that plainly where the next reader will see it, so nobody mistakes it for the AST count and reasons from a false equivalence.
+Adjust to what T2 actually reports. Two hard requirements on whatever you land on:
 
-Report the opening number. If `static/` is already close to 1200, **say so rather than raising the cap** — that is a finding, not a configuration problem.
+- **Every distinction must survive greyscale.** Red-closed against green-added is the standard red-green confusion; the dash pattern and weight must carry the meaning on their own, with hue as reinforcement rather than the sole channel. **Check this and say how you checked.**
+- **Legible on a dark background at projector distance.** This is shown to an examiner across a room, not read at arm's length.
 
-### T2 — The timeline endpoint
+### T5 — The fade, and what its length should be
 
-`GET /api/timeline` — one call, the whole run, no server state.
+Events decay from full brightness back to nothing over a short window, so recent breaks dominate and old ones vanish. **Only that window's worth of events is ever on screen**, which is what makes accumulation structurally impossible.
 
-**Stateless by construction.** The server holds no cursor, no "current step", no session. The page asks once for everything and scrubs locally. A stateful server would make "which step are we on" a thing that can disagree between the page and the process, which is a bug surface this project does not need.
+**Report first, then choose:** does the `recency` signal have a decay constant or half-life in the config? If it does, **use that number** and say so on the page.
 
-**Build the timeline live from the core. Do not read `outputs/`.** Every run on disk predates F1's fix and carries a permanently misaligned `num_events` column (D32). Drawing disruption markers from those files would draw them one step early — **the exact bug this segment must not reintroduce, reintroduced by trusting stored data instead of the engine.** Stored-run replay waits for Phase 4's regenerated runs.
+The reason is not tidiness. **Recency of disruption is the signal the entire allocation thesis rests on.** If the visual fade runs on the same constant, the examiner is watching the *actual signal the controller reads*, not a decorative animation. If no such constant exists, pick a window, **state the number and why**, and flag it for the Architect.
 
-Return, per timestep `t` from 0 to the horizon:
+### T6 — Markers and legend
 
-| Field | Source | Note |
-|---|---|---|
-| `events` | **`timeline.events_at(t)`** | The contract. Never `schedule[t]`, never a re-derived index |
-| `optimum` | `core.oracle` at state `t` | The moving optimum — the quantity the entire project measures against |
-| `path` | the oracle's node sequence at `t` | What gets highlighted |
-| `reachable` | whether target is still reachable | A disruption can disconnect the graph. **Decide what the page shows then, and say what you decided** |
+**Rudra's ruling: the goal is green.**
 
-Plus the horizon and the scenario name once, at the top.
+- **Goal — solid green.** It is the thing you are heading for
+- **Start — white ring.** Neutral. **Not red** — red means *closed* in T4's palette, and a red start marker is the same self-collision as the current red goal
+- Both in the legend
 
-Report the payload size. If it is unreasonable, say so and propose — do not silently thin it.
+**The legend names events in plain words.** *"road closed"*, *"got slower"*, *"new road"* — never *"changed"*. It must also distinguish the two layers, because a viewer needs to know that a thick warm line means *this road is expensive now* while a flashing one means *this just happened*.
 
-**First, report what the core actually exposes**: the real names and signatures of the timeline/scenario API, and how a state at `t` is obtained. If applying the timeline requires something not public, **stop and report** before writing around it.
+Also: **the blue optimal path stays on top of everything**, and stays the thickest line on screen.
 
-### T3 — Draw the disruptions
-
-On the graph from segment 7:
-
-- **changed edges are visibly changed** — colour or weight, and consistent from the moment they change onward, not only on the step they happen
-- **the step where a change lands is marked distinctly** — the difference between "this edge is broken" and "this edge just broke" is the difference between state and event, and both belong on screen
-- **the optimal path re-routes** as `t` advances, drawn from the endpoint's `path` for that `t`
-
-Keep segment 7's rule: geometry is received, never invented. Nodes do not move. Ever.
-
-### T4 — Playback
-
-- **step back / step forward**, one timestep
-- **play / pause**, at a speed that is watchable rather than impressive
-- **a scrubber** — drag to any `t`
-- **the current `t` displayed as a number**, always, unambiguously
-
-**Scrubbing must be exact.** Landing on `t` shows state `t` — not `t±1`, not an interpolation. If the scrubber and the step buttons can ever disagree about which step is showing, that is the off-by-one wearing a different hat.
-
-Keyboard: arrow keys step, space toggles play. Cheap and it makes the demo one-handed.
-
-### T5 — Show the moving optimum as a number
-
-Beside the graph, always visible:
-
-```
-t = 14 / 60      optimum 104.23      hops 13      2 edges changed this step
-```
-
-This is the sentence your examiner needs to understand the entire project. **The optimum moves. That is the problem.** Show it moving.
-
-Every number on that line comes from the endpoint. None is computed in the browser.
-
-### T6 — Tests
+### T7 — Tests
 
 | Test | What it catches |
 |---|---|
-| **Marker time equals engine time, at every `t`** | The endpoint's `events` at `t` are exactly `timeline.events_at(t)`. **The F1 test for the visual layer** |
-| **The optimum at every `t` equals the oracle's at that state** | Not the first, not the last — **every** one. This is the anti-reimplementation test for this segment |
-| **Every `path` is a real walk in the graph as it stands at that `t`** | A path valid at `t=0` and invalid at `t=30` is what a stale cache looks like |
-| **Every `path`'s summed weights equal that `t`'s `optimum`** | Segment 7's strongest test, extended across time |
-| **The timeline is stateless** | Two identical requests return identical payloads; requests in any order return the same thing |
-| **Unreachability is represented, not crashed on** | Whatever T2 decided, pinned |
-| **T1's static budget** | with its docstring stating its own imprecision |
+| **Every event kind the core emits maps to a defined visual class** | A seventh kind added later renders as a silent default and nobody notices |
+| **No event kind maps to the same class as another** | The bug this segment exists to fix, pinned so it cannot return |
+| **A closed or deleted road is not drawn as a usable road** | The decluttering rule, asserted |
+| **The fade window bounds what is on screen** | After the window passes, an event contributes nothing. This is the anti-mud guarantee — assert it, do not trust it |
+| **The state layer reflects the current price, not the history** | Two roads with the same current price look the same regardless of how they got there |
+| **`step.t === t` guard throws when they disagree** | T1's guard, tested |
+| **The JS suite runs under node, and skips loudly without it** | T1 |
+| **The science surface is testable with node absent** | T1's boundary |
 
-### T7 — Mutations — two required
+### T8 — Mutations — two required, one of them yours
 
-**The specified one: shift the markers by one.** Make the endpoint return `schedule[t]` instead of `events_at(t)`. That is F1, reintroduced in the visual layer, and it is the mutation this whole segment is built around. **Paste the failure.** If it does not fail, you have found something far more important than a passing test — report it as the headline.
+**Specified:** collapse two event kinds to the same visual class — closed and added, the opposite pair. That is the bug this segment fixes, reintroduced. Paste the failure.
 
-**And at least one nobody specified.** Entry 007 made this a standing rule: the commissioned mutation confirmed a prediction, the uncommissioned one found a real defect. Pick something plausible that the weak version of a test would wave through — a stale path cached from an earlier `t`, an optimum array off by one against the events array, a scrubber that lands on `t-1`.
+**Yours: pick something the weak version of a test would wave through.** Entry 007 made this standing, and Entry 008's uncommissioned mutation is the reason the JS is being tested at all. Report anything you expected to be caught that was not — that remains the most valuable thing you can report.
 
-Report what you tried, what caught it, and — most valuable of all — **anything you expected to be caught that was not.**
+### T9 — Show it
 
-### T8 — Show it
+Three frames, executed and pasted, not described:
 
-1. `/api/timeline` truncated sensibly — the top-level fields, the full first three timesteps, the full timestep with the most events, and total payload size
-2. The page as it renders at three different `t`: **0, a step where a disruption lands, and the horizon.** Execute it, do not describe it
-3. **State whether the movement is legible.** Does a re-route read as a re-route, or as a flicker? Segment 9 puts four algorithms on this same canvas and inherits whatever you say here
+1. **A quiet step** — the state layer alone. Is the fabric still readable?
+2. **A heavy disruption step** — flashes at full brightness over the state layer
+3. **`t = 59`** — the frame that used to be mud. **Say plainly whether it is now readable**, and how many edges are lit compared with the 244 before
 
-### T9 — Commit
+Then: **is there room on this canvas for four more coloured paths?** Segment 11 puts the arms here and inherits your answer.
+
+### T10 — Commit
 
 Whole tree. **Do not push.**
 
 ```
-segment 8: make it move (phase 1)
+segment 9: two layers — state and event (phase 1)
 
-Adds GET /api/timeline: one stateless call returning, for every timestep,
-the events that produced that state via timeline.events_at(), the oracle's
-optimum and path at that state, and whether the target is still reachable.
-Built live from the core rather than read from outputs/, whose stored runs
-predate F1 and carry a misaligned num_events column (D32).
+Splits what the picture shows into a road's current condition, which
+persists, and a disruption, which flashes and fades. One channel was
+carrying both, so "a road closed" and "a new road appeared" — opposite
+events — rendered identically, and touched edges accumulated until 244 of
+735 were lit.
 
-The page plays it: disruptions land on the graph, changed edges stay
-changed, and the optimal path re-routes as t advances, with step, play and
-scrub controls and the moving optimum shown as a number. The browser
-reconstructs which edges have changed so it knows what to grey out; every
-quantity it displays is the engine's.
+The state layer draws every road at its current price in a subtle channel;
+closed and deleted roads are not drawn as roads. The event layer flashes in
+six kinds distinguished by hue and dash together, so the distinctions
+survive greyscale, and fades over a bounded window, which makes
+accumulation impossible rather than merely unlikely. The fade runs on the
+recency signal's own constant where one exists, so the picture shows the
+signal the allocation controller reads.
 
-Tests pin marker time to engine time at every timestep, and every path to a
-real walk whose summed weights equal that step's quoted optimum. Returning
-schedule[t] instead of events_at(t) — F1 reintroduced in the visual layer —
-is caught.
+Goal is green and start is a white ring, neither colliding with the event
+palette. The legend names events in plain words rather than "changed".
 
-Also lands Entry 007's R1: dashboard/static/ gets its own line budget, since
-the statement counter globs *.py and had been reporting zero for a file that
-grew to 142 lines.
+Also lands Entry 008's R1: node is admitted as a dev-only test dependency,
+the render harness moves out of the scratchpad into the repository, and the
+renderer asserts its step index before drawing — the two-character
+browser-side mutation that the entire Python suite passed.
 
 Spec + findings: currentWorkFlow.md
-Log: WORKFLOW_LOG.md entry 008
+Log: WORKFLOW_LOG.md entry 009
 ```
 
 ---
@@ -207,15 +203,16 @@ Log: WORKFLOW_LOG.md entry 008
 
 | | |
 |---|---|
-| **Zero statements added to `src/`** | Stop and report if the drawing needs one |
-| **`events_at()` is the only source of event timing** | No re-derived index, anywhere, in any language |
-| **The browser computes no quantity** | It reconstructs appearance. Every number is the engine's |
-| **No server state** | Stateless endpoint, client-side playback |
-| **Do not read timelines from `outputs/`** | D32. Live from the core |
-| **Nodes never move** | Geometry received, never invented |
-| **No new dependency** | |
-| **Do not modify `/api/graph` or `/api/graph/geometry`** | Both are pinned. Add, do not edit |
-| **No clicking the graph** | Segment 9, and it needs a hit-target policy first |
+| **Zero statements added to `src/`** | Stop and report |
+| **The browser computes no quantity** | It applies weights it was given and renders. It does not derive a price |
+| **`node` is confined to `tests/` and `dashboard/`** | The science surface must be fully testable without it, asserted |
+| **Hue is never the only channel** | Every distinction survives greyscale |
+| **Bounded fade window** | Nothing accumulates without limit |
+| **Closed and deleted roads are not drawn as roads** | |
+| **Do not modify `/api/graph` or `/api/graph/geometry`** | Both pinned. Add, do not edit |
+| **No pickers** | Segment 10. Resist it |
+| **No arms** | Segment 11 |
+| **New dependency: `node` only** | |
 | **Do not push** | |
 
 ---
@@ -223,53 +220,36 @@ Log: WORKFLOW_LOG.md entry 008
 ## Acceptance check
 
 ```bash
-# 1a. In scope
-git diff --stat -- dashboard/ tests/
-# 1b. The science surface is untouched
-git diff --stat -- src/                       # expect EMPTY
-
-# 2. Suite
-./.venv/bin/pytest -q -m "not slow"
-
-# 3. Lint
+git diff --stat -- dashboard/ tests/ RUNBOOK.md pyproject.toml
+git diff --stat -- src/                          # expect EMPTY
+./.venv/bin/pytest -q -m "not slow"              # report passes AND skips
 ./.venv/bin/ruff check src/ tests/ dashboard/
-
-# 4. All three budgets — report each
 ./.venv/bin/pytest -q -k "statement or budget" -s
-
-# 5. No re-derived event indexing anywhere
-grep -rn "schedule\[" dashboard/                        # expect NONE
-grep -rn "t - 1\|t-1\|t + 1\|t+1" dashboard/static/     # inspect every hit, justify or remove
-
-# 6. Nothing reads stored runs for timing
-grep -rn "load_events\|load_steps" dashboard/           # only run_classes(), nothing timeline-related
-
-# 7. It runs
-curl -s "localhost:8000/api/timeline" | head -c 400
-
-# 8. Committed, not pushed
-git log --oneline -2
-git status --short --branch | head -1
+grep -rn "schedule\[" dashboard/ --include=*.py --include=*.js   # expect NONE in code
+./.venv/bin/python -m dashboard.server           # then look at t=0, a heavy step, t=59
+git log --oneline -2 && git status --short --branch | head -1
 ```
 
-**Expected:** `src/` diff empty · all tests pass · lint clean across three trees · three budgets reported with projections · no `schedule[` in the dashboard and every arithmetic-on-`t` hit justified · no stored-run read in the timeline path · endpoint answers · commit on top, ahead 1, unpushed.
+**Expected:** `src/` empty · all pass, **skips reported and explained** · lint clean · three budgets with projections · no re-derived indexing · commit on top, ahead 1, unpushed.
 
 **Paste verbatim:**
 
-1. **T0** — projection then actual, all three surfaces, plus `static/`'s opening figure against 1200
-2. **What the core exposes for timelines** — real names and signatures
-3. **The truncated timeline JSON** — top-level fields, first three steps, busiest step, total size
-4. **The page at `t` = 0, a disruption step, and the horizon**
-5. **Both mutations** — the specified shift and your own — what caught each, and anything that slipped through
-6. **Your honest read on legibility of movement**, and what you decided for unreachable states
+1. **T0** — projection then actual, all three, and what segments 10–12 have left
+2. **The real event kinds from the code**, file and line, and any divergence from §15.4
+3. **Where the current price comes from** — event payload or server-sent weights, and the cost
+4. **The fade window** — the recency constant if one exists, or your number and your reason
+5. **The three frames**, and the `t=59` edge count against 244
+6. **Both mutations**, and anything that slipped through
+7. **The greyscale check** — how you did it, and the result
+8. **Room for four arm paths?** — your honest answer
 
 ---
 
 ## Definition of done
 
-Eight checks pass, six artefacts pasted, commit exists unpushed, FINDINGS appended.
+All checks pass, eight artefacts pasted, commit exists unpushed, FINDINGS appended.
 
-**After this, Rudra can hit play and watch the problem his project exists to solve.** Segment 9 puts the algorithms on it.
+**After this the picture tells the truth about what happened, and keeps telling it at t=59.** Segment 10 hands Rudra the controls.
 
 ---
 ---
@@ -278,302 +258,341 @@ Eight checks pass, six artefacts pasted, commit exists unpushed, FINDINGS append
 
 ---
 
-# FINDINGS — Segment 8
+# FINDINGS — Segment 9
 
 ## 1. T0 — three surfaces, projection then actual
 
 ```
 surface                    projected        actual      delta
 src/                      2005  (+0)    2005 / 2100      +0
-dashboard/**/*.py           81 (+25)      76 / 1000     +20
-dashboard/static/**        340 (+172)    246 / 1200     +78
+dashboard/**/*.py           76  (+0)      76 / 1000      +0
+dashboard/static/**       ~520 (+274)    361 / 1200    +115
 
-   app.js       156        headroom: python 924
-   index.html    45                  static 954
-   style.css     45
+   app.js     178      headroom: python 924
+   model.js    81                static 839
+   index.html  52
+   style.css   50
 ```
 
-**`src/` did not move, third segment running.** Everything the timeline needed
-was already public: `build_schedule()`, `GraphTimeline`, `events_at()`,
-`state_at()`, `shortest_path()`, and `Event`'s `kind/u/v/old_weight/new_weight`
-— which is exactly the set a browser needs to reconstruct appearance without
-being told anything it could get wrong.
+**`src/` did not move — fourth segment running — and neither did the Python.**
+Everything this segment needed was already in the payload; the only new server-
+side artefact is a static data file. I projected ~274 static lines and added
+115, over-projecting because I budgeted for per-frame classification that
+became one precomputed pass plus a data file.
 
-**`static/`'s opening figure was 168 / 1200.** Not close to the cap, so nothing
-to report there beyond the number. I over-projected its growth by 94 lines,
-mostly because I budgeted for per-frame edge classification that turned out to
-be one precomputed pass.
+**Segments 10–12 have 839 static lines and 924 statements left.**
 
-**Both budgets are in `tests/test_dashboard.py`, and `test_hygiene.py` was not
-touched.** The spec allowed editing it for T1; I did not, because the two
-dashboard budgets answer questions about the dashboard and reading them side by
-side is worth more than proximity to the counter they borrow. Flagging it since
-the scope line offered otherwise.
+**One gap in the instrument, reported not fixed.** `_static_files()` globs
+`.js`, `.css` and `.html`. The new `palette.json` — 12 lines, and the single
+source of truth for the entire event encoding — is **not counted by the static
+budget**. It is immaterial to the cap (373 either way) but material to the
+instrument's honesty, which is the exact F5 shape Entry 008 R1 was about. The
+counting rule is the Architect's; flagging rather than widening it.
 
-## 2. What the core exposes — reported before writing
+## 2. The real event kinds, from the code
 
 ```python
-build_schedule(base: GraphView, cfg: ScenarioCfg, rng, source: int,
-               target: int, preserve_connectivity: bool = True)
-        -> tuple[tuple[Event, ...], ...]
-
-class GraphTimeline:
-    base: GraphView
-    schedule: tuple[tuple[Event, ...], ...]
-    timesteps  -> int                      # property; len(schedule)
-    events_at(t: int)   -> tuple[Event, ...]
-    state_at(t: int)    -> GraphView       # pure, cached
-    changed_edges(t: int) -> int
-
-@dataclass(frozen=True)
-class Event:
-    kind: EventKind; slot: int; u: int; v: int
-    old_weight: float; new_weight: float
+# src/dynaswarm/core/events.py:33
+KINDS = ("closure", "traffic_up", "traffic_down", "reopen", "delete", "add")
 ```
 
-Nothing was missing and nothing needed writing around.
+**No divergence from §15.4 in substance.** Six kinds, and they are the same six
+the document names — `traffic-up`/`traffic_up`, `deleted`/`delete`,
+`added`/`add`, `reopened`/`reopen` differ only in prose-versus-identifier
+spelling. §15.4 needs no correction; the naming is the document writing English
+where the code writes Python. Reported as required rather than assumed.
 
-**One thing found while reading, reported not touched.**
-`GraphTimeline.changed_edges` (`core/timeline.py:272`) is
-`len(self.schedule[t - 1])` — it re-derives the index rather than calling
-`events_at(t)`. It is **correct today** and agrees with the contract. But the
-constraint for this segment is that the arithmetic exists in exactly one place,
-and in `src/` it exists in two. A future edit to one and not the other is F1's
-whole shape. `src/` is out of scope and it is not broken, so: named, not fixed.
+**Two facts from the source that the document does not carry, and that changed
+the design:**
 
-**Also worth knowing before segment 9: `events_per_step` counts *clusters*, not
-edges.** `build_schedule` draws `Poisson(events_per_step)` **clusters**, and
-`_draw_cluster` returns "a coherent group of edges, all of the same kind and
-centred on one node" — in practice 25. At `moderate` this run has **12
-disrupted steps out of 60** (80 % quiet against the predicted `exp(-0.3)` =
-74 %, fine for n=60) and **284 events**. The registration comment's claim about
-quiet fractions is about *timesteps*, and is correct; the field name reads like
-it is about edges, and is not. This is why T5's line says "25 edges changed
-this step" rather than the spec's illustrative "2".
-
-## 3. The timeline JSON
-
-```
-TOP LEVEL
-   tier               medium200        horizon   60
-   seed               1000             source    0
-   scenario           moderate         target    2
-   events_per_step    0.3              steps     60
-
-   payload 33.9 KB
+```python
+# events.py:76 — apply_event
+if event.kind in ("closure", "delete"):
+    active[slot] = False; active[rev] = False
+elif event.kind in ("reopen", "add"):
+    active[slot] = True; active[rev] = True; weight[...] = event.new_weight
+else:  # traffic_up / traffic_down
+    weight[slot] = event.new_weight; weight[rev] = event.new_weight
 ```
 
-33.9 KB for a whole 60-step run is not a problem and needs no thinning.
+**Closure and delete are mechanically identical** — the module docstring says so
+outright: *"Under an active-mask representation they are the same operation …
+Both labels are retained so event-type breakdowns stay faithful to the brief."*
+So the visual distinction T3 asks for (closed → ghost, deleted → nothing) is a
+presentation choice on top of one mechanism, not two mechanisms. I implemented
+it by carrying the causing `kind` forward in the state ledger, and the code says
+which of the two it is rather than implying the engine distinguishes them.
+
+**`new_weight` is meaningless for closure and delete** — `_new_weight` falls
+through to `return old` for both (`timeline.py:184`). Harmless here, because a
+closed road is not drawn as a road and its price is never read, but it is a
+field that looks informative and is not.
+
+## 3. Where the current price comes from — reported before writing
+
+**The event payload already carries it. No server change, no new field, no
+per-step weight arrays, no `src/` touch.** Every price the state layer shows is
+`event.new_weight`, which the core computed; the browser replays the stream.
+That is bookkeeping, inside segment 8's rule.
+
+**Verified before relying on it, against the core, exhaustively:**
 
 ```
-FIRST THREE STEPS
-   t=0  events=0   optimum=99.96328976797456  hops=11  reachable=True
-   t=1  events=0   optimum=99.96328976797456  hops=11  reachable=True
-   t=2  events=25  optimum=99.96328976797456  hops=11  reachable=True
-
-BUSIEST STEP — t=2, 25 events
-   kinds: {'traffic_up': 25}
-   traffic_up    23-31   10.727 -> 21.453
-   traffic_up    23-50    5.072 -> 10.144
-   traffic_up    23-100   8.810 -> 17.619   …
-
-disrupted steps: [2, 5, 8, 9, 14, 19, 21, 28, 35, 47, 54, 57]
-optimum range  : 99.96 .. 110.54
+checked 47325 (edge, t) pairs across 60 frames, mismatches 0
 ```
 
-**Note t=2: 25 edges break and the optimum does not move.** The cluster is
-centred on node 23, which is not on the route. That is correct and it is the
-honest case — a disruption that costs nothing because it happened somewhere
-else. Four steps actually move the number:
+Every edge, every timestep: `model.js`'s reconstructed `{price, active}` equals
+`GraphTimeline.state_at(t)`'s `weight[slot]` and `active[slot]` exactly. Not
+approximately — zero mismatches at 1e-9. The alternative would have been
+sending 735 weights × 60 steps (~1.7 MB against the current 34 KB), so this is
+also the only affordable option; it being *correct* is what makes it usable.
+
+## 4. The fade window — the recency signal's own constant
+
+**It exists, and I used it.**
+
+```python
+# src/dynaswarm/control/signals.py:204
+def __init__(self, window: int = 10, decay: float = 0.7) -> None:
+```
+
+`decay = 0.7`, and grepping `conf/`, `config.py` and `control/` shows **no
+config anywhere overrides it** — so 0.7 is not merely the default, it is the
+operative constant everywhere `RecencySignal` is constructed.
+
+`model.js` exports it as `RECENCY_DECAY = 0.7`, and a flash's opacity is
+`0.7 ** age` — the identical curve to `RecencySignal.observe`'s
+`self._value * self._decay`. **The fade on screen and the signal the allocation
+controller reads are the same number.** Watching a flash die out is watching
+the signal die out, which is what T5 was asking for.
+
+The cutoff at **13 steps** is mine, derived rather than picked: `0.7**13 ≈
+0.0097`, the first age below 1 %, past which another frame of fade is not
+distinguishable from zero.
 
 ```
-t= 5   99.96 -> 102.02    11 hops
-t= 8  102.02 -> 103.25    11 hops
-t=21  103.25 -> 110.54    11 -> 12 hops     <- a real re-route
-t=57  110.54 -> 103.25    12 -> 11 hops     <- and a recovery
+age:  1     2     3     5     8     11     13
+val: 0.70  0.49  0.34  0.17  0.058  0.020  0.0097
 ```
 
-## 4. The page at t = 0, 21, 59
+## 5. The three frames
 
-Executed, not described — the real `app.js` under node against the live server:
+Executed through the now-versioned harness, not described:
 
 ```
-=== t = 0 ===
+=== t = 0  (quiet — state layer alone) ===
   t = 0 / 59      optimum 99.96      hops 11      0 edges changed this step
-  svg groups : {"e-base":735,"e-changed":0,"e-gone":0,"nodes":200,
-                "e-hit":0,"path":11,"ends":2}
+  state layer : 735 roads drawn  (0 salient, 735 baseline fabric)
+  ghosts      : 0        event layer : 0 flashes        path : 11 segments
 
-=== t = 21 ===
-  t = 21 / 59      optimum 110.54      hops 12      25 edges changed this step
-  svg groups : {"e-base":610,"e-changed":125,"e-gone":25,"nodes":200,
-                "e-hit":25,"path":12,"ends":2}
+=== t = 2  (heavy disruption — 25 events land) ===
+  t = 2 / 59      optimum 99.96      hops 11      25 edges changed this step
+  state layer : 735 roads drawn  (25 salient, 710 baseline fabric)
+  ghosts      : 0        event layer : 25 flashes, 1 fade level   path : 11
 
-=== t = 59 ===
-  t = 59 / 59      optimum 103.25      hops 11      0 edges changed this step
-  svg groups : {"e-base":566,"e-changed":178,"e-gone":66,"nodes":200,
-                "e-hit":0,"path":11,"ends":2}
+=== t = 59  (horizon — the frame that used to be mud) ===
+  t = 59 / 59     optimum 103.25     hops 11      0 edges changed this step
+  state layer : 744 roads drawn  (92 salient, 652 baseline fabric)
+  ghosts      : 50       event layer : 75 flashes, 3 fade levels  path : 11
 ```
 
-Damage accumulates as it should: 0 changed at t=0, 150 by t=21, 244 by t=59,
-and `e-hit` is non-zero **only** on a step where something actually lands. The
-path is 11 hops, 12 at the re-route, 11 again after the recovery — matching the
-endpoint exactly. The scrubber reads 0, 21, 59 with max 59; it sets `t` to its
-own value and nothing adjusts it.
+**`t = 59` is readable, and the number that matters is 244 → 142.**
 
-Edge totals exceed 735 later on because `add` events create edges the base list
-never had. The browser draws them from `event.u`, `event.v` and the node
-positions it already has — no geometry is invented, only edges the engine said
-appeared.
+92 edges deviating in price, plus 50 closure ghosts, against **244 lit before**.
+16 deleted roads are drawn as nothing at all.
 
-### The browser's reconstruction agrees with the engine
+**The reduction is semantic, not cosmetic, and that is the finding.** Segment
+8's 244 counted every edge *ever touched* — an edge that went up at `t=12` and
+came back down at `t=30` stayed amber to the horizon. The state layer only
+lights what **currently** deviates, so a road that recovered goes quiet, which
+is the truth about it. Recolouring alone would have moved nothing.
 
-The design's claim is that if the page's greyed-out set ever drifts from the
-engine's active set, the highlighted path visibly crosses a broken edge. Tested
-that directly across the whole run:
+The event layer at `t=59` holds 75 flashes across 3 fade levels — the
+disruptions at `t=47`, `54` and `57`, at opacities 0.014, 0.168 and 0.49. The
+`t=47` set is effectively invisible, which is the window doing its job: nothing
+older than 13 steps can contribute at all.
 
-```
-696 path edges checked across 60 timesteps
-drawn as removed while carrying the route: 0
--> the page's greyed-out set and the engine's active set agree everywhere
-```
+**Colour is the sharper comparison.** Before, all 244 were the same amber and
+competed equally for attention. Now the 142 state marks are neutral greyscale
+and only the event layer carries hue, most of it fading — so *things shouting in
+colour* went from 244 to about 50.
 
-## 5. Both mutations
+## 6. Both mutations
 
-### A — the specified one: F1, reintroduced in the visual layer
+### Specified — collapse two opposite kinds onto one class
 
-```python
--                for event in timeline.events_at(t)
-+                for event in timeline.schedule[t]
-```
-
-**Caught by two tests, and the failure names the timestep:**
+`closure` given `add`'s `cls`, `dash` and `color` in `palette.json`.
 
 ```
-E  AssertionError: t=1
-E  assert 25 == 0
-FAILED test_marker_time_equals_engine_time_at_every_timestep
-
-E  AssertionError: server.py:245 indexes the schedule
-FAILED test_the_dashboard_never_derives_event_timing_itself
+not ok 3 - no two kinds share a visual class
+        a class collision would let two opposite events look identical
+not ok 4 - no two kinds share a dash pattern — the greyscale guarantee
+        a shared dash pattern would rely on hue alone
+# pass 19  # fail 2
 ```
 
-It fails at **t=1**, not t=0 — both are empty at t=0, which is precisely why
-the test walks every timestep rather than sampling. The disruption really lands
-at t=2; the mutation would have drawn it at t=1, one step early, with a correct
-optimum beside it.
+Caught twice, and by the two different guarantees it breaks at once.
 
-### B — mine: the same off-by-one, one layer out, where nothing was looking
+### Mine — the state layer reverted to segment 8's semantics
+
+One expression: light an edge if it has *ever* been touched, rather than if its
+price currently deviates.
 
 ```javascript
--  const step = run.steps[t];
-+  const step = run.steps[Math.max(0, t - 1)];
+- const ratio = entry.price / baselinePrice;
++ const ratio = entry.changedAt >= 0 ? 2.0 : entry.price / baselinePrice;
 ```
 
-Server untouched. The drawing stays current; only the numbers and the
-highlighted route go one step stale.
-
 ```
-24 passed
-```
-
-**The entire Python suite is blind to it.** Every endpoint test still passes,
-because the endpoint is still perfect. What the page then shows at t=21:
-
-```
-mutated : t = 21 / 59   optimum 103.25   hops 11   0 edges changed this step
-correct : t = 21 / 59   optimum 110.54   hops 12   25 edges changed this step
+not ok 1 - two edges landing on the same current price look the same
+           regardless of path taken
+        + opacity: 0.37     - opacity: 0.12
 ```
 
-It reports **"0 edges changed this step"** on the exact step where 25 edges
-break and the route re-routes — while the picture beside it shows the break
-happening. That is the segment's stated nightmare, produced by a two-character
-edit in a file no test reads.
+Caught by the unit test named for exactly that property.
 
-**What did catch it — partly.** The design's self-disagreement property fired:
+### What slipped through, and it is the one worth reading
+
+**The integration test that is nominally the anti-mud guard passed this
+mutation.** Under it, salient edges at `t=59` went **92 → 178** (228 including
+ghosts) — a 93 % regression back toward the mud this segment exists to remove —
+and `t=59 has fewer salient edges than the old mud figure of 244` **passed**,
+because 228 < 244.
+
+I had asserted against **the figure I was improving on**. A threshold set at the
+old bad value cannot detect anything short of total failure, and it is a
+comfortable number to write precisely because it always passes.
+
+Tightened to `< 160`, just above the achieved 142, and re-run under the same
+mutation:
 
 ```
-696 path edges checked across 60 timesteps
-drawn as removed while carrying the route: 3
-  t=5 path uses 64,164: { gone: true, hit: 5 }
-  t=5 path uses 164,181: { gone: true, hit: 5 }
--> DISAGREEMENT: the visible failure this design was built to expose
+not ok 4 - 228 salient edges at t=59; the two-layer split achieves 142
 ```
 
-So a human watching t=5 would see a blue route crossing two red broken roads.
-**But 3 out of 696**, on one step out of sixty. It is a real property and it
-worked; it is not a safety net. You would have to be looking at the right
-frame.
+Renamed too — its name still advertised the 244 it no longer asserts.
 
-And acceptance check 5b — `grep "t - 1" dashboard/static/` — flags it on line
-80. So the thing standing between this defect and the demo is **a human reading
-grep output once, at the end of a segment.**
+The general form, since this is the third segment in a row where a test I wrote
+promised more than it checked: **a threshold copied from the state you are
+leaving behind is not a guard, it is a memento.**
 
-## 6. Legibility, and the unreachable decision
+## 7. The greyscale check — how, and the result
 
-**Movement reads as movement.** The re-route at t=21 is unmistakable: the blue
-line visibly takes a different corridor, the hop count ticks 11 → 12, and 25
-edges go bright red at once. Because a disruption is a *cluster* centred on one
-node, a break reads as a neighbourhood going dark rather than a single hairline
-changing — much easier to see than I expected, and the reason is the core's
-clustering, not the drawing.
+Computed WCAG relative luminance for each palette colour, fully desaturated,
+then ranked every pair by how close they land:
 
-`e-hit` (bright red, this step) versus `e-changed` (amber, earlier) is the
-distinction that makes it work. Without it, a step where damage lands looks
-identical to a step where damage merely persists.
+```
+  traffic_up     #c47f00  L=0.2691   dash=none    w=2.4
+  traffic_down   #17a673  L=0.2869   dash=1 4     w=2.4
+  add            #2fae5a  L=0.3161   dash=8 3     w=2.4
+  reopen         #2fae5a  L=0.3161   dash=4 2     w=2.4
+  closure        #e5484d  L=0.2183   dash=2 2     w=2.4
+  delete         #7a2b2e  L=0.0606   dash=1 6     w=1.0
 
-**Two honest caveats for segment 9:**
+Closest pairs — where hue alone would fail:
+  add        vs reopen        ΔL=0.0000  '8 3' vs '4 2' -> separated by dash
+  traffic_up vs traffic_down  ΔL=0.0178  'none' vs '1 4' -> separated by dash
+  traffic_down vs add         ΔL=0.0292  '1 4' vs '8 3' -> separated by dash
 
-1. **Quiet steps look like nothing is happening, because nothing is** — 48 of
-   60. At 320 ms a frame the run plays in 19 s and most of it is still. That is
-   the truth of the scenario, not a rendering problem, but four algorithms
-   racing on the same canvas will want a way to skip to the next event.
-2. **244 of 810 edges are amber by t=59.** Damage accumulates and never clears
-   visually, so late steps are busier than early ones. Legible now; adding four
-   coloured arm-paths on top of that is the thing most likely to tip it.
+distinct dash patterns: 6/6
+=> every kind is identifiable with colour fully removed.
+```
 
-**Unreachable states — decided and pinned:** `optimum: null`, `path: []`,
-`reachable: false`, the step still present so playback runs through it, and the
-readout shows `optimum unreachable` / `hops —` in red rather than a number.
-Never an exception, never a skipped step. It did not occur in this run —
-`preserve_connectivity` rejects severing events — so the test exercises
-`scenario_name="high"` and asserts the representation holds for whatever
-happens there.
+**The check justified the design rather than confirming it.** `add` and
+`reopen` are the *same hex colour* — ΔL exactly 0 — and `traffic_up` against
+`traffic_down` is ΔL 0.018, which is nothing. Three pairs would be
+indistinguishable to a greyscale or red-green-colourblind viewer if hue were
+doing the work.
 
-## 7. Acceptance — all eight
+So every kind carries a **unique dash pattern**, and that is the primary
+channel; hue is reinforcement. `no two kinds share a dash pattern` is asserted
+in the suite, so a future palette edit cannot quietly reintroduce the collapse.
+
+## 8. Room for four more coloured paths?
+
+**Yes, and the headroom is real, but it is in the hue channel specifically.**
+
+The state layer is now entirely greyscale — 652 of 744 roads at `t=59` are
+baseline fabric at 0.12 opacity, and the 92 salient ones vary only in lightness
+and width. **Hue is unoccupied except by the event layer**, which is bounded to
+13 steps and is mostly faded at any given frame.
+
+Segment 11 gets: four arm paths, plus the blue optimum which must stay topmost
+and thickest. Three constraints I would hand forward —
+
+1. **The arms need four hues that do not collide with the six event hues**
+   (orange, teal, green, red, dark red — plus blue for the optimum). That is
+   seven taken. Feasible but not roomy; purple/magenta/cyan/yellow is about
+   what remains, and yellow against orange is already marginal.
+2. **The same greyscale rule will apply to the arms** and there is no dash
+   channel left to give them — dashes now mean event kind. Arms will need
+   width, or a stroke pattern that is clearly not one of the six.
+3. **48 of 60 steps are still quiet.** Entry 008 flagged this and it remains
+   unaddressed; four arms moving through 48 uneventful frames is worse than one
+   path doing it, not better. A jump-to-next-event control is now the single
+   highest-value thing the demo is missing.
+
+## 9. Acceptance — all eight
 
 | # | Check | Result |
 |---|---|---|
-| 1a | In scope | 5 files, +534 −107 |
+| 1a | In scope | 14 files, +741 −104 |
 | 1b | `git diff --stat -- src/` | **Empty** |
-| 2 | Suite | **345 full** · **340 not-slow, 5 deselected** |
+| 2 | Suite | **347 passed, 0 skipped** full · **342 passed, 5 deselected** not-slow |
 | 3 | Lint, three trees | `All checks passed!` |
-| 4 | Three budgets | 8 passed — 2005/2100 · 76/1000 · 246/1200 |
-| 5a | No `schedule[` in dashboard code | Two hits, both in the header comment quoting §4.4; the AST/comment-stripping test asserts the real thing |
-| 5b | Every `t ± 1` in `static/` | 5 hits, all **playback navigation** (`show(state.t ± 1)`) — moving the cursor, never indexing an event list |
-| 6 | No stored-run reads | `load_steps` appears twice, both in `run_classes()`; nothing timeline-related |
-| 7 | It runs | 33.9 KB payload over HTTP |
+| 4 | Three budgets | 8 passed — 2005/2100 · 76/1000 · 361/1200 |
+| 5 | No re-derived indexing | Two `schedule[` hits, both in `server.py`'s docstring quoting the contract; none in code, none in any `.js` |
+| 6 | JS suite | **21 passed** under node, 0 failed |
+| 7 | It runs | `palette.json`, `model.js`, `/` all HTTP 200 |
 | 8 | Committed, not pushed | Below |
 
-**345 full / 340 not-slow**, from 337 / 332 — **+8**.
+**Skip count, qualified per Entry 008 R1: 0 skipped.** `node` was present, so
+`dashboard/static/*.js` was genuinely tested this run — 21 assertions across
+`model.js` and the real `app.js`, not a green tick standing in for one.
 
 ## Deviations from spec
 
-**None.** T1's placement (§1) was a choice the spec permitted either way.
+**1. The event layer's dash patterns are all six distinct, not solid-versus-
+dashed.** T4's table implies a binary (`solid` for traffic, `dashed` for the
+rest), but that leaves `traffic_up`/`traffic_down` and `add`/`reopen`
+distinguished by hue alone, which §7's measurement shows fails outright in
+greyscale. Six distinct patterns satisfies the hard requirement; the table's
+hues are kept exactly as specified.
+
+**2. State-layer direction is encoded as salience, not warm-versus-cool.** T3's
+table says "warmer / darker" for dearer and "cooler / lighter" for cheaper, but
+the constraint beneath it says lightness and width, **never hue**. I read the
+constraint as binding and the adjectives as illustrative: dearer roads become
+brighter and thicker, cheaper roads recede toward the background. That also
+means salience tracks how much a road should worry you, which seems the right
+thing for the eye to be drawn to.
+
+**3. `app.js` and `model.js` are ES modules**, so `index.html` uses
+`<script type="module">`. The split is what let 15 of the 21 JS tests run with
+no DOM shim at all, against real imported functions.
 
 ## Surprises
 
-**The uncommissioned mutation found the hole again, and it is the same hole in a
-new place.** Segment 7's lesson was that a test can be named for a guarantee it
-does not provide. This one is worse: the guarantee has no test at all in the
-language that half the dashboard is now written in. 246 lines of JavaScript are
-covered by exactly two greps and my ad-hoc node harness, which is not in the
-repository and runs only when I choose to run it.
+**`node --test <directory>` is not portable.** This machine has three node
+installs; the JS suite passed under nvm's v20 and failed under homebrew's v25
+with `test at tests/js:1:1 — 'test failed'` and no subtest detail whatsoever.
+The cause is that directory discovery globs differently across versions. The
+Python side now globs `*.test.mjs` itself and passes explicit paths, which
+passes under both. Had I only ever run it one way, this would have surfaced as
+an unreproducible failure on someone else's machine.
 
-**A break that costs nothing is common.** At t=2, 25 edges break and the
-optimum does not move — the cluster landed off-route. I had assumed disruption
-implied cost. Most of them do not, and that is worth knowing before segment 9
-tries to show algorithms *reacting* to disruptions: many of the reactions will
-be to events that never mattered.
+**`pytest -q` in this repo means `-qq`.** `addopts` in `pyproject.toml` already
+contains `-q`, so passing it again suppresses the summary line entirely — no
+"N passed", just dots and a clean exit. I spent real time treating a missing
+footer as a hung test or a broken reporter. Every acceptance block in this
+document says `pytest -q`; it should say `pytest`.
+
+**Stripping one `node` from `PATH` does not make node unavailable.** The
+boundary test initially removed only the directory `shutil.which` returned and
+believed it had succeeded — while two other installs remained reachable. It now
+removes every `PATH` entry containing a `node` executable and asserts the
+absence before proceeding. A test that believes it has removed a dependency and
+has not is the same failure as a skipped test that reports as passing.
 
 ## Could not do
 
@@ -581,18 +600,13 @@ Nothing was blocked.
 
 ## Questions for the Architect
 
-1. **The headline (§5B): should the browser be tested, and with what?** Options
-   as I see them, cheapest first — (a) extend the existing textual guard to
-   assert every `run.steps[...]` index is bare `t`, which is brittle and
-   segments 9–10 will fight it; (b) admit `node` as a **dev-only test
-   dependency** and run the existing harness under pytest with
-   `pytest.importorskip`-style skipping when node is absent; (c) accept the
-   grep and the visible-disagreement property as sufficient, and record that
-   the JS is deliberately untested. I lean (b) — the harness already exists and
-   has now caught something twice — but it admits a whole language into the
-   test story, which is a ruling and not mine.
-2. **`changed_edges` duplicates the index arithmetic in `src/`** (§2). Phase 3
-   defect, or leave it — it is correct and the segment that would touch it has
-   no other reason to?
-3. **Quiet steps** (§6) — should segment 9 get a "jump to next event" control,
-   or does watching 48 still frames honestly represent the problem?
+1. **`palette.json` is uncounted by the static budget** (§1). Widen
+   `STATIC_SUFFIXES` to include `.json`, or is the budget deliberately about
+   code rather than data?
+2. **Hue is nearly exhausted before the arms arrive** (§8). Seven hues are
+   committed; segment 11 needs four more that survive greyscale, with the dash
+   channel already spent on event kinds. Worth deciding the arm encoding now,
+   at the same time as the palette, rather than discovering the collision in
+   segment 11?
+3. **The quiet-step problem is now two entries old** (§8.3). Is jump-to-next-
+   event segment 10's, segment 11's, or its own small task?

@@ -392,6 +392,27 @@ graph; the defaults are seed 1000 (trial 0's evaluation seed) and
 so anything visual built on it is a meaningless tangle. That is why the
 research tier is the default and not a convenience.
 
+### Testing it
+
+The dashboard's Python side is covered by the normal suite. Its
+**JavaScript** is covered by `node`, which is a **dev-only dependency of
+this tool** — nothing under `src/` requires it, and
+`test_the_dashboard_is_testable_with_node_absent` asserts that by
+stripping every `node` off `PATH` and proving the rest still passes.
+
+```bash
+node --test tests/js/*.test.mjs        # or just run pytest, which shells out to it
+```
+
+Pass a directory instead of that glob and a newer `node` will silently
+find nothing — its directory-discovery rules are not stable across
+versions, which is why the Python side globs the files itself.
+
+**If `node` is missing the JS tests skip, and the skip is the point:**
+`dashboard/static/*.js` — the render logic, the state/event split, the
+`step.t === t` guard — is then untested for that run. The skip message
+says so. A skipped test is not a test.
+
 ### The one rule
 
 The dashboard **imports `dynaswarm`; `dynaswarm` never imports the

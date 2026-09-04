@@ -1,0 +1,9 @@
+{
+  "_comment": "The six keys are dynaswarm.core.events.KINDS (core/events.py:33), byte for byte. tests/test_dashboard.py::test_palette_matches_core_event_kinds checks it on every run; tests/js/palette.test.mjs checks every key has a distinct cls and dash.",
+  "traffic_up":   { "cls": "e-slower",  "color": "#c47f00", "dash": "none",  "width": 2.4, "opacity": 0.95, "usable": true,  "label": "got slower" },
+  "traffic_down": { "cls": "e-faster",  "color": "#17a673", "dash": "1 4",   "width": 2.4, "opacity": 0.95, "usable": true,  "label": "got faster" },
+  "add":          { "cls": "e-added",   "color": "#2fae5a", "dash": "8 3",   "width": 2.4, "opacity": 0.95, "usable": true,  "label": "new road" },
+  "reopen":       { "cls": "e-reopen",  "color": "#2fae5a", "dash": "4 2",   "width": 2.4, "opacity": 0.95, "usable": true,  "label": "reopened" },
+  "closure":      { "cls": "e-closed",  "color": "#e5484d", "dash": "2 2",   "width": 2.4, "opacity": 0.95, "usable": false, "label": "road closed" },
+  "delete":       { "cls": "e-deleted", "color": "#7a2b2e", "dash": "1 6",   "width": 1.0, "opacity": 0.55, "usable": false, "label": "road removed" }
+}
