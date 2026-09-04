@@ -152,16 +152,27 @@ function wire() {
   });
 }
 
-function buildLegend(palette) {
+// The legend draws each swatch as a real line carrying the real dash
+// pattern, because the dash IS the distinction: three of the six kinds
+// share a hue (add and reopen are the same hex), and a solid colour
+// block shows none of that. A legend that cannot tell them apart is
+// teaching the viewer that they are the same thing.
+function buildLegend(kinds) {
   const list = document.getElementById("legend-events");
   list.replaceChildren();
-  for (const entry of Object.values(palette)) {
+  for (const entry of Object.values(kinds)) {
     const item = document.createElement("li");
-    const swatch = document.createElement("span");
-    swatch.className = "swatch";
-    swatch.style.background = entry.color;
-    swatch.style.opacity = entry.opacity;
-    item.append(swatch, document.createTextNode(" " + entry.label));
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "swatch-line");
+    svg.setAttribute("viewBox", "0 0 34 8");
+    const line = el("line", {
+      x1: 1, y1: 4, x2: 33, y2: 4,
+      stroke: entry.color, "stroke-width": entry.width,
+    });
+    line.style.opacity = entry.opacity;
+    if (entry.dash !== "none") line.setAttribute("stroke-dasharray", entry.dash);
+    svg.append(line);
+    item.append(svg, document.createTextNode(" " + entry.label));
     list.append(item);
   }
 }
@@ -195,12 +206,12 @@ Promise.all([
 ]).then(([geo, run, palette]) => {
   state.geo = geo;
   state.run = run;
-  state.palette = palette;
+  state.palette = palette.kinds;
   if (!geo.has_coordinates) return refuse(geo);
   state.xy = geo.positions.map(projector(geo.positions, VIEW.w, VIEW.h, VIEW.pad));
   state.baseline = baselineFrom(geo.edges, geo.weights);
   state.frames = buildStateFrames(state.baseline, run.steps);
-  buildLegend(palette);
+  buildLegend(palette.kinds);
   wire();
   show(0);
 }).catch((e) => {

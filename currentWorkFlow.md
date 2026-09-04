@@ -610,3 +610,107 @@ Nothing was blocked.
    segment 11?
 3. **The quiet-step problem is now two entries old** (§8.3). Is jump-to-next-
    event segment 10's, segment 11's, or its own small task?
+
+---
+
+# FINDINGS — Segment 9, addendum: two defects Rudra found in the delivered page
+
+Reported by Rudra immediately after the commit, from one screenshot of the
+legend. Both are mine, both were in the delivered artefact, and **both had a
+test that should have caught them and did not.**
+
+## Defect 1 — a legend row reading "undefined"
+
+`palette.json` carried its `_comment` in the same namespace as the six kinds,
+and `buildLegend` iterated `Object.values(palette)` without filtering. The page
+rendered a seventh row with no colour and the label `undefined`.
+
+**Why the test missed it.** My own legend test contained:
+
+```javascript
+for (const entry of Object.values(fixtures.palette)) {
+  if (typeof entry !== "object" || !entry.label) continue;   // <- skipped it
+```
+
+That line **skips the exact entry that was breaking the page.** The test walked
+past the bug it existed to catch, because I wrote the filter to make the loop
+work rather than asking why an entry had no label.
+
+## Defect 2 — three legend swatches identically green
+
+The swatches were solid colour blocks. `add` and `reopen` are **the same hex
+colour**, and `traffic_down` is a near neighbour — the whole greyscale argument
+in §7 rests on the *dash pattern*, and the legend showed none of it. The one
+place a viewer learns the encoding was teaching them that three different
+events are the same event.
+
+I measured that hue collision in §7 of these findings, wrote "dash is the
+primary channel", and then built a legend that displays only hue.
+
+## Defect 3 — a test I designed, described, and never wrote
+
+While planning I specified a Python test asserting `palette.json`'s keys equal
+`dynaswarm.core.events.KINDS` exactly — the cross-language seam, since the JS
+cannot import the Python tuple. **It does not exist in the segment 9 commit.** I
+described it in reasoning and moved on.
+
+It is the test that would have caught defect 1 outright: `_comment` was a key in
+the kind namespace, and an exact set comparison against `KINDS` fails on it
+immediately.
+
+## What changed
+
+**Structural, not a patch.** The kinds are now nested under their own key:
+
+```json
+{ "_comment": "...", "kinds": { "traffic_up": {...}, ... } }
+```
+
+so metadata **cannot** be mistaken for a kind by a consumer that forgets to
+filter. Filtering-by-convention across three separate consumers was the actual
+defect; removing one stray row would have left it in place.
+
+**The legend swatch is now a real `<svg><line>`** carrying the kind's actual
+`stroke`, `stroke-width` and `stroke-dasharray` — the same attributes the map
+draws, so the legend and the picture cannot disagree.
+
+**Four tests added or repaired:**
+
+| Test | Catches |
+|---|---|
+| `test_palette_covers_exactly_the_cores_event_kinds` | the missing seam — palette keys vs `KINDS`, exact set equality, plus every field present and every label non-empty |
+| `test_the_fixture_palette_matches_the_shipped_one` | the JS fixture drifting from the file the page actually serves |
+| legend test, repaired | row count must equal kind count, and no row may read `undefined` — the lenient `continue` is gone |
+| `each legend swatch carries its kind's real dash pattern` | a swatch that shows hue but not dash |
+
+**Both defects reintroduced and confirmed caught:**
+
+```
+BUG A (metadata rendered as a row):  legend row count does not match the kind count   # fail 2
+BUG B (solid swatches, no dash):     not ok 7 - each legend swatch carries its
+                                                kind's real dash pattern              # fail 1
+restored, byte-identical                                                              # pass 22
+```
+
+## Counts
+
+**349 passed, 0 skipped** (was 347). JS suite **22 passed** (was 21). Lint
+clean. `src/` diff empty. `dashboard/static/` **369 / 1200**.
+
+## The pattern, stated because it is now four segments old
+
+Segment 7: a test named for an invariant that only checked array lengths.
+Segment 8: 246 lines of JavaScript with no tests at all.
+Segment 9: a threshold asserted against the value I was improving on.
+Segment 9 addendum: a test whose filter skipped the entry that was broken, and
+a test I designed and never wrote.
+
+Every one is the same failure — **the test was written to pass, not to fail on
+the thing it names.** The mutation step catches these when I choose the right
+mutation; it did not catch these two, because I mutated the renderer and the
+palette semantics and never mutated *the legend*. Rudra found them by looking at
+the screen, which is the one instrument I do not have.
+
+**The one that would have helped: render the page and read it, every segment,
+as an artefact — not only assert about it.** §5's three frames report element
+counts, all of which were correct while the legend beside them was wrong.

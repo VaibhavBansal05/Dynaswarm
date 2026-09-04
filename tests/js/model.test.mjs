@@ -15,8 +15,8 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const palette = JSON.parse(
   readFileSync(path.resolve(HERE, "../../dashboard/static/palette.json"), "utf8")
-);
-const KIND_KEYS = Object.keys(palette).filter((k) => !k.startsWith("_"));
+).kinds;
+const KIND_KEYS = Object.keys(palette);
 
 const geometry = JSON.parse(readFileSync(path.join(HERE, "fixtures/geometry.json"), "utf8"));
 const timeline = JSON.parse(readFileSync(path.join(HERE, "fixtures/timeline.json"), "utf8"));

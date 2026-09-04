@@ -76,13 +76,33 @@ describe("the real page, driven under node", () => {
 
   test("the legend names every event kind in plain words, never 'changed'", async () => {
     const { nodes } = await loadPage(fixtures);
-    const text = nodes["legend-events"].children.map((li) =>
-      li.children.map((c) => c.text ?? "").join("")
-    ).join(" ");
-    for (const entry of Object.values(fixtures.palette)) {
-      if (typeof entry !== "object" || !entry.label) continue;
+    const rows = nodes["legend-events"].children;
+    const text = rows.map((li) => li.children.map((c) => c.text ?? "").join("")).join(" ");
+
+    // Written first with `if (!entry.label) continue;`, which SKIPPED the
+    // palette's `_comment` key instead of noticing app.js was rendering
+    // it as a row reading "undefined". The test worked around the bug it
+    // existed to catch. One row per kind, exactly, and every row named.
+    const kinds = Object.values(fixtures.palette.kinds);
+    assert.equal(rows.length, kinds.length, "legend row count does not match the kind count");
+    for (const entry of kinds) {
       assert.ok(text.includes(entry.label), `legend missing "${entry.label}"`);
     }
+    assert.ok(!/undefined/.test(text), `legend rendered an undefined row: ${text}`);
     assert.ok(!/\bchanged\b/i.test(text), "legend used the word 'changed' instead of naming the event");
+  });
+
+  test("each legend swatch carries its kind's real dash pattern", async () => {
+    // Three of the six kinds share a hue — add and reopen are the same
+    // hex — so a solid colour block shows the viewer nothing that
+    // distinguishes them, which is exactly what the first version did.
+    const { nodes } = await loadPage(fixtures);
+    const kinds = Object.values(fixtures.palette.kinds);
+    const drawn = nodes["legend-events"].children.map((li) => {
+      const line = li.children.find((c) => c.tag === "svg").children[0];
+      return line.attrs["stroke-dasharray"] ?? "none";
+    });
+    assert.deepEqual(drawn, kinds.map((k) => k.dash));
+    assert.equal(new Set(drawn).size, drawn.length, "legend swatches are not visually distinct");
   });
 });

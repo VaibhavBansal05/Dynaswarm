@@ -706,3 +706,44 @@ def test_the_dashboard_is_testable_with_node_absent():
         f"the rest of the dashboard suite must still pass with node absent:\n"
         f"{result.stdout}\n{result.stderr}"
     )
+
+
+def test_palette_covers_exactly_the_cores_event_kinds():
+    """The cross-language contract, in the only place that can check it.
+
+    `palette.json` is the sole source of truth for how a disruption is
+    drawn, and its keys have to be `dynaswarm.core.events.KINDS` exactly
+    — no more, no fewer, no metadata masquerading as a kind. The
+    JavaScript cannot import the Python tuple, so this is the seam where
+    the two are held together.
+
+    Written after Rudra opened the page and found a legend row reading
+    "undefined": the palette's `_comment` key was sitting in the same
+    namespace as the six kinds, and every consumer was expected to
+    remember to filter it. The kinds are now nested under their own key,
+    and this asserts the set rather than trusting the convention.
+    """
+    from dynaswarm.core.events import KINDS
+
+    palette = json.loads((ROOT / "dashboard" / "static" / "palette.json").read_text())
+    assert set(palette["kinds"]) == set(KINDS), (
+        f"palette kinds {sorted(palette['kinds'])} != core KINDS {sorted(KINDS)}"
+    )
+    for kind, entry in palette["kinds"].items():
+        for field in ("cls", "color", "dash", "width", "opacity", "usable", "label"):
+            assert field in entry, f"{kind} is missing {field}"
+        assert entry["label"].strip(), f"{kind} has an empty label"
+
+
+def test_the_fixture_palette_matches_the_shipped_one():
+    """A fixture that has drifted from the real file tests the fixture.
+
+    Segment 5's lesson, in a new place: `tests/js/fixtures/palette.json`
+    is a copy, and a copy that falls behind would let the JS suite go on
+    asserting a palette the page no longer serves.
+    """
+    shipped = (ROOT / "dashboard" / "static" / "palette.json").read_text()
+    fixture = (ROOT / "tests" / "js" / "fixtures" / "palette.json").read_text()
+    assert json.loads(shipped) == json.loads(fixture), (
+        "tests/js/fixtures/palette.json has drifted from dashboard/static/palette.json"
+    )

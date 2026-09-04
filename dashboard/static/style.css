@@ -56,6 +56,8 @@ footer { margin-top: 2.5rem; opacity: 0.5; font-size: 0.85rem; }
 .legend ul { margin: 0; padding: 0; }
 .swatch { display: inline-block; width: 1.6em; height: 0.3em; margin-right: 0.4em;
           vertical-align: middle; border-radius: 1px; }
+.swatch-line { display: inline-block; width: 2.4em; height: 0.7em;
+               margin-right: 0.4em; vertical-align: middle; overflow: visible; }
 .state-dearer  { background: #e8eaed; opacity: 0.8; height: 0.4em; }
 .state-cheaper { background: #e8eaed; opacity: 0.2; }
 .state-ghost   { background: #e8eaed; opacity: 0.15; border: 1px dashed #e8eaed44; }
