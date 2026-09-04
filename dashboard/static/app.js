@@ -17,6 +17,7 @@
 import {
   FADE_CUTOFF, fadeOpacity,
   buildStateFrames, baselineFrom, stateStyle, projector,
+  TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent,
 } from "./model.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -113,9 +114,11 @@ function draw() {
   const readout = document.getElementById("readout");
   readout.textContent =
     `t = ${t} / ${run.horizon - 1}      optimum ${cost}      hops ${hops}` +
+    `      |E| ${step.n_active_edges}` +
     `      ${n} edge${n === 1 ? "" : "s"} changed this step`;
   readout.classList.toggle("broken", !step.reachable);
   document.getElementById("scrub").value = String(t);
+  drawLedger(run.steps, t);
 }
 
 function show(t) {
@@ -140,16 +143,48 @@ function toggle() {
 
 function wire() {
   const scrub = document.getElementById("scrub");
-  scrub.max = String(state.run.horizon - 1);
   scrub.addEventListener("input", () => show(Number(scrub.value)));
   document.getElementById("back").addEventListener("click", () => show(state.t - 1));
   document.getElementById("fwd").addEventListener("click", () => show(state.t + 1));
   document.getElementById("play").addEventListener("click", toggle);
+  document.getElementById("reset").addEventListener("click", () => show(0));
+  document.getElementById("next-event").addEventListener("click", () => jump(1));
+  document.getElementById("prev-event").addEventListener("click", () => jump(-1));
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowLeft") show(state.t - 1);
     else if (e.key === "ArrowRight") show(state.t + 1);
     else if (e.key === " ") { e.preventDefault(); toggle(); }
   });
+}
+
+// §4.3.1's identity, on screen. It is not a statistic — it is an
+// invariant an examiner can watch hold for sixty steps, and a divergence
+// would be visible the moment it happened.
+function drawLedger(steps, t) {
+  const l = ledgerAt(steps, t);
+  const dl = document.getElementById("ledger-stats");
+  dl.replaceChildren();
+  const rows = [
+    ["initial", l.initial], ["+ added", l.added], ["+ reopened", l.reopened],
+    ["− closed", l.closed], ["− deleted", l.deleted], ["= current", l.predicted],
+  ];
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = String(v);
+    dl.append(dt, dd);
+  }
+  const balance = document.getElementById("ledger-balance");
+  balance.textContent = l.balances
+    ? `balances — engine reports ${l.engineCount} active edges`
+    : `DIVERGED — ledger says ${l.predicted}, engine says ${l.engineCount}`;
+  balance.classList.toggle("broken", !l.balances);
+}
+
+function jump(direction) {
+  const landing = seekEvent(state.run.steps, state.t, direction);
+  if (landing !== null) show(landing);
 }
 
 // The legend draws each swatch as a real line carrying the real dash
@@ -180,10 +215,12 @@ function buildLegend(kinds) {
 function refuse(geo) {
   document.getElementById("canvas").setAttribute("hidden", "hidden");
   document.getElementById("controls").setAttribute("hidden", "hidden");
+  document.getElementById("readout").textContent =
+    `${geo.n_nodes} nodes, ${geo.n_edges} edges — but no coordinates.`;
   const refusal = document.getElementById("refusal");
   refusal.textContent =
-    `The ${geo.tier} tier carries no node coordinates — it is an Erdős–Rényi ` +
-    `graph, so the engine never generated positions for it. Drawing it would ` +
+    `This graph carries no node coordinates — the ${geo.spec.model} model ` +
+    `does not generate positions. Drawing it would ` +
     `mean inventing a layout, and the picture would show the layout algorithm ` +
     `rather than the graph. Nothing is drawn on purpose.`;
   refusal.hidden = false;
@@ -199,24 +236,123 @@ if (typeof globalThis.__TEST__ !== "undefined") {
   globalThis.__TEST__.draw = draw;
 }
 
-Promise.all([
-  fetch("/api/graph/geometry").then((r) => r.json()),
-  fetch("/api/timeline").then((r) => r.json()),
-  fetch("/static/palette.json").then((r) => r.json()),
-]).then(([geo, run, palette]) => {
-  state.geo = geo;
+// --- Stage 1 / Stage 2: the page now asks for a world, rather than
+// being handed one. Both endpoints are POST and both are stateless: the
+// graph id in the response is derived from the parameters, so nothing
+// here depends on the server remembering anything between calls.
+
+const $ = (id) => document.getElementById(id);
+const num = (id) => Number($(id).value);
+
+function graphSpec() {
+  return {
+    model: $("model").value,
+    n_nodes: num("n_nodes"),
+    density: num("density"),
+    seed: num("seed"),
+  };
+}
+
+function scenarioSpec() {
+  return {
+    events_per_step: num("events_per_step"),
+    cluster_size: num("cluster_size"),
+    timesteps: num("timesteps"),
+    p_closure: num("p_closure"),
+    p_traffic_up: num("p_traffic_up"),
+    p_traffic_down: num("p_traffic_down"),
+    p_reopen: num("p_reopen"),
+    p_delete: num("p_delete"),
+    p_add: num("p_add"),
+    traffic_factor: num("traffic_factor"),
+  };
+}
+
+async function post(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+  return response.json();
+}
+
+function showStats(world) {
+  $("graph-id").textContent = world.graph_id;
+  const dl = $("world-stats");
+  dl.replaceChildren();
+  const rows = [
+    ["|V|", world.n_nodes], ["|E|", world.n_edges],
+    ["mean degree", world.mean_degree.toFixed(2)],
+    ["optimal cost", world.reachable ? world.optimum.toFixed(2) : "unreachable"],
+  ];
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = String(v);
+    dl.append(dt, dd);
+  }
+}
+
+async function generate() {
+  const world = await post("/api/graph", graphSpec());
+  state.geo = world;
+  showStats(world);
+  if (!world.has_coordinates) return refuse(world);
+  $("canvas").removeAttribute("hidden");
+  $("controls").removeAttribute("hidden");
+  $("refusal").hidden = true;
+  state.xy = world.positions.map(projector(world.positions, VIEW.w, VIEW.h, VIEW.pad));
+  state.baseline = baselineFrom(world.edges, world.weights);
+  await rebuild();
+}
+
+async function rebuild() {
+  if (!state.geo || !state.geo.has_coordinates) return;
+  const run = await post("/api/timeline", {
+    graph: graphSpec(), scenario: scenarioSpec(),
+  });
   state.run = run;
-  state.palette = palette.kinds;
-  if (!geo.has_coordinates) return refuse(geo);
-  state.xy = geo.positions.map(projector(geo.positions, VIEW.w, VIEW.h, VIEW.pad));
-  state.baseline = baselineFrom(geo.edges, geo.weights);
   state.frames = buildStateFrames(state.baseline, run.steps);
-  buildLegend(palette.kinds);
-  wire();
+  $("scrub").max = String(run.horizon - 1);
   show(0);
-}).catch((e) => {
-  document.getElementById("readout").textContent = `error: ${e.message}`;
-});
+}
+
+function applyTierPreset() {
+  const preset = TIER_PRESETS[$("tier").value];
+  if (!preset) return;
+  $("model").value = preset.model;
+  $("n_nodes").value = String(preset.n_nodes);
+  $("density").value = String(preset.density);
+}
+
+fetch("/static/palette.json")
+  .then((r) => r.json())
+  .then((palette) => {
+    state.palette = palette.kinds;
+    buildLegend(palette.kinds);
+    wire();
+    $("world").addEventListener("submit", (e) => {
+      e.preventDefault();
+      generate().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+    });
+    $("disruption").addEventListener("submit", (e) => {
+      e.preventDefault();
+      rebuild().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+    });
+    $("tier").addEventListener("change", applyTierPreset);
+    $("preset").addEventListener("change", () => {
+      $("events_per_step").value = String(SCENARIO_PRESETS[$("preset").value]);
+    });
+    $("reroll").addEventListener("click", () => {
+      $("seed").value = String(Math.floor(Math.random() * 100000));
+      generate().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+    });
+    return generate();
+  })
+  .catch((e) => { $("readout").textContent = `error: ${e.message}`; });
 
 fetch("/api/runs")
   .then((r) => r.json())

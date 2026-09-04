@@ -24,7 +24,7 @@ required for the live demo.
 **Verify the install:**
 
 ```bash
-./.venv/bin/pytest -q -m "not slow"     # ~35 s
+./.venv/bin/pytest -m "not slow"        # ~35 s
 ./.venv/bin/ruff check src/ tests/ dashboard/
 ./.venv/bin/python -m dynaswarm.cli     # smoke run, ~10 s
 ```
@@ -39,7 +39,7 @@ The suite is the project's standing claim that its mechanisms actually run —
 the structural guards, the temporal invariants, and the boundary that keeps
 the dashboard a view. **Run it for the count**; it changes every segment, so a
 number written here would be wrong within the week. The `slow` tests run
-tuning searches and are excluded by default; include them with `pytest -q`
+tuning searches and are excluded by default; include them with `pytest`
 before a release. The authoritative counts are recorded, dated, in
 `WORKFLOW_LOG.md` — a number describing a moment cannot rot, while a number
 claiming to be current always can.
@@ -373,45 +373,45 @@ The port is **8000** and the host is **127.0.0.1**, both fixed in
 
 ### What it shows today
 
-As of segment 6 the dashboard is a **scaffold**: it proves the pipe, and
-draws nothing. The page renders, as text, one `medium200` graph built by
-the real engine — node and edge counts, the endpoints `build()` chose,
-and the true shortest-path cost from `core.oracle` — plus which run
-classes exist under `outputs/`. Graph rendering arrives in segment 7.
+Two stages, then playback.
 
-Two endpoints back it:
+**1 · Build the world.** Choose model, node count, density and seed, or
+start from a registered preset (`small30`, `medium200`, `large1000`,
+`grid20`) and edit from there. **Generate** builds it through the real
+engine and reports `|V|`, `|E|`, mean degree and the true optimal cost.
+**Re-roll seed** browses variants of the same shape.
+
+**2 · Design the disruption.** A preset (`static` / `low` / `moderate` /
+`high`) or the knobs underneath: events per step, cluster size, timesteps
+and the six event probabilities. **Build** materialises the timeline.
+
+**Then watch.** The graph draws at real coordinates; a road's current
+price shows in the state layer and a disruption flashes and fades over
+the recency signal's own decay constant. Playback has step, play, scrub,
+reset, and jump-to-next-event — most steps in a moderate run are quiet,
+so stepping one at a time is mostly waiting.
+
+The **edge ledger** shows `initial + added + reopened − closed − deleted`
+against the engine's own active-edge count at that timestep. Per
+`ARCHITECTURE.md` §4.3.1 the slot population is closed, so that identity
+is exact — the panel is an invariant you can watch hold, not a summary.
+
+**`small30` refuses to draw**, on purpose: it is Erdős–Rényi and carries
+no coordinates, so any picture of it would be a picture of a layout
+algorithm rather than of the graph.
 
 ```bash
-curl -s localhost:8000/api/graph          # one graph, described
-curl -s localhost:8000/api/runs           # run classes present, plus the D32 caveat
+# Stage 1 and 2 are POST; the GET forms remain for one-off inspection.
+curl -s localhost:8000/api/graph -H 'content-type: application/json' \
+  -d '{"model":"geometric","n_nodes":200,"density":0.04,"seed":1000}'
+
+curl -s localhost:8000/api/runs            # run classes present under outputs/
 ```
 
-`/api/graph` takes `?seed=` and `?tier_name=` if you want a different
-graph; the defaults are seed 1000 (trial 0's evaluation seed) and
-`medium200`. **`small30` carries no coordinates** — it is Erdős–Rényi —
-so anything visual built on it is a meaningless tangle. That is why the
-research tier is the default and not a convenience.
-
-### Testing it
-
-The dashboard's Python side is covered by the normal suite. Its
-**JavaScript** is covered by `node`, which is a **dev-only dependency of
-this tool** — nothing under `src/` requires it, and
-`test_the_dashboard_is_testable_with_node_absent` asserts that by
-stripping every `node` off `PATH` and proving the rest still passes.
-
-```bash
-node --test tests/js/*.test.mjs        # or just run pytest, which shells out to it
-```
-
-Pass a directory instead of that glob and a newer `node` will silently
-find nothing — its directory-discovery rules are not stable across
-versions, which is why the Python side globs the files itself.
-
-**If `node` is missing the JS tests skip, and the skip is the point:**
-`dashboard/static/*.js` — the render logic, the state/event split, the
-`step.t === t` guard — is then untested for that run. The skip message
-says so. A skipped test is not a test.
+A graph's id is **derived from its parameters** — a blake2b digest of
+model, nodes, density and seed — never issued from a registry. The server
+holds no state, so any request carrying an id rebuilds the identical
+graph from nothing.
 
 ### The one rule
 

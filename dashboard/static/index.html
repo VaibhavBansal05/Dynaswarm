@@ -3,18 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dynaswarm — timeline</title>
+  <title>Dynaswarm</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header>
     <h1>Dynaswarm</h1>
-    <p class="sub">Phase 1 · segment 9 — a road's price persists; a road
-       breaking flashes and fades. Press space.</p>
+    <p class="sub">A shortest path that will not hold still. Build a world,
+       break it, and watch the optimum move.</p>
   </header>
 
+  <section class="stages">
+    <form id="world" class="stage">
+      <h2>1 · Build the world</h2>
+      <div class="fields">
+        <label>preset
+          <select id="tier">
+            <option value="">custom</option>
+            <option value="small30">small30 — no coordinates</option>
+            <option value="medium200" selected>medium200 — research tier</option>
+            <option value="large1000">large1000</option>
+            <option value="grid20">grid20</option>
+          </select>
+        </label>
+        <label>model
+          <select id="model">
+            <option value="geometric">geometric</option>
+            <option value="grid">grid</option>
+            <option value="erdos_renyi">erdos_renyi</option>
+          </select>
+        </label>
+        <label>nodes <input id="n_nodes" type="number" min="4" max="2000" step="1" value="200"></label>
+        <label>density <input id="density" type="number" min="0.005" max="1" step="0.005" value="0.04"></label>
+        <label>seed <input id="seed" type="number" min="0" step="1" value="1000"></label>
+      </div>
+      <div class="stage-actions">
+        <button type="submit">Generate</button>
+        <button type="button" id="reroll" title="new seed, same shape">re-roll seed</button>
+        <span id="graph-id" class="mono"></span>
+      </div>
+      <dl id="world-stats" class="stats"></dl>
+    </form>
+
+    <form id="disruption" class="stage">
+      <h2>2 · Design the disruption</h2>
+      <div class="fields">
+        <label>preset
+          <select id="preset">
+            <option value="static">static — 0.0</option>
+            <option value="low">low — 0.1</option>
+            <option value="moderate" selected>moderate — 0.3</option>
+            <option value="high">high — 0.8</option>
+          </select>
+        </label>
+        <label>events/step <input id="events_per_step" type="number" min="0" max="10" step="0.05" value="0.3"></label>
+        <label>cluster size <input id="cluster_size" type="number" min="1" max="200" step="1" value="25"></label>
+        <label>timesteps <input id="timesteps" type="number" min="1" max="500" step="1" value="60"></label>
+      </div>
+      <details>
+        <summary>event probabilities</summary>
+        <div class="fields">
+          <label>closure <input id="p_closure" type="number" min="0" max="1" step="0.05" value="0.15"></label>
+          <label>traffic up <input id="p_traffic_up" type="number" min="0" max="1" step="0.05" value="0.30"></label>
+          <label>traffic down <input id="p_traffic_down" type="number" min="0" max="1" step="0.05" value="0.20"></label>
+          <label>reopen <input id="p_reopen" type="number" min="0" max="1" step="0.05" value="0.10"></label>
+          <label>delete <input id="p_delete" type="number" min="0" max="1" step="0.05" value="0.10"></label>
+          <label>add <input id="p_add" type="number" min="0" max="1" step="0.05" value="0.15"></label>
+          <label>traffic factor <input id="traffic_factor" type="number" min="1.05" max="10" step="0.05" value="2.0"></label>
+        </div>
+      </details>
+      <div class="stage-actions"><button type="submit">Build</button></div>
+    </form>
+  </section>
+
   <section>
-    <p id="readout" class="readout">loading…</p>
+    <p id="readout" class="readout">choose a world and generate it</p>
 
     <div id="figure">
       <svg id="canvas" role="img" aria-label="graph over time"></svg>
@@ -22,24 +85,34 @@
     </div>
 
     <div id="controls" class="controls">
+      <button id="reset" type="button" title="back to t=0">⏮</button>
+      <button id="prev-event" type="button" title="previous step with events">⏪</button>
       <button id="back" type="button" title="previous step (←)">←</button>
       <button id="play" type="button" title="play / pause (space)">play</button>
       <button id="fwd" type="button" title="next step (→)">→</button>
-      <input id="scrub" type="range" min="0" max="0" value="0" step="1"
-             aria-label="timestep">
+      <button id="next-event" type="button" title="next step with events">⏩</button>
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="timestep">
     </div>
 
-    <div class="legend">
-      <div class="legend-col">
-        <h3>state — persists</h3>
-        <p><span class="swatch state-dearer"></span> road is dearer than at t=0</p>
-        <p><span class="swatch state-cheaper"></span> road is cheaper than at t=0</p>
-        <p><span class="swatch state-ghost"></span> road is closed right now</p>
-        <p class="hint">(a deleted road is not drawn at all)</p>
+    <div class="panels">
+      <div class="legend">
+        <div class="legend-col">
+          <h3>state — persists</h3>
+          <p><span class="swatch state-dearer"></span> dearer than at t=0</p>
+          <p><span class="swatch state-cheaper"></span> cheaper than at t=0</p>
+          <p><span class="swatch state-ghost"></span> closed right now</p>
+          <p class="hint">(a deleted road is not drawn at all)</p>
+        </div>
+        <div class="legend-col">
+          <h3>event — flashes, then fades</h3>
+          <ul id="legend-events"></ul>
+        </div>
       </div>
-      <div class="legend-col">
-        <h3>event — flashes, then fades</h3>
-        <ul id="legend-events"></ul>
+
+      <div class="ledger">
+        <h3>edge ledger — must balance</h3>
+        <dl id="ledger-stats"></dl>
+        <p id="ledger-balance" class="balance"></p>
       </div>
     </div>
   </section>
@@ -47,12 +120,7 @@
   <section>
     <h2>Runs on disk</h2>
     <dl id="runs"><dd class="pending">reading outputs/…</dd></dl>
-    <p id="warning" class="warning" hidden></p>
   </section>
-
-  <footer>
-    <p>Local development server. Not hosted, not exposed, not deployed.</p>
-  </footer>
 
   <script type="module" src="/static/app.js"></script>
 </body>

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   RECENCY_DECAY, FADE_CUTOFF, fadeOpacity, edgeKey, classify, isUsable,
-  buildStateFrames, baselineFrom, stateStyle,
+  buildStateFrames, baselineFrom, stateStyle, ledgerAt, seekEvent,
 } from "../../dashboard/static/model.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -123,5 +123,74 @@ describe("the state layer reflects the current price, not the history", () => {
 describe("edgeKey is undirected", () => {
   test("(u,v) and (v,u) key identically", () => {
     assert.equal(edgeKey(3, 9), edgeKey(9, 3));
+  });
+});
+
+const run = JSON.parse(readFileSync(path.join(HERE, "fixtures/run.json"), "utf8"));
+
+describe("the edge ledger — an invariant, not a statistic", () => {
+  test("balances against the engine's own count at every timestep", () => {
+    // Written first as `assert.equal(l.balances, true)` alone, which a
+    // mutation replacing `engineCount` with `predicted` walked straight
+    // through — a ledger reconciling against its own arithmetic balances
+    // on any data whatsoever, so the assertion named for the property
+    // could never fail.
+    //
+    // The obvious repair — also assert `engineCount === steps[t]
+    // .n_active_edges` — does not work either, because on correct data
+    // the predicted value IS that number. Nothing checked against a
+    // correct run can distinguish the two.
+    //
+    // The only thing that can is data where they disagree, so the
+    // perturbation below is the real test and the loop is the regression.
+    for (let t = 0; t < run.steps.length; t += 1) {
+      const l = ledgerAt(run.steps, t);
+      assert.equal(l.balances, true,
+        `t=${t}: ledger ${l.predicted} vs engine ${l.engineCount}`);
+    }
+
+    const bent = run.steps.map((s, i) =>
+      i === 30 ? { ...s, n_active_edges: s.n_active_edges + 7 } : s);
+    const perturbed = ledgerAt(bent, 30);
+    assert.equal(perturbed.balances, false,
+      "the ledger balanced against a count the engine did not report — " +
+      "it is reconciling with itself");
+    assert.equal(perturbed.engineCount, run.steps[30].n_active_edges + 7);
+  });
+
+  test("the tally actually moves — a ledger of zeros would balance trivially", () => {
+    const end = ledgerAt(run.steps, run.steps.length - 1);
+    assert.ok(end.added > 0 && end.closed > 0,
+      "fixture has no adds or closures; balancing proves nothing");
+    assert.notEqual(end.predicted, end.initial, "|E| never moved across the run");
+  });
+});
+
+describe("jump-to-next-event", () => {
+  test("lands on a step that has events, and on the nearest one", () => {
+    const withEvents = run.steps.filter((s) => s.events.length > 0).map((s) => s.t);
+    assert.ok(withEvents.length > 1, "fixture needs at least two disrupted steps");
+
+    const landing = seekEvent(run.steps, 0, 1);
+    assert.equal(landing, withEvents[0], "did not land on the nearest disrupted step");
+    assert.ok(run.steps[landing].events.length > 0);
+  });
+
+  test("seeks backwards to the nearest earlier disrupted step", () => {
+    const withEvents = run.steps.filter((s) => s.events.length > 0).map((s) => s.t);
+    const last = withEvents[withEvents.length - 1];
+    const previous = withEvents[withEvents.length - 2];
+    assert.equal(seekEvent(run.steps, last, -1), previous);
+  });
+
+  test("returns null rather than guessing when there is no next event", () => {
+    const last = run.steps.filter((s) => s.events.length > 0).map((s) => s.t).pop();
+    assert.equal(seekEvent(run.steps, last, 1), null);
+    assert.equal(seekEvent(run.steps, 0, -1), null);
+  });
+
+  test("a quiet run has nowhere to jump, and says so", () => {
+    const quiet = run.steps.map((s) => ({ ...s, events: [] }));
+    assert.equal(seekEvent(quiet, 0, 1), null);
   });
 });

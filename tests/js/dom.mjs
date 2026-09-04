@@ -19,9 +19,11 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const STATIC = path.resolve(HERE, "../../dashboard/static");
 
-function makeElement(tag) {
+function makeElement(tag, value = "") {
   return {
     tag,
+    value,
+    max: "",
     children: [],
     attrs: {},
     style: {},
@@ -45,11 +47,30 @@ function makeElement(tag) {
   };
 }
 
-// One fixed set of ids: every element app.js's index.html declares.
-const ELEMENT_IDS = [
-  "canvas", "refusal", "readout", "controls", "back", "play", "fwd",
-  "scrub", "runs", "warning", "legend-events",
-];
+// Element ids and their default values are read out of the real
+// index.html rather than listed here. A hand-maintained list is a
+// fixture, and a fixture that falls behind the page tests itself — the
+// failure this project has hit twice already. Adding a control to the
+// page now automatically gives the harness that control.
+function pageElements() {
+  const html = readFileSync(path.join(STATIC, "index.html"), "utf8");
+  const found = new Map();
+  for (const m of html.matchAll(/<(\w+)([^>]*\bid="([^"]+)"[^>]*)>/g)) {
+    const [, , attrs, id] = m;
+    const value = /\bvalue="([^"]*)"/.exec(attrs);
+    const selected = /<option value="([^"]*)"[^>]*\bselected\b/;
+    found.set(id, value ? value[1] : "");
+    void selected;
+  }
+  // <select> carries its value on the selected <option>, not on itself.
+  for (const m of html.matchAll(/<select[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+    const [, id, body] = m;
+    const chosen = /<option value="([^"]*)"[^>]*selected/.exec(body)
+      ?? /<option value="([^"]*)"/.exec(body);
+    found.set(id, chosen ? chosen[1] : "");
+  }
+  return found;
+}
 
 /**
  * Load the real app.js under node, with document/fetch/timers shimmed.
@@ -57,14 +78,15 @@ const ELEMENT_IDS = [
  * @param fixtures {{ geometry: object, timeline: object, palette: object }}
  *   Canned responses for the three endpoints app.js fetches on load.
  * @returns {Promise<{nodes: object, test: object}>}
- *   `nodes` is every shimmed element, keyed by id. `test` is the hook
+ *   `nodes` is every shimmed element, keyed by id. `calls` is every
+ *   fetch the page made, in order, with method and body. `test` is the hook
  *   app.js exposes on `globalThis.__TEST__` when it is present — see
  *   the guard at the bottom of app.js. Real internal state, not a
  *   reimplementation of it.
  */
 export async function loadPage(fixtures) {
   const nodes = {};
-  for (const id of ELEMENT_IDS) nodes[id] = makeElement("el");
+  for (const [id, value] of pageElements()) nodes[id] = makeElement("el", value);
 
   globalThis.document = {
     getElementById: (id) => nodes[id] ?? null,
@@ -76,14 +98,19 @@ export async function loadPage(fixtures) {
 
   const routes = {
     "/api/graph/geometry": fixtures.geometry,
+    "/api/graph": fixtures.world ?? fixtures.geometry,
     "/api/timeline": fixtures.timeline,
     "/static/palette.json": fixtures.palette,
-    "/api/runs": fixtures.runs ?? { run_classes: {}, warning: "" },
+    "/api/runs": fixtures.runs ?? { run_classes: {} },
   };
-  globalThis.fetch = async (url) => {
+  // Records what the page asked for, so a test can assert that Stage 1
+  // and Stage 2 actually POST rather than merely that they rendered.
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
     const p = String(url).replace(/^https?:\/\/[^/]+/, "");
+    calls.push({ path: p, method: init?.method ?? "GET", body: init?.body });
     if (!(p in routes)) throw new Error(`unshimmed fetch: ${p}`);
-    return { json: async () => routes[p] };
+    return { ok: true, status: 200, json: async () => routes[p] };
   };
 
   globalThis.setInterval = () => 0;
@@ -97,7 +124,7 @@ export async function loadPage(fixtures) {
   await import(`${url}?t=${Date.now()}-${Math.random()}`);
   await new Promise((resolve) => setTimeout(resolve, 50));
 
-  return { nodes, test: globalThis.__TEST__ };
+  return { nodes, calls, test: globalThis.__TEST__ };
 }
 
 export function readFixture(name) {

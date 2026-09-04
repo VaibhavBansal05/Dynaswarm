@@ -137,3 +137,57 @@ export function projector(positions, viewW, viewH, pad) {
   const offY = (viewH - (maxY - minY) * scale) / 2;
   return ([x, y]) => [(x - minX) * scale + offX, (y - minY) * scale + offY];
 }
+
+
+// --- Stage 1 / Stage 2 additions (segment 10) ---
+
+// The tiers config.py registers, mirrored so the picker can offer them as
+// presets. Kept here rather than fetched because they are the *starting
+// point* a user edits, not a value the page reports — nothing downstream
+// trusts these numbers; the server rebuilds from whatever is submitted.
+export const TIER_PRESETS = Object.freeze({
+  small30:    { model: "erdos_renyi", n_nodes: 30,   density: 0.3 },
+  medium200:  { model: "geometric",   n_nodes: 200,  density: 0.04 },
+  large1000:  { model: "geometric",   n_nodes: 1000, density: 0.01 },
+  grid20:     { model: "grid",        n_nodes: 400,  density: 0.04 },
+});
+
+// The four registered scenarios differ in events_per_step ALONE — every
+// other field is ScenarioCfg's default in all four (config.py:308-313).
+// Presets therefore set one number, and the knobs below them are what
+// actually varies the disruption.
+export const SCENARIO_PRESETS = Object.freeze({
+  static: 0.0, low: 0.1, moderate: 0.3, high: 0.8,
+});
+
+// §4.3.1: the slot population is closed, so at every t
+//     active(t) = active(0) + adds + reopens - closures - deletes
+// exactly. `engineCount` is the engine's own n_active_edges for that
+// step — reconciling a tally against another tally would only prove the
+// browser agrees with itself.
+export function ledgerAt(steps, t) {
+  const tally = { added: 0, reopened: 0, closed: 0, deleted: 0 };
+  for (let k = 0; k <= t; k += 1) {
+    for (const ev of steps[k].events) {
+      if (ev.kind === "add") tally.added += 1;
+      else if (ev.kind === "reopen") tally.reopened += 1;
+      else if (ev.kind === "closure") tally.closed += 1;
+      else if (ev.kind === "delete") tally.deleted += 1;
+    }
+  }
+  const initial = steps[0].n_active_edges;
+  const predicted = initial + tally.added + tally.reopened - tally.closed - tally.deleted;
+  const engineCount = steps[t].n_active_edges;
+  return { initial, ...tally, predicted, engineCount, balances: predicted === engineCount };
+}
+
+// The nearest step in `direction` that carries events. Returns null when
+// there is none, so the caller can leave the cursor where it is rather
+// than guessing. 48 of 60 steps are quiet in a moderate run; without this
+// the demo is mostly waiting.
+export function seekEvent(steps, from, direction) {
+  for (let t = from + direction; t >= 0 && t < steps.length; t += direction) {
+    if (steps[t].events.length > 0) return t;
+  }
+  return null;
+}

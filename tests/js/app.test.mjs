@@ -8,8 +8,9 @@ import assert from "node:assert/strict";
 import { loadPage, readFixture } from "./dom.mjs";
 
 const fixtures = {
-  geometry: readFixture("geometry.json"),
-  timeline: readFixture("timeline.json"),
+  world: readFixture("world.json"),
+  geometry: readFixture("world.json"),
+  timeline: readFixture("run.json"),
   palette: readFixture("palette.json"),
 };
 
@@ -68,8 +69,8 @@ describe("the real page, driven under node", () => {
   });
 
   test("small30 refuses to draw rather than inventing a layout", async () => {
-    const smallGeo = readFixture("geometry_small30.json");
-    const { nodes } = await loadPage({ ...fixtures, geometry: smallGeo });
+    const smallGeo = readFixture("world_small30.json");
+    const { nodes } = await loadPage({ ...fixtures, world: smallGeo, geometry: smallGeo });
     assert.equal(nodes.canvas.attrs.hidden, "hidden");
     assert.equal(nodes.refusal.hidden, false);
   });
@@ -104,5 +105,49 @@ describe("the real page, driven under node", () => {
     });
     assert.deepEqual(drawn, kinds.map((k) => k.dash));
     assert.equal(new Set(drawn).size, drawn.length, "legend swatches are not visually distinct");
+  });
+});
+
+
+describe("Stage 1 and Stage 2 ask the server, statelessly", () => {
+  test("the page POSTs for its world and its timeline", async () => {
+    // Not merely "it rendered" — the two stages must actually go to the
+    // POST endpoints, since that is what carries the chosen parameters.
+    const { calls } = await loadPage(fixtures);
+    const graph = calls.find((c) => c.path === "/api/graph");
+    const timeline = calls.find((c) => c.path === "/api/timeline");
+    assert.equal(graph?.method, "POST");
+    assert.equal(timeline?.method, "POST");
+    assert.deepEqual(JSON.parse(graph.body), {
+      model: "geometric", n_nodes: 200, density: 0.04, seed: 1000,
+    }, "Stage 1 did not send the form's own values");
+  });
+
+  test("the ledger renders and reports it balances", async () => {
+    const { nodes, test: hook } = await loadPage(fixtures);
+    hook.show(59);
+    assert.match(nodes["ledger-balance"].textContent, /balances — engine reports \d+/);
+    assert.equal(nodes["ledger-balance"].classList.has("broken"), false);
+  });
+
+  test("the ledger says DIVERGED rather than quietly rounding", async () => {
+    // The panel's whole value is that a divergence is visible. Feed it a
+    // run whose engine count disagrees with its own events and check the
+    // page says so instead of showing a plausible number.
+    const bent = {
+      ...fixtures.timeline,
+      steps: fixtures.timeline.steps.map((s, i) =>
+        i === 30 ? { ...s, n_active_edges: s.n_active_edges + 7 } : s),
+    };
+    const { nodes, test: hook } = await loadPage({ ...fixtures, timeline: bent });
+    hook.show(30);
+    assert.match(nodes["ledger-balance"].textContent, /DIVERGED/);
+    assert.equal(nodes["ledger-balance"].classList.has("broken"), true);
+  });
+
+  test("the stat line carries live |E|", async () => {
+    const { nodes, test: hook } = await loadPage(fixtures);
+    hook.show(59);
+    assert.match(nodes.readout.textContent, /\|E\| \d+/);
   });
 });

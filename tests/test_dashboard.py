@@ -400,7 +400,11 @@ def test_a_tier_without_coordinates_answers_and_refuses():
 MAX_STATIC_LINES = 1200
 
 STATIC = DASHBOARD / "static"
-STATIC_SUFFIXES = {".js", ".css", ".html"}
+# .json is in here because the budget's question is "has this become an
+# application?", and a growing palette or config file is that growth as
+# surely as a growing script. The code/data line is not where the risk
+# lives (Entry 009 R2).
+STATIC_SUFFIXES = {".js", ".css", ".html", ".json"}
 
 
 def _static_lines(path: Path) -> int:
@@ -747,3 +751,222 @@ def test_the_fixture_palette_matches_the_shipped_one():
     assert json.loads(shipped) == json.loads(fixture), (
         "tests/js/fixtures/palette.json has drifted from dashboard/static/palette.json"
     )
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 / Stage 2, and the edge lifecycle (ARCHITECTURE.md §4.3.1)
+# ---------------------------------------------------------------------------
+
+
+def _spec(**kw):
+    server = pytest.importorskip("dashboard.server")
+    return server.GraphSpec(**kw)
+
+
+def test_the_ledger_balances_against_the_engine_at_every_timestep():
+    """§4.3.1's identity, checked against the engine's own count.
+
+    ``active(t) = active(0) + adds + reopens - closures - deletes`` is
+    exact, not approximate, because the slot population is closed — no
+    slot is created, destroyed or reindexed at any timestep.
+
+    The reconciliation target matters more than the arithmetic. Comparing
+    a tally of events against a tally of the same events would pass while
+    the engine disagreed with both; this compares against
+    ``GraphView.n_active_edges``, which the engine computes from the
+    active mask itself.
+    """
+    server = pytest.importorskip("dashboard.server")
+    run = server.build_run(_spec(), server.ScenarioSpec())
+
+    initial = run["steps"][0]["n_active_edges"]
+    tally = dict(add=0, reopen=0, closure=0, delete=0)
+    for step in run["steps"]:
+        for event in step["events"]:
+            if event["kind"] in tally:
+                tally[event["kind"]] += 1
+        predicted = initial + tally["add"] + tally["reopen"] - tally["closure"] - tally["delete"]
+        assert predicted == step["n_active_edges"], (
+            f"ledger diverged at t={step['t']}: "
+            f"predicted {predicted}, engine reports {step['n_active_edges']}"
+        )
+
+
+def test_the_live_edge_count_moves_when_pool_roads_are_added():
+    """`add` genuinely increases |E| — it is not an overlay (§4.3.1.1).
+
+    A pool road connects a node pair that had no road, so activating one
+    raises the live count. If `add` were an overlay on an existing edge
+    the count would never rise, and the picture would be hiding a real
+    change in the world.
+    """
+    server = pytest.importorskip("dashboard.server")
+    run = server.build_run(_spec(), server.ScenarioSpec())
+
+    counts = [step["n_active_edges"] for step in run["steps"]]
+    adds = sum(
+        1 for step in run["steps"] for e in step["events"] if e["kind"] == "add"
+    )
+    assert adds > 0, "fixture produced no add events; the test proves nothing"
+    assert max(counts) > counts[0], "|E| never rose despite add events"
+
+
+def test_a_derived_id_round_trips_from_a_cold_process():
+    """Same parameters, same id, identical graph — with nothing remembered.
+
+    Run in a subprocess with no shared interpreter state, because the
+    point of deriving rather than issuing an id is that it survives a
+    restart. `hash()` would not: Python salts it per process, so the same
+    graph would be named differently after every reboot.
+    """
+    server = pytest.importorskip("dashboard.server")
+    here = server.graph_id(_spec(n_nodes=120, seed=77))
+
+    program = textwrap.dedent(
+        """
+        from dashboard.server import GraphSpec, graph_id, build_world
+        spec = GraphSpec(n_nodes=120, seed=77)
+        world = build_world(spec)
+        print(graph_id(spec), world["n_edges"], f"{world['optimum']:.9f}")
+        """
+    )
+    first = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, cwd=ROOT
+    )
+    second = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, cwd=ROOT
+    )
+    assert first.returncode == 0, first.stderr
+    assert first.stdout == second.stdout, "two cold processes disagreed"
+    assert first.stdout.split()[0] == here, "the id is not stable across processes"
+
+
+def test_different_parameters_give_different_ids():
+    """Every field must reach the digest.
+
+    A field left out of the id collapses two different worlds onto one
+    name — and segment 11 would race arms on a graph it was not handed.
+    """
+    server = pytest.importorskip("dashboard.server")
+    base = server.graph_id(_spec())
+    variants = {
+        "model": _spec(model="grid"),
+        "n_nodes": _spec(n_nodes=201),
+        "density": _spec(density=0.041),
+        "seed": _spec(seed=1001),
+    }
+    for field, spec in variants.items():
+        assert server.graph_id(spec) != base, f"{field} does not reach the graph id"
+
+
+def test_the_server_holds_no_state_between_requests():
+    """Statelessness, asserted rather than promised.
+
+    There is no cache to evict — every response is rebuilt from the
+    parameters in the request — so the test that a cache is safely
+    evictable becomes the stronger test that identical calls are
+    identical however they are interleaved.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    first = server.build_world(_spec())
+    server.build_world(_spec(seed=4242))
+    server.build_run(_spec(n_nodes=60), server.ScenarioSpec(events_per_step=0.9))
+    assert server.build_world(_spec()) == first
+
+    assert not hasattr(server, "_CACHE"), "a cache appeared; the eviction rule now needs asserting"
+
+
+def test_small30_is_selectable_and_still_refuses_to_draw():
+    """The refusal is a feature, and the picker is where it is first met."""
+    server = pytest.importorskip("dashboard.server")
+    world = server.build_world(_spec(model="erdos_renyi", n_nodes=30, density=0.3))
+
+    assert world["has_coordinates"] is False
+    assert world["positions"] == []
+    assert world["n_edges"] > 0, "the graph exists; only its geometry does not"
+
+
+def test_no_event_can_act_on_a_road_that_is_not_eligible_for_it():
+    """§4.3.1's eligibility table, against `events.candidate_slots`.
+
+    Rudra's question — *can the model close a road that was never
+    there?* — is answered by the masks, and this pins the answer so a
+    later change to `candidate_slots` cannot quietly widen them:
+
+    | kind                        | may target          |
+    |-----------------------------|---------------------|
+    | closure, delete, traffic_*  | `active`            |
+    | reopen                      | `~active & base_active` |
+    | add                         | `~active & ~base_active` |
+    """
+    import numpy as np
+
+    from dynaswarm.core.events import candidate_slots
+    from dynaswarm.core.generate import build
+    from dynaswarm.core.rng import stream
+
+    server = pytest.importorskip("dashboard.server")
+    view, _, _ = build(server._graph_cfg(_spec()), stream(1000, "graph"))
+    topo = view.topology
+    active = np.asarray(view.active).copy()
+    base = np.asarray(topo.base_active)
+
+    # Deactivate a handful of live slots so every population is non-empty.
+    live = np.flatnonzero(active)
+    active[live[:40]] = False
+
+    for kind in ("closure", "delete", "traffic_up", "traffic_down"):
+        slots = candidate_slots(kind, active, topo)
+        assert active[slots].all(), f"{kind} targeted a road that is not currently there"
+
+    reopen = candidate_slots("reopen", active, topo)
+    assert not active[reopen].any(), "reopen targeted an already-open road"
+    assert base[reopen].all(), "reopen targeted a road that was never an original"
+
+    added = candidate_slots("add", active, topo)
+    assert not active[added].any(), "add targeted a road that already exists"
+    assert not base[added].any(), "add re-added an original road, which reopen owns"
+
+
+def test_an_added_road_is_first_class_and_never_becomes_reopen_eligible():
+    """The lifecycle across cycles (§4.3.1.2).
+
+    An added pool road is `active`, so it can be closed like any other.
+    Deactivated, it returns to `~active & ~base_active` — eligible for
+    `add` again, and **never** for `reopen`, because `reopen` requires
+    `base_active` and no event ever writes that mask.
+
+    Original roads reopen; pool roads re-add. The distinction has to
+    survive arbitrarily many cycles, and it does because `base_active` is
+    a property of construction, not of history.
+    """
+    import numpy as np
+
+    from dynaswarm.core.events import candidate_slots
+    from dynaswarm.core.generate import build
+    from dynaswarm.core.rng import stream
+
+    server = pytest.importorskip("dashboard.server")
+    view, _, _ = build(server._graph_cfg(_spec()), stream(1000, "graph"))
+    topo = view.topology
+    active = np.asarray(view.active).copy()
+    base = np.asarray(topo.base_active)
+
+    pool = candidate_slots("add", active, topo)
+    assert pool.size, "no pool slots; the tier has no room to add"
+    slot = int(pool[0])
+
+    for cycle in range(3):
+        active[slot] = True                                    # add
+        assert slot in set(candidate_slots("closure", active, topo).tolist()), (
+            f"cycle {cycle}: an added road cannot be closed — it is not first class"
+        )
+        active[slot] = False                                   # close it again
+        assert slot not in set(candidate_slots("reopen", active, topo).tolist()), (
+            f"cycle {cycle}: a pool road became reopen-eligible"
+        )
+        assert slot in set(candidate_slots("add", active, topo).tolist()), (
+            f"cycle {cycle}: a closed pool road cannot be re-added"
+        )
+    assert not base[slot], "base_active was mutated; it must be fixed at construction"

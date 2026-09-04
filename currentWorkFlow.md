@@ -173,3 +173,268 @@ Checks pass, artefacts pasted, commit exists unpushed, FINDINGS appended.
 ---
 
 <!-- vClaude: append your FINDINGS block below this line, using the template in AGENT_PROTOCOL.md §6 -->
+
+---
+
+# FINDINGS — Segment 10
+
+## 1. T0 — three surfaces
+
+```
+                       projected        actual       delta
+src/                  2005  (+0)    2005 / 2100       +0
+dashboard/**/*.py       ~130 (+54)    125 / 1000      +49
+dashboard/static/**     ~640 (+279)   665 / 1200     +296
+```
+
+`src/` **+0 for the fifth consecutive segment.** Two POST endpoints, derived
+ids, per-step active-edge counts and the whole picker surface, and the core
+still exposed everything: `GraphView.n_active_edges`, `candidate_slots`,
+`base_active` and `build()` were already public.
+
+**Left for segments 11–13: 875 Python statements, 535 static lines.** The
+static figure is the one to watch — this segment spent 296 of the 1032 that
+existed, and segment 11's pane grid is the next large consumer.
+
+`.json` is now inside the static budget (**R2**), which moved the figure by
+**+59** on its own — `palette.json` had been growing unmeasured, which is the
+exact shape of the thing R2 exists to stop.
+
+**R3 confirmed empirically.** `pytest` without `-q` prints
+`357 passed in 67.65s`; the same command with `-q` prints nothing after the
+progress dots. The suppressed summary I spent several tool calls debugging at
+the end of segment 9 was `addopts`' `-q` doubling with mine, exactly as ruled.
+`RUNBOOK.md` had the same mistake in two places and now says `pytest`. Its
+`pytest --collect-only -q` is **left alone** — there `-q` selects the
+collection listing format and is correct.
+
+## 2. The presets the code actually registers
+
+**Graph tiers** (`config.py:288-302`) — four:
+
+```python
+cs.store(group="graph", name="small30",    node=GraphCfg())                                    # erdos_renyi, 30, 0.3
+cs.store(group="graph", name="medium200",  node=GraphCfg(model="geometric", n_nodes=200,  density=0.04))
+cs.store(group="graph", name="large1000",  node=GraphCfg(model="geometric", n_nodes=1000, density=0.01))
+cs.store(group="graph", name="grid20",     node=GraphCfg(model="grid",      n_nodes=400))
+```
+
+**Scenarios** (`config.py:308-313`) — four, and here is the finding:
+
+```python
+cs.store(group="scenario", name="static",   node=ScenarioCfg(name="static",   events_per_step=0.0))
+cs.store(group="scenario", name="low",      node=ScenarioCfg(name="low",      events_per_step=0.1))
+cs.store(group="scenario", name="moderate", node=ScenarioCfg(name="moderate", events_per_step=0.3))
+cs.store(group="scenario", name="high",     node=ScenarioCfg(name="high",     events_per_step=0.8))
+```
+
+**A "scenario preset" changes exactly one number.** `cluster_size` (25),
+`timesteps` (60), the six probabilities and `traffic_factor` (2.0) are
+`ScenarioCfg`'s defaults in all four. The word "preset" implies a bundle; it is
+a single knob.
+
+That is why Stage 2 puts the knobs *beside* the preset rather than behind it —
+picking `high` and picking `moderate` differ only in rate, and everything that
+actually shapes a disruption is in the fields underneath. **`static` is
+`events_per_step = 0.0`**, so it produces a genuinely empty timeline and
+jump-to-next-event correctly has nowhere to go.
+
+## 3. The derived id, and the cache that does not exist
+
+```python
+payload = f"{spec.model}|{spec.n_nodes}|{spec.density!r}|{spec.seed}"
+return hashlib.blake2b(payload.encode(), digest_size=6).hexdigest()
+```
+
+`blake2b` and not `hash()`: Python salts `hash()` per process, so the same graph
+would be named differently after every restart — and an id that changes on
+restart is a registry with extra steps. It is also what `core/rng.py` already
+uses to name streams, so content-addressing is the house convention rather than
+a new idea.
+
+**There is no cache.** The spec permits one only if evicting it cannot change an
+answer, and the cheapest guarantee of that is having nothing to evict. It is
+affordable because rebuilding is cheap:
+
+```
+build_world (200 nodes)          12 ms
+build_run   (200 nodes, 60 steps) 74 ms
+```
+
+74 ms to rebuild an entire run from four parameters. A cache would buy nothing
+worth the statelessness it costs. `test_the_server_holds_no_state_between_requests`
+asserts identical calls stay identical however they are interleaved, and also
+asserts no `_CACHE` attribute has appeared — so the day someone adds one, the
+eviction rule stops being hypothetical and the test says so.
+
+## 4. The ledger
+
+Verified against the engine before any UI existed:
+
+```
+ledger checked at all 60 timesteps, mismatches: 0
+final: initial 735 + adds 75 + reopens 9 - closures 50 - deletes 25 = 744,
+       engine says 744
+```
+
+On screen, at three points:
+
+```
+=== t = 0 ===
+  t = 0 / 59      optimum 99.96      hops 11      |E| 735      0 edges changed this step
+  ledger : initial 735   + added 0   + reopened 0   − closed 0   − deleted 0   = current 735
+  balances — engine reports 735 active edges
+
+=== t = 30 ===
+  t = 30 / 59      optimum 110.54      hops 12      |E| 785      0 edges changed this step
+  ledger : initial 735   + added 75   + reopened 0   − closed 0   − deleted 25   = current 785
+  balances — engine reports 785 active edges
+
+=== t = 59 ===
+  t = 59 / 59      optimum 103.25      hops 11      |E| 744      0 edges changed this step
+  ledger : initial 735   + added 75   + reopened 9   − closed 50   − deleted 25   = current 744
+  balances — engine reports 744 active edges
+```
+
+**`|E|` moves 735 → 785 → 744.** A pool road really does connect a node pair
+that had none, and the picture was hiding that until now.
+
+## 5. Jump-to-next-event
+
+```
+disrupted steps: 2, 5, 8, 9, 14, 19, 21, 28, 35, 47, 54, 57
+four presses land on: 2 -> 5 -> 8 -> 9
+nearest disrupted step after 0 is 2 -> correct
+```
+
+`seekEvent` returns `null` rather than guessing when there is no next event, so
+the cursor stays where it is at the end of a run and throughout a `static`
+scenario.
+
+## 6. T7.1 / T7.2 — a different world, differently broken
+
+```
+400 nodes, density 0.02, seed 7:
+  graph_id     515bf7aa93a5
+  |V| 400   |E| 1549   mean degree 7.75   optimal cost 146.75   0 -> 122
+
+for comparison, the default:
+  graph_id efc1c968922f  |V| 200  |E| 735  deg 7.35  opt 99.96
+```
+
+```
+high rate, 8-edge clusters, 40 steps, closure-heavy:
+  disrupted steps: 22 of 40   (the default run: 12 of 60)
+  event kinds: closure 88, delete 48, traffic_down 48, traffic_up 32, add 16, reopen 8
+  |E|      1549 -> 1437
+  optimum  146.75 -> 153.55
+```
+
+All six kinds present, `|E|` falling under a closure/delete-heavy mix. The
+knobs do what they say.
+
+## 7. Both mutations
+
+### A — specified: the graph id ignores `seed`
+
+```
+E  AssertionError: seed does not reach the graph id
+E  assert 'efce1e910f78' != 'efce1e910f78'
+FAILED test_different_parameters_give_different_ids
+```
+
+**`test_a_derived_id_round_trips_from_a_cold_process` passed under it.**
+Determinism survived the mutation intact — only *distinctness* broke. A
+segment that had tested only "same parameters give the same id" would have
+shipped two worlds sharing one name.
+
+### B — mine: a ledger that reconciles against itself
+
+```javascript
+-  const engineCount = steps[t].n_active_edges;
++  const engineCount = predicted;
+```
+
+The ledger then balances on any data whatsoever.
+
+**The test named for the property did not catch it.**
+`balances against the engine's own count at every timestep` asserted
+`l.balances === true`, which is satisfied trivially by a ledger that can never
+be false. Only `the ledger says DIVERGED rather than quietly rounding` — which
+I wrote as an afterthought about UI wording — failed.
+
+**And the obvious repair did not work either.** I added
+`assert.equal(l.engineCount, run.steps[t].n_active_edges)` and re-ran the
+mutation: still green, because on correct data the predicted value *is* that
+number. Nothing checked against a correct run can distinguish the two.
+
+The only thing that can is data where they disagree. The test now perturbs one
+step's count by +7 and asserts the ledger notices:
+
+```
+not ok 1 - balances against the engine's own count at every timestep
+not ok 8 - the edge ledger — an invariant, not a statistic
+# pass 30  # fail 2
+```
+
+restored → `# pass 32  # fail 0`.
+
+**The generalisation, and it is the sharpest form of Entry 009's warning yet:**
+an invariant test written only against correct data cannot tell a real
+invariant from a tautology. Both are green. **The assertion has to be handed
+something that ought to break it.**
+
+## 8. Acceptance
+
+| Check | Result |
+|---|---|
+| In scope | 9 files |
+| `git diff --stat -- src/` | **Empty** — fifth segment |
+| Suite | **357 passed, 0 skipped** (from 349) |
+| Lint, three trees | `All checks passed!` |
+| Three budgets | 2005/2100 · 125/1000 · 665/1200 |
+| Banners gone | no hits for `segment`, `D32`, `not hosted` in `index.html` |
+| JS suite | **32 passed** under both node installs |
+| Committed, not pushed | below |
+
+**Skips: 0.** Node was present, so nothing went unchecked.
+
+## Deviations from spec
+
+**None.**
+
+## Surprises
+
+**The `.json` widening was not cosmetic.** `palette.json` is 59 lines — 9% of
+the static budget — and it had been invisible to the brake since the day it was
+created. R2 was filed as a one-liner; it turned out to be the second-largest
+unmeasured file on the page.
+
+**`erdos_renyi` at 30 nodes has 125 edges and a mean degree of 8.3**, which is
+why `small30` "survives" as a test tier despite being undrawable — the target is
+one or two hops from anywhere. The picker now makes that concrete: choosing it
+refuses to draw and says why, which is a better explanation of D8 than the
+sentence in the docs.
+
+## Could not do
+
+Nothing was blocked.
+
+## Questions for the Architect
+
+1. **Does the "runs on disk" panel still earn its place?** My read: **no, not
+   in its current form.** With the D32 banner gone it is a bare count of
+   `exploratory: 9240` with nothing to click and nothing to load — it answers
+   "how much scratch data exists", which is a question nobody standing in front
+   of this page is asking. It becomes worth having when the dashboard can
+   *load* one of those runs, which is stored-run replay, which waits for Phase
+   4's regenerated data. Suggest dropping it until then; it is four lines of
+   HTML to restore. Your ruling.
+2. **`ScenarioCfg.name` is set to `"custom"`** for every POST-built timeline,
+   since the knobs may not match any registered preset. If a dashboard-driven
+   run is ever written to `outputs/` (D15/D16), that name lands in the manifest
+   — is `"custom"` the right label, or should the endpoint detect an exact
+   preset match and name it?
+3. **Static budget pacing.** 665/1200 with three segments left, and segment 11's
+   pane grid is the next large consumer. Worth a projection before segment 11
+   is written rather than discovering it mid-segment?
