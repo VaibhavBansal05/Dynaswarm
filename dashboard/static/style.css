@@ -1,90 +1,300 @@
-:root { color-scheme: light dark; }
+/* Two typefaces, doing two different jobs. Prose and controls are set in
+   the system UI face because that is what reads as an instrument rather
+   than a terminal; every NUMBER is monospace and tabular, so figures line
+   up column-wise and a changing digit does not shift the ones beside it.
+   The old page set everything in mono, which made the labels shout as
+   loudly as the data. */
+:root {
+  --bg:        #0a0b0d;
+  --panel:     #121417;
+  --panel-2:   #171a1f;
+  --line:      #23272e;
+  --line-soft: #1a1d22;
+  --ink:       #e6e8eb;
+  --ink-dim:   #9aa1ab;
+  --ink-faint: #6b727c;
+  --accent:    #4d8dff;
+  --good:      #2fae5a;
+  --bad:       #e5484d;
+  --warn:      #c47f00;
+
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  --r: 8px;
+  --pad: 18px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
 body {
-  margin: 0 auto; padding: 2rem 1.5rem; max-width: 58rem;
-  font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.01em; }
-h2 { margin: 2rem 0 0.5rem; font-size: 0.95rem; text-transform: uppercase;
-     letter-spacing: 0.08em; opacity: 0.6; }
-h3 { margin: 0 0 0.4rem; font-size: 0.8rem; text-transform: uppercase;
-     letter-spacing: 0.06em; opacity: 0.55; }
-.sub { margin: 0.4rem 0 0; opacity: 0.7; }
-dl { display: grid; grid-template-columns: 12rem 1fr; gap: 0.15rem 1rem; margin: 0; }
-dt { opacity: 0.65; }
-dd { margin: 0; font-weight: 600; }
-dd.pending { grid-column: 1 / -1; opacity: 0.5; font-weight: 400; }
-footer { margin-top: 2.5rem; opacity: 0.5; font-size: 0.85rem; }
-.warning {
-  margin-top: 1rem; padding: 0.75rem 0.9rem; border-left: 3px solid #c47f00;
-  background: color-mix(in srgb, #c47f00 12%, transparent); font-weight: 400;
+  margin: 0;
+  padding: 40px 28px 64px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 14px/1.55 var(--ui);
+  -webkit-font-smoothing: antialiased;
 }
 
-.readout { margin: 1.5rem 0 0.75rem; font-size: 1.05rem; font-weight: 600;
-           font-variant-numeric: tabular-nums; white-space: pre; overflow-x: auto; }
-.readout.broken { color: #e5484d; }
-#figure { margin: 0; }
-#canvas { width: 100%; height: auto; display: block; border-radius: 4px;
-          background: #0b0d10; }
+.wrap, header, section, footer { max-width: 1180px; margin-inline: auto; }
 
-/* State layer: lightness/opacity/width only. Hue is reserved for events,
-   so this and the event layer can never be mistaken for one another. */
-.road { stroke: #e8eaed; }
-.road-ghost { stroke: #e8eaed; }
-.nodes circle { fill: currentColor; fill-opacity: 0.45; }
+/* ---------- masthead ---------- */
 
-.path line { stroke: #2b7fff; stroke-width: 2.8; stroke-linecap: round; }
+header { padding-bottom: 22px; margin-bottom: 26px; border-bottom: 1px solid var(--line); }
+h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+h1::after {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-left: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 3px;
+}
+.sub { margin: 5px 0 0; color: var(--ink-dim); font-size: 13.5px; max-width: 60ch; }
 
-/* Markers: goal is green (heading there), start is a neutral ring —
-   never red, which the event palette reserves for "closed". */
-.ends .start { fill: none; stroke: #e8eaed; stroke-width: 2; opacity: 0.85; }
-.ends .goal  { fill: #2fae5a; stroke: none; }
+/* ---------- panels ---------- */
 
-.refusal { margin: 0; padding: 2rem 1.5rem; border: 1px dashed currentColor;
-           border-radius: 4px; opacity: 0.7; font-weight: 400; }
+.stage, .ledger, .legend {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--pad);
+}
 
-.controls { display: flex; gap: 0.5rem; align-items: center; margin: 0.75rem 0 1rem; }
-.controls button { font: inherit; padding: 0.25rem 0.8rem; cursor: pointer;
-                   border-radius: 4px; border: 1px solid currentColor;
-                   background: transparent; color: inherit; }
-.controls button:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
-#scrub { flex: 1; accent-color: #2b7fff; }
+h2 {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 0 15px;
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-transform: none;
+}
+.step-n {
+  display: grid; place-items: center;
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font: 600 11px/1 var(--mono);
+}
+h3 {
+  margin: 0 0 10px;
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
 
-.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 2rem;
-          margin: 0.5rem 0 1.5rem; font-size: 0.85rem; }
-.legend p, .legend li { margin: 0.15rem 0; opacity: 0.85; list-style: none; }
-.legend .hint { opacity: 0.5; font-style: italic; }
+.stages { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 26px; }
+
+/* ---------- form controls ---------- */
+
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 11px 12px; }
+.fields label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 11px; letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+.fields input, .fields select {
+  height: 31px;
+  padding: 0 9px;
+  background: var(--panel-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 400 13px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fields select { font-family: var(--ui); padding-right: 4px; }
+.fields input:hover, .fields select:hover { border-color: #2e343d; }
+.fields input:focus, .fields select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+button {
+  height: 31px;
+  padding: 0 15px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font: 500 13px/1 var(--ui);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+button:hover { background: #1e2229; border-color: #2e343d; }
+button:active { transform: translateY(0.5px); }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* The one filled button per panel — the action, not the options. */
+.stage-actions button[type="submit"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08111f;
+  font-weight: 600;
+}
+.stage-actions button[type="submit"]:hover { background: #619bff; border-color: #619bff; }
+
+.stage-actions { display: flex; gap: 8px; align-items: center; margin-top: 15px; }
+.mono { margin-left: auto; font: 400 11px/1 var(--mono); color: var(--ink-faint); letter-spacing: 0.03em; }
+.stage details { margin-top: 12px; }
+.stage summary {
+  cursor: pointer; font-size: 11.5px; color: var(--ink-faint);
+  padding: 3px 0; user-select: none;
+}
+.stage summary:hover { color: var(--ink-dim); }
+.stage details .fields { margin-top: 11px; }
+
+/* ---------- stat bar: the sentence the examiner reads ---------- */
+
+.statbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.stat { background: var(--panel); padding: 12px 15px; }
+.stat-label {
+  display: block;
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 5px;
+}
+.stat-value {
+  display: block;
+  font: 500 19px/1.15 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.stat-value.accent { color: var(--accent); }
+.stat-value.broken { color: var(--bad); font-size: 15px; }
+
+.readout { margin: 0 0 14px; font-size: 13px; color: var(--bad); }
+.readout:empty { display: none; }
+
+/* ---------- figure ---------- */
+
+#canvas {
+  display: block; width: 100%; height: auto;
+  background: #08090b;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.road, .road-ghost { stroke: var(--ink); }
+.nodes circle { fill: var(--ink); fill-opacity: 0.4; }
+.path line { stroke: var(--accent); stroke-width: 2.8; stroke-linecap: round; }
+.ends .start { fill: none; stroke: var(--ink); stroke-width: 2; opacity: 0.9; }
+.ends .goal  { fill: var(--good); stroke: none; }
+
+.refusal {
+  margin: 0; padding: 44px 28px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  color: var(--ink-dim);
+  text-align: center;
+  max-width: 62ch; margin-inline: auto;
+}
+
+/* ---------- transport ---------- */
+
+.controls {
+  display: flex; gap: 7px; align-items: center;
+  margin: 12px 0 22px;
+  padding: 11px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.controls button { min-width: 34px; padding: 0 10px; font-family: var(--mono); }
+#play { min-width: 62px; font-family: var(--ui); font-weight: 500; }
+#scrub {
+  flex: 1; height: 4px; margin-left: 6px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--line); border-radius: 2px; cursor: pointer;
+}
+#scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  cursor: grab;
+}
+#scrub::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg); cursor: grab;
+}
+
+/* ---------- legend + ledger ---------- */
+
+.panels { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: start; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.legend p, .legend li {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 6px; padding: 0;
+  font-size: 12.5px; color: var(--ink-dim); list-style: none;
+}
 .legend ul { margin: 0; padding: 0; }
-.swatch { display: inline-block; width: 1.6em; height: 0.3em; margin-right: 0.4em;
-          vertical-align: middle; border-radius: 1px; }
-.swatch-line { display: inline-block; width: 2.4em; height: 0.7em;
-               margin-right: 0.4em; vertical-align: middle; overflow: visible; }
-.state-dearer  { background: #e8eaed; opacity: 0.8; height: 0.4em; }
-.state-cheaper { background: #e8eaed; opacity: 0.2; }
-.state-ghost   { background: #e8eaed; opacity: 0.15; border: 1px dashed #e8eaed44; }
+.legend .hint { color: var(--ink-faint); font-size: 11.5px; font-style: italic; margin-top: 9px; }
+.swatch { flex: none; width: 26px; height: 3px; border-radius: 1px; background: var(--ink); }
+.swatch-line { flex: none; width: 26px; height: 8px; overflow: visible; }
+.state-dearer  { opacity: 0.85; height: 4px; }
+.state-cheaper { opacity: 0.2; }
+.state-ghost   { opacity: 0.16; }
 
-/* Stage controls */
-.stages { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0; }
-.stage { border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-         border-radius: 6px; padding: 0.9rem 1rem; }
-.stage h2 { margin: 0 0 0.6rem; }
-.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; }
-.fields label { display: flex; flex-direction: column; gap: 0.15rem;
-                font-size: 0.8rem; opacity: 0.75; }
-.fields input, .fields select { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.35rem;
-    background: transparent; color: inherit; border-radius: 3px;
-    border: 1px solid color-mix(in srgb, currentColor 28%, transparent); }
-.stage-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
-.stage-actions button { font: inherit; padding: 0.25rem 0.9rem; cursor: pointer;
-    border-radius: 4px; border: 1px solid currentColor; background: transparent; color: inherit; }
-.stage-actions button:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
-.stage details { margin-top: 0.6rem; font-size: 0.8rem; opacity: 0.8; }
-.stage summary { cursor: pointer; opacity: 0.7; }
-.mono { font-size: 0.75rem; opacity: 0.45; margin-left: auto; }
-.stats { grid-template-columns: 7rem 1fr; margin-top: 0.75rem; font-size: 0.85rem; }
+.ledger dl {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 0; margin: 0;
+  font: 400 12.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.ledger dt, .ledger dd {
+  margin: 0; padding: 7px 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.ledger dt { color: var(--ink-faint); }
+.ledger dd { text-align: right; font-weight: 500; }
+/* The closing row is the one that has to balance — weight it like a total. */
+.ledger dt:nth-last-of-type(1), .ledger dd:nth-last-of-type(1) {
+  border-bottom: none; padding-top: 10px;
+  font-weight: 600; color: var(--ink);
+}
+.balance {
+  margin: 12px 0 0; padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: color-mix(in srgb, var(--good) 11%, transparent);
+  color: var(--good);
+}
+.balance.broken {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad); font-weight: 600;
+}
 
-/* Ledger */
-.panels { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start; }
-.ledger dl { grid-template-columns: 6.5rem 1fr; font-size: 0.85rem;
-             font-variant-numeric: tabular-nums; }
-.balance { margin: 0.6rem 0 0; font-size: 0.8rem; color: #2fae5a; }
-.balance.broken { color: #e5484d; font-weight: 700; }
+/* ---------- runs ---------- */
+
+section > h2 { margin-top: 30px; }
+#runs {
+  display: grid; grid-template-columns: 160px 1fr; gap: 4px 14px;
+  margin: 0; font-size: 13px;
+}
+#runs dt { color: var(--ink-faint); }
+#runs dd { margin: 0; font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+#runs dd.pending { grid-column: 1 / -1; color: var(--ink-faint); font-family: var(--ui); }
+
+@media (max-width: 900px) {
+  .stages, .panels, .legend { grid-template-columns: 1fr; }
+}

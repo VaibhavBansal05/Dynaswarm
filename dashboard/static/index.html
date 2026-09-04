@@ -13,9 +13,9 @@
        break it, and watch the optimum move.</p>
   </header>
 
-  <section class="stages">
+  <section class="stages" aria-label="setup">
     <form id="world" class="stage">
-      <h2>1 · Build the world</h2>
+      <h2><span class="step-n">1</span> Build the world</h2>
       <div class="fields">
         <label>preset
           <select id="tier">
@@ -46,7 +46,7 @@
     </form>
 
     <form id="disruption" class="stage">
-      <h2>2 · Design the disruption</h2>
+      <h2><span class="step-n">2</span> Design the disruption</h2>
       <div class="fields">
         <label>preset
           <select id="preset">
@@ -77,7 +77,19 @@
   </section>
 
   <section>
-    <p id="readout" class="readout">choose a world and generate it</p>
+    <div class="statbar">
+      <div class="stat"><span class="stat-label">timestep</span>
+        <span class="stat-value" id="stat-t">—</span></div>
+      <div class="stat"><span class="stat-label">optimum</span>
+        <span class="stat-value accent" id="stat-optimum">—</span></div>
+      <div class="stat"><span class="stat-label">hops</span>
+        <span class="stat-value" id="stat-hops">—</span></div>
+      <div class="stat"><span class="stat-label">live edges</span>
+        <span class="stat-value" id="stat-edges">—</span></div>
+      <div class="stat"><span class="stat-label">changed this step</span>
+        <span class="stat-value" id="stat-changed">—</span></div>
+    </div>
+    <p id="readout" class="readout"></p>
 
     <div id="figure">
       <svg id="canvas" role="img" aria-label="graph over time"></svg>

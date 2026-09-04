@@ -108,15 +108,15 @@ function draw() {
   ends.append(el("circle", { cx: xy[geo.target][0], cy: xy[geo.target][1], r: 6, class: "goal" }));
   svg.append(ends);
 
-  const cost = step.reachable ? step.optimum.toFixed(2) : "unreachable";
-  const hops = step.reachable ? step.path.length - 1 : "—";
   const n = step.events.length;
-  const readout = document.getElementById("readout");
-  readout.textContent =
-    `t = ${t} / ${run.horizon - 1}      optimum ${cost}      hops ${hops}` +
-    `      |E| ${step.n_active_edges}` +
-    `      ${n} edge${n === 1 ? "" : "s"} changed this step`;
-  readout.classList.toggle("broken", !step.reachable);
+  const set = (id, value) => { document.getElementById(id).textContent = String(value); };
+  set("stat-t", `${t} / ${run.horizon - 1}`);
+  set("stat-optimum", step.reachable ? step.optimum.toFixed(2) : "unreachable");
+  set("stat-hops", step.reachable ? step.path.length - 1 : "—");
+  set("stat-edges", step.n_active_edges);
+  set("stat-changed", n);
+  document.getElementById("stat-optimum").classList.toggle("broken", !step.reachable);
+  document.getElementById("readout").textContent = "";
   document.getElementById("scrub").value = String(t);
   drawLedger(run.steps, t);
 }

@@ -17,7 +17,8 @@ const fixtures = {
 describe("the real page, driven under node", () => {
   test("loads and renders t=0 without error", async () => {
     const { nodes } = await loadPage(fixtures);
-    assert.equal(nodes.readout.textContent.startsWith("t = 0 / 59"), true, nodes.readout.textContent);
+    assert.equal(nodes["stat-t"].textContent, "0 / 59");
+    assert.equal(nodes.readout.textContent, "", "an error was rendered");
   });
 
   test("the step.t === t guard throws on a mismatched payload", async () => {
@@ -37,7 +38,7 @@ describe("the real page, driven under node", () => {
     const { nodes, test: hook } = await loadPage(fixtures);
     hook.show(21);
     assert.equal(nodes.scrub.value, "21");
-    assert.equal(nodes.readout.textContent.startsWith("t = 21 / 59"), true);
+    assert.equal(nodes["stat-t"].textContent, "21 / 59");
   });
 
   test("t=59 stays close to the 142 salient edges the two-layer split achieves", async () => {
@@ -145,9 +146,13 @@ describe("Stage 1 and Stage 2 ask the server, statelessly", () => {
     assert.equal(nodes["ledger-balance"].classList.has("broken"), true);
   });
 
-  test("the stat line carries live |E|", async () => {
+  test("the stat bar carries live |E| from the engine's own count", async () => {
     const { nodes, test: hook } = await loadPage(fixtures);
     hook.show(59);
-    assert.match(nodes.readout.textContent, /\|E\| \d+/);
+    const shown = Number(nodes["stat-edges"].textContent);
+    assert.equal(shown, fixtures.timeline.steps[59].n_active_edges);
+    // It has to be live, not the opening count — that is the whole point
+    // of putting it on the bar.
+    assert.notEqual(shown, fixtures.timeline.steps[0].n_active_edges);
   });
 });

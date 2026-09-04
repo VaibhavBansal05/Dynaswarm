@@ -438,3 +438,85 @@ Nothing was blocked.
 3. **Static budget pacing.** 665/1200 with three segments left, and segment 11's
    pane grid is the next large consumer. Worth a projection before segment 11
    is written rather than discovering it mid-segment?
+
+---
+
+# FINDINGS — Segment 10 addendum: a design pass, out of order, at Rudra's request
+
+**Flagging the scope breach first.** Segment 10's constraints say *"No arms, no
+inspect panels, no design pass — Segments 11, 12, 13."* Rudra looked at the
+delivered page and asked for it directly. He is the owner, so I did it; recording
+it as **out-of-order work done at his request**, not as drift, so the segment 13
+spec is written knowing this already happened.
+
+## What was actually wrong
+
+The page set **everything** in monospace — headings, labels, prose and data
+alike — so a field label shouted as loudly as the number beside it, and nothing
+established what to read first. Panels had no ground of their own, controls were
+browser defaults, and the most important line on the page (`t`, optimum, hops,
+`|E|`) was a run-on paragraph of space-padded text.
+
+## What changed
+
+**Two typefaces, doing two jobs.** System UI face for prose and controls;
+monospace **only for numbers**, tabular-lining so a changing digit does not shift
+the ones beside it. That is not decoration — on a page whose whole purpose is
+watching figures move while a picture changes, digits that jitter are a
+readability defect.
+
+**The stat line became five stat blocks** with label-above-value, which is a
+real structural change rather than styling: it needed new markup and new JS.
+`#readout` is now the error channel alone, hidden by `.readout:empty` so no JS
+coordination is required to show or hide it.
+
+**One accent, used three times** — the step badges, the optimal path, and the
+single filled button per panel. Everything else is neutral. The semantic event
+colours are untouched: they are the data encoding, and this pass had no business
+near them.
+
+**The ledger's closing row is weighted like a total**, because that is the row
+that has to balance.
+
+```
+=== t = 0 ===
+  0 / 59   |   99.96   |   11   |   735   |   0
+=== t = 30 ===
+  30 / 59  |  110.54   |   12   |   785   |   0
+=== t = 59 ===
+  59 / 59  |  103.25   |   11   |   744   |   0
+```
+
+## Three tests changed, and why that was necessary rather than convenient
+
+`loads and renders t=0`, `scrubbing lands exactly on the requested t` and
+`the stat line carries live |E|` all read `#readout`'s text, which no longer
+carries figures. They now read the stat blocks.
+
+The `|E|` test was **strengthened while it was open**: it now asserts the shown
+value equals `steps[59].n_active_edges` *and* differs from `steps[0]`'s — a
+test that only matched `/\|E\| \d+/` would have passed against a hardcoded
+opening count, which is the exact defect the live count exists to expose.
+
+The harness needed no change: it derives element ids and defaults from
+`index.html`, so the five new stat ids appeared on their own. That decision paid
+within the hour.
+
+## ⚠️ The budget, and it is now the constraint
+
+```
+static/**   665 -> 856 / 1200      the design pass cost +191
+```
+
+**344 lines left for segments 11, 12 and 13.** Segment 11's pane grid is the
+largest remaining consumer and segment 13 is *itself* the design segment, whose
+budget I have now partly spent.
+
+This wants a ruling before segment 11 is written. Three options as I see them:
+**(a)** accept that segment 13 is now mostly done and re-scope it; **(b)** raise
+the static cap on the same terms the science cap was raised — measured, argued,
+recorded; **(c)** hold 1200 and let segment 11 discover the wall mid-flight,
+which is the one option I would argue against, since that is how a segment ends
+up deleting something that mattered to make room.
+
+**All 36 dashboard tests pass, 32 JS tests pass, lint clean, `src/` untouched.**
