@@ -18,6 +18,7 @@ import {
   FADE_CUTOFF, fadeOpacity,
   buildStateFrames, baselineFrom, stateStyle, projector,
   TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent, ARM_COLORS, excessPath,
+  pickNode, pickEdge, edgeHistory, edgeKey,
 } from "./model.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -29,7 +30,7 @@ const ARM_NAMES = {
 const VIEW = { w: 900, h: 620, pad: 24 };
 const FRAME_MS = 320;
 
-const state = { geo: null, run: null, race: null, palette: null, t: 0, timer: null, xy: [], frames: [] };
+const state = { geo: null, run: null, race: null, palette: null, selection: null, t: 0, timer: null, xy: [], frames: [] };
 
 function el(name, attrs) {
   const node = document.createElementNS(SVG_NS, name);
@@ -125,6 +126,19 @@ function draw() {
   document.getElementById("scrub").value = String(t);
   drawLedger(run.steps, t);
   if (state.race) drawPanes(t);
+  drawArmPanel(t);
+
+  const sel = state.selection;
+  if (sel && sel.kind === "node") {
+    svg.append(el("circle", { cx: xy[sel.index][0], cy: xy[sel.index][1], r: 9, class: "sel-node" }));
+    inspectNode(sel.index, t);
+  } else if (sel && sel.kind === "edge") {
+    const [u, v] = geo.edges[sel.index];
+    const g = el("g", { class: "sel-edge" });
+    g.append(el("line", { x1: xy[u][0], y1: xy[u][1], x2: xy[v][0], y2: xy[v][1] }));
+    svg.append(g);
+    inspectEdge(sel.index, t);
+  }
 }
 
 function show(t) {
@@ -153,6 +167,18 @@ function wire() {
   document.getElementById("back").addEventListener("click", () => show(state.t - 1));
   document.getElementById("fwd").addEventListener("click", () => show(state.t + 1));
   document.getElementById("play").addEventListener("click", toggle);
+  document.getElementById("canvas").addEventListener("click", (e) => {
+    if (!state.geo || !state.geo.has_coordinates) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * VIEW.w;
+    const py = ((e.clientY - box.top) / box.height) * VIEW.h;
+    const node = pickNode(state.xy, px, py);
+    const edge = node === null ? pickEdge(state.xy, state.geo.edges, px, py) : null;
+    if (node !== null) state.selection = { kind: "node", index: node };
+    else if (edge !== null) state.selection = { kind: "edge", index: edge };
+    else clearInspect();
+    show(state.t);
+  });
   document.getElementById("reset").addEventListener("click", () => show(0));
   document.getElementById("next-event").addEventListener("click", () => jump(1));
   document.getElementById("prev-event").addEventListener("click", () => jump(-1));
@@ -274,6 +300,114 @@ function drawExcess() {
     swatch.style.borderTopStyle = "solid";
     item.append(swatch, document.createTextNode(`${arm.name} · ${(arm.mean_excess * 100).toFixed(1)}% avg`));
     key.append(item);
+  }
+}
+
+// Everything below reads what the run recorded and nothing else. Where
+// §15.6 asks for a field the run does not carry — per-edge pheromone,
+// per-node PSO priority — the panel leaves a gap rather than showing a
+// plausible number nobody can trace. Both are Layer 2 probes and Phase 2
+// records them; `probe` today carries colony- and swarm-level aggregates
+// (tau_ratio, diversity), which are not per-edge or per-node.
+function rows(host, pairs) {
+  host.replaceChildren();
+  for (const [k, v] of pairs) {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = String(v);
+    host.append(dt, dd);
+  }
+}
+
+function inspectEdge(index, t) {
+  const [u, v] = state.geo.edges[index];
+  const frame = state.frames[t].get(edgeKey(u, v));
+  const baseline = state.baseline.get(edgeKey(u, v));
+  const history = edgeHistory(state.run.steps, u, v);
+  document.getElementById("ins-hint").textContent = `road ${u}–${v}`;
+
+  rows(document.getElementById("ins-body"), [
+    ["price now", frame ? frame.price.toFixed(3) : "—"],
+    ["price at t=0", baseline ? baseline.price.toFixed(3) : "—"],
+    ["open right now", frame && frame.active ? "yes" : "no"],
+    ["original road", baseline ? "yes" : "no — appeared during the run"],
+    ["times changed", history.length],
+    ["on the best route", onBestRoute(u, v, t) ? "yes" : "no"],
+  ]);
+
+  const table = document.getElementById("ins-events");
+  table.replaceChildren();
+  for (const e of history) {
+    const tr = document.createElement("tr");
+    for (const cell of [`t=${e.t}`, state.palette[e.kind].label,
+                        `${e.old_weight.toFixed(2)} → ${e.new_weight.toFixed(2)}`]) {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      tr.append(td);
+    }
+    table.append(tr);
+  }
+}
+
+function onBestRoute(u, v, t) {
+  const path = state.run.steps[t].path;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    if (edgeKey(path[i], path[i + 1]) === edgeKey(u, v)) return true;
+  }
+  return false;
+}
+
+function inspectNode(node, t) {
+  const step = state.run.steps[t];
+  const degree = [...state.frames[t].values()]
+    .filter((e) => e.active && (e.u === node || e.v === node)).length;
+  const [x, y] = state.geo.positions[node];
+  const through = (state.race?.arms ?? [])
+    .filter((a) => (a.paths[t] ?? []).includes(node)).map((a) => a.name);
+
+  document.getElementById("ins-hint").textContent = `place ${node}`;
+  rows(document.getElementById("ins-body"), [
+    ["roads open here", degree],
+    ["position", `${x.toFixed(3)}, ${y.toFixed(3)}`],
+    ["role", node === state.geo.source ? "start"
+      : node === state.geo.target ? "goal" : "—"],
+    ["on the best route", step.path.includes(node) ? "yes" : "no"],
+    ["arms routing through", through.length ? through.join(", ") : "none"],
+  ]);
+  document.getElementById("ins-events").replaceChildren();
+}
+
+function clearInspect() {
+  state.selection = null;
+  document.getElementById("ins-hint").textContent = "click a road or a place";
+  document.getElementById("ins-body").replaceChildren();
+  document.getElementById("ins-events").replaceChildren();
+}
+
+// Per-arm, at this step. Every figure is a column the run recorded.
+function drawArmPanel(t) {
+  const host = document.getElementById("ins-arms");
+  host.replaceChildren();
+  if (!state.race) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "race the algorithms to see their figures here";
+    host.append(empty);
+    return;
+  }
+  for (const arm of state.race.arms) {
+    const row = document.createElement("div");
+    row.className = "ins-arm";
+    const name = document.createElement("b");
+    name.textContent = arm.name;
+    const excess = document.createElement("span");
+    excess.textContent = arm.excess[t] === null ? "no route"
+      : `+${(arm.excess[t] * 100).toFixed(1)}%`;
+    const spent = document.createElement("span");
+    spent.textContent = `${arm.evaluations[t] ?? "—"} evals`;
+    row.append(name, excess, spent);
+    host.append(row);
   }
 }
 

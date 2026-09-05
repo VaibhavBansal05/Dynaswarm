@@ -5,14 +5,14 @@
    The old page set everything in mono, which made the labels shout as
    loudly as the data. */
 :root {
-  --bg:        #0a0b0d;
-  --panel:     #121417;
-  --panel-2:   #171a1f;
-  --line:      #23272e;
-  --line-soft: #1a1d22;
-  --ink:       #e6e8eb;
-  --ink-dim:   #9aa1ab;
-  --ink-faint: #6b727c;
+  --bg:        #050607;
+  --panel:     #14181d;
+  --panel-2:   #1c2128;
+  --line:      #2e343d;
+  --line-soft: #23282f;
+  --ink:       #eaecef;
+  --ink-dim:   #a8b0ba;
+  --ink-faint: #79818c;
   --accent:    #4d8dff;
   --good:      #2fae5a;
   --bad:       #e5484d;
@@ -22,7 +22,7 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   --r: 8px;
-  --pad: 18px;
+  --pad: 21px;
   color-scheme: dark;
 }
 
@@ -30,21 +30,21 @@
 
 body {
   margin: 0;
-  padding: 40px 28px 64px;
+  padding: 44px 32px 72px;
   background: var(--bg);
   color: var(--ink);
-  font: 400 14px/1.55 var(--ui);
+  font: 400 16.5px/1.6 var(--ui);
   -webkit-font-smoothing: antialiased;
 }
 
-.wrap, header, section, footer { max-width: 1180px; margin-inline: auto; }
+.wrap, header, section, footer { max-width: 1400px; margin-inline: auto; }
 
 /* ---------- masthead ---------- */
 
 header { padding-bottom: 22px; margin-bottom: 26px; border-bottom: 1px solid var(--line); }
 h1 {
   margin: 0;
-  font-size: 21px;
+  font-size: 27px;
   font-weight: 650;
   letter-spacing: -0.015em;
 }
@@ -57,7 +57,7 @@ h1::after {
   background: var(--accent);
   vertical-align: 3px;
 }
-.sub { margin: 5px 0 0; color: var(--ink-dim); font-size: 13.5px; max-width: 60ch; }
+.sub { margin: 6px 0 0; color: var(--ink-dim); font-size: 16px; max-width: 62ch; }
 
 /* ---------- panels ---------- */
 
@@ -66,27 +66,28 @@ h1::after {
   border: 1px solid var(--line);
   border-radius: var(--r);
   padding: var(--pad);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
 }
 
 h2 {
   display: flex; align-items: center; gap: 9px;
   margin: 0 0 15px;
-  font-size: 13px; font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 15.5px; font-weight: 600;
+  letter-spacing: 0.01em;
   color: var(--ink);
   text-transform: none;
 }
 .step-n {
   display: grid; place-items: center;
-  width: 20px; height: 20px;
-  border-radius: 5px;
+  width: 22px; height: 22px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
-  font: 600 11px/1 var(--mono);
+  font: 600 12px/1 var(--mono);
 }
 h3 {
   margin: 0 0 10px;
-  font-size: 10.5px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
   letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--ink-faint);
 }
@@ -98,17 +99,17 @@ h3 {
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 11px 12px; }
 .fields label {
   display: flex; flex-direction: column; gap: 5px;
-  font-size: 11px; letter-spacing: 0.02em;
+  font-size: 12.5px; letter-spacing: 0.02em;
   color: var(--ink-faint);
 }
 .fields input, .fields select {
-  height: 31px;
-  padding: 0 9px;
+  height: 38px;
+  padding: 0 11px;
   background: var(--panel-2);
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font: 400 13px/1 var(--mono);
+  font: 400 15px/1 var(--mono);
   font-variant-numeric: tabular-nums;
   transition: border-color .12s, box-shadow .12s;
 }
@@ -124,13 +125,13 @@ h3 {
 }
 
 button {
-  height: 31px;
-  padding: 0 15px;
+  height: 38px;
+  padding: 0 19px;
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--panel-2);
   color: var(--ink);
-  font: 500 13px/1 var(--ui);
+  font: 500 15px/1 var(--ui);
   cursor: pointer;
   transition: background .12s, border-color .12s;
 }
@@ -148,10 +149,10 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
 .stage-actions button[type="submit"]:hover { background: #619bff; border-color: #619bff; }
 
 .stage-actions { display: flex; gap: 8px; align-items: center; margin-top: 15px; }
-.mono { margin-left: auto; font: 400 11px/1 var(--mono); color: var(--ink-faint); letter-spacing: 0.03em; }
+.mono { margin-left: auto; font: 400 12px/1 var(--mono); color: var(--ink-faint); letter-spacing: 0.03em; }
 .stage details { margin-top: 12px; }
 .stage summary {
-  cursor: pointer; font-size: 11.5px; color: var(--ink-faint);
+  cursor: pointer; font-size: 12.5px; color: var(--ink-faint);
   padding: 3px 0; user-select: none;
 }
 .stage summary:hover { color: var(--ink-dim); }
@@ -163,26 +164,26 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0; margin: 16px 0 0;
-  font: 400 12.5px/1 var(--mono);
+  font: 400 14.5px/1 var(--mono);
   font-variant-numeric: tabular-nums;
 }
 .stats dt, .stats dd {
   margin: 0; padding: 8px 2px;
   border-bottom: 1px solid var(--line-soft);
 }
-.stats dt { color: var(--ink-faint); font-family: var(--ui); font-size: 12px; }
+.stats dt { color: var(--ink-faint); font-family: var(--ui); font-size: 14px; }
 .stats dd { text-align: right; font-weight: 500; }
 .stats dt:nth-last-of-type(1), .stats dd:nth-last-of-type(1) { border-bottom: none; }
 
 /* Native <option> text cannot be fully styled on macOS, but the closed
    control can, and that is what is on screen most of the time. */
-.fields select { font-family: var(--ui); font-size: 12.5px; }
+.fields select { font-family: var(--ui); font-size: 14.5px; }
 
 /* ---------- stat bar: the sentence the examiner reads ---------- */
 
 .statbar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 1px;
   background: var(--line-soft);
   border: 1px solid var(--line);
@@ -190,31 +191,31 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
   overflow: hidden;
   margin-bottom: 14px;
 }
-.stat { background: var(--panel); padding: 12px 15px; }
+.stat { background: var(--panel); padding: 14px 17px; }
 .stat-label {
   display: block;
-  font-size: 10px; font-weight: 500;
+  font-size: 11.5px; font-weight: 500;
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--ink-faint);
   margin-bottom: 5px;
 }
 .stat-value {
   display: block;
-  font: 500 19px/1.15 var(--mono);
+  font: 500 25px/1.15 var(--mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 .stat-value.accent { color: var(--accent); }
-.stat-value.broken { color: var(--bad); font-size: 15px; }
+.stat-value.broken { color: var(--bad); font-size: 17px; }
 
-.readout { margin: 0 0 14px; font-size: 13px; color: var(--bad); }
+.readout { margin: 0 0 14px; font-size: 14px; color: var(--bad); }
 .readout:empty { display: none; }
 
 /* ---------- figure ---------- */
 
 #canvas {
   display: block; width: 100%; height: auto;
-  background: #08090b;
+  background: #0a0d10;
   border: 1px solid var(--line);
   border-radius: var(--r);
 }
@@ -238,7 +239,7 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
 .controls {
   display: flex; gap: 7px; align-items: center;
   margin: 12px 0 22px;
-  padding: 11px 13px;
+  padding: 13px 15px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -269,10 +270,10 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
 .legend p, .legend li {
   display: flex; align-items: center; gap: 8px;
   margin: 0 0 6px; padding: 0;
-  font-size: 12.5px; color: var(--ink-dim); list-style: none;
+  font-size: 14.5px; color: var(--ink-dim); list-style: none;
 }
 .legend ul { margin: 0; padding: 0; }
-.legend .hint { color: var(--ink-faint); font-size: 11.5px; font-style: italic; margin-top: 9px; }
+.legend .hint { color: var(--ink-faint); font-size: 12.5px; font-style: italic; margin-top: 9px; }
 .swatch { flex: none; width: 26px; height: 3px; border-radius: 1px; background: var(--ink); }
 .swatch-line { flex: none; width: 26px; height: 8px; overflow: visible; }
 .state-dearer  { opacity: 0.85; height: 4px; }
@@ -282,7 +283,7 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
 .ledger dl {
   display: grid; grid-template-columns: 1fr auto;
   gap: 0; margin: 0;
-  font: 400 12.5px/1 var(--mono);
+  font: 400 14.5px/1 var(--mono);
   font-variant-numeric: tabular-nums;
 }
 .ledger dt, .ledger dd {
@@ -297,9 +298,9 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
   font-weight: 600; color: var(--ink);
 }
 .balance {
-  margin: 12px 0 0; padding: 8px 10px;
+  margin: 13px 0 0; padding: 9px 11px;
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   background: color-mix(in srgb, var(--good) 11%, transparent);
   color: var(--good);
 }
@@ -330,12 +331,12 @@ section > h2 { margin-top: 30px; }
    so they are read rather than scanned past. */
 .notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
 .note {
-  padding: 11px 13px;
+  padding: 13px 15px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-left: 2px solid var(--accent);
   border-radius: 6px;
-  font-size: 12.5px; line-height: 1.45; color: var(--ink-dim);
+  font-size: 14.5px; line-height: 1.5; color: var(--ink-dim);
 }
 .note b { color: var(--ink); font-weight: 600; }
 .note i { font-style: italic; }
@@ -346,13 +347,13 @@ section > h2 { margin-top: 30px; }
 /* A reference table, not paragraphs: term in a fixed column, one line of
    definition beside it, so the eye can run down the terms alone. */
 .guide dl {
-  display: grid; grid-template-columns: 118px 1fr;
+  display: grid; grid-template-columns: 142px 1fr;
   gap: 0; margin: 0;
 }
 .guide dt, .guide dd {
-  margin: 0; padding: 7px 0;
+  margin: 0; padding: 8px 0;
   border-top: 1px solid var(--line-soft);
-  font-size: 12.5px; line-height: 1.45;
+  font-size: 14.5px; line-height: 1.5;
 }
 .guide dt:first-of-type, .guide dt:first-of-type + dd { border-top: none; }
 .guide dt { color: var(--ink); font-weight: 550; padding-right: 10px; }
@@ -362,7 +363,7 @@ section > h2 { margin-top: 30px; }
 kbd {
   padding: 1px 5px; border-radius: 4px;
   border: 1px solid var(--line); background: var(--panel-2);
-  font: 400 11px/1.5 var(--mono); color: var(--ink-dim);
+  font: 400 12px/1.5 var(--mono); color: var(--ink-dim);
 }
 
 @media (max-width: 900px) {
@@ -371,16 +372,16 @@ kbd {
 
 /* ---------- stage 3: panes and the excess chart ---------- */
 .arms { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
-.arms label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-dim); }
+.arms label { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--ink-dim); }
 .arms input { accent-color: var(--accent); }
 .section-label { margin: 22px 0 9px; }
 .panes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.pane { background: #08090b; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.pane { background: #0a0d10; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
 .pane h4 {
-  margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  margin: 0 0 7px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
   display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
 }
-.pane h4 span { font: 400 10.5px/1 var(--mono); color: var(--ink-faint); }
+.pane h4 span { font: 400 11.5px/1 var(--mono); color: var(--ink-faint); }
 .pane svg { display: block; width: 100%; height: auto; }
 .pane .fabric line { stroke: var(--ink); stroke-opacity: 0.07; stroke-width: 0.5; }
 .pane .arm-path line { stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; }
@@ -388,7 +389,7 @@ kbd {
 .pane.broken .arm-path line { stroke: var(--bad); stroke-dasharray: 3 2; }
 .pane .ends .start { fill: none; stroke: var(--ink); stroke-width: 1.6; opacity: 0.85; }
 .pane .ends .goal { fill: var(--good); }
-.excess { width: 100%; height: auto; background: #08090b;
+.excess { width: 100%; height: auto; background: #0a0d10;
           border: 1px solid var(--line); border-radius: 6px; }
 .excess .axis line { stroke: var(--line); stroke-width: 1; }
 .excess .axis text { fill: var(--ink-faint); font: 400 9px var(--mono); }
@@ -396,10 +397,44 @@ kbd {
    and the two competed. Hue in this chart belongs to the arms alone. */
 .excess .marker line { stroke: var(--ink); stroke-opacity: 0.16; stroke-width: 1; }
 .excess .series path { fill: none; stroke-width: 1.8; }
-.chart-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; font-size: 12px; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 7px 18px; margin: 9px 0 0; font-size: 13px; }
 .chart-key span { display: flex; align-items: center; gap: 6px; color: var(--ink-dim); }
 .chart-key i { display: inline-block; width: 18px; height: 0; border-top-width: 2.5px; }
 @media (max-width: 900px) { .panes { grid-template-columns: repeat(2, 1fr); } }
 .stage.busy .stats, .stage.busy .mono { opacity: 0.35; }
 button:disabled { opacity: 0.55; cursor: default; }
 .stage-wide { grid-column: 1 / -1; }
+/* One field in a full-width panel would otherwise stretch across it. */
+#race .fields { grid-template-columns: 160px; }
+
+/* ---------- inspect ---------- */
+.inspect { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.ins-panel { background: var(--panel); border: 1px solid var(--line);
+             border-radius: var(--r); padding: var(--pad);
+             box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset; }
+.ins-panel h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ins-panel .hint { text-transform: none; letter-spacing: 0; font-weight: 400;
+                   color: var(--ink-faint); font-size: 12px; }
+#ins-body { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0;
+            font: 400 14px/1 var(--mono); font-variant-numeric: tabular-nums; }
+#ins-body dt, #ins-body dd { margin: 0; padding: 8px 2px;
+                             border-bottom: 1px solid var(--line-soft); }
+#ins-body dt { color: var(--ink-faint); font-family: var(--ui); font-size: 13.5px; }
+#ins-body dd { text-align: right; font-weight: 500; }
+.ins-events { width: 100%; border-collapse: collapse; margin-top: 12px;
+              font: 400 13px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.ins-events td { padding: 6px 4px; border-bottom: 1px solid var(--line-soft); }
+.ins-events td:first-child { color: var(--ink-faint); width: 3.5em; }
+.ins-events td:last-child { text-align: right; color: var(--ink-dim); }
+.ins-arm { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 14px;
+           padding: 9px 2px; border-bottom: 1px solid var(--line-soft);
+           font: 400 13.5px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.ins-arm b { font-family: var(--ui); font-weight: 500; }
+.reserved { margin-top: 16px; padding: 13px 15px; border-radius: 6px;
+            border: 1px dashed var(--line); color: var(--ink-faint);
+            font-size: 13px; line-height: 1.5; }
+.reserved b { display: block; color: var(--ink-dim); margin-bottom: 5px; }
+.reserved code { font: 400 12.5px var(--mono); color: var(--ink-dim); }
+.sel-node { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.sel-edge line { stroke: var(--accent); stroke-width: 4; stroke-opacity: 0.55; }
+@media (max-width: 900px) { .inspect { grid-template-columns: 1fr; } }

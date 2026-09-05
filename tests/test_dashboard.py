@@ -995,7 +995,7 @@ def test_an_added_road_is_first_class_and_never_becomes_reopen_eligible():
 # ---------------------------------------------------------------------------
 
 
-def test_the_dashboard_calls_run_trial_and_does_not_step_its_own_loop():
+def test_the_dashboard_calls_run_trial_and_does_not_step_its_own_loop(tmp_path):
     """§15.2, asserted at the entry point rather than at the outcome.
 
     A dashboard that assembled the trial loop itself would be a second
@@ -1016,7 +1016,7 @@ def test_the_dashboard_calls_run_trial_and_does_not_step_its_own_loop():
 
     server.run_experiment = spy
     try:
-        server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
+        server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60), root=tmp_path)
     finally:
         server.run_experiment = real
 
@@ -1029,7 +1029,7 @@ def test_the_dashboard_calls_run_trial_and_does_not_step_its_own_loop():
     assert "for trial in range" not in source, "the dashboard is stepping a trial loop"
 
 
-def test_a_dashboard_run_writes_a_real_directory_stamped_exploratory():
+def test_a_dashboard_run_writes_a_real_directory_stamped_exploratory(tmp_path):
     """D30/D31, exercised rather than assumed.
 
     Phase 0 built the provenance system; this is the first thing that
@@ -1038,9 +1038,9 @@ def test_a_dashboard_run_writes_a_real_directory_stamped_exploratory():
     `run_class` exists to prevent.
     """
     server = pytest.importorskip("dashboard.server")
-    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
+    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60), root=tmp_path)
 
-    directory = ROOT / started["path"]
+    directory = Path(started["path"])
     assert (directory / "steps.parquet").exists()
     assert (directory / "manifest.json").exists()
 
@@ -1054,7 +1054,7 @@ def test_a_dashboard_run_writes_a_real_directory_stamped_exploratory():
     )
 
 
-def test_a_dashboard_run_is_indistinguishable_from_a_cli_run():
+def test_a_dashboard_run_is_indistinguishable_from_a_cli_run(tmp_path):
     """The strong one: same schema, same columns, same dtypes.
 
     Not "it has the columns we remembered to check" — the comparison is
@@ -1067,8 +1067,8 @@ def test_a_dashboard_run_is_indistinguishable_from_a_cli_run():
     from dynaswarm.harness.trial import StepRow
 
     server = pytest.importorskip("dashboard.server")
-    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
-    frame = load_steps(ROOT / started["path"], run_class=None)
+    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60), root=tmp_path)
+    frame = load_steps(started["path"], run_class=None)
 
     expected = {f.name for f in fields(StepRow)} | {"run_id"}
     assert expected <= set(frame.columns), (
@@ -1076,7 +1076,7 @@ def test_a_dashboard_run_is_indistinguishable_from_a_cli_run():
     )
 
 
-def test_the_excess_shown_is_the_analysis_layers_own_figure():
+def test_the_excess_shown_is_the_analysis_layers_own_figure(tmp_path):
     """The anti-reimplementation test for this segment.
 
     The panes and the chart both quote excess. If the endpoint computed
@@ -1086,17 +1086,19 @@ def test_the_excess_shown_is_the_analysis_layers_own_figure():
     `per_trial_excess`, called independently here.
     """
     server = pytest.importorskip("dashboard.server")
-    started = server.race(server.RaceSpec(arms=["astar", "aco", "pso"], evaluations=80))
-    back = server.read_run(started["run_id"])
+    started = server.race(
+        server.RaceSpec(arms=["astar", "aco", "pso"], evaluations=80), root=tmp_path
+    )
+    back = server.read_run(started["run_id"], root=tmp_path)
 
-    frame = load_steps(ROOT / started["path"], run_class=None)
+    frame = load_steps(started["path"], run_class=None)
     trials = per_trial_excess(frame)
     for arm in back["arms"]:
         expected = trials[trials["arm"] == arm["id"]]["mean_excess"].iloc[0]
         assert arm["mean_excess"] == pytest.approx(float(expected)), arm["id"]
 
 
-def test_every_arm_sees_the_identical_timeline():
+def test_every_arm_sees_the_identical_timeline(tmp_path):
     """§10's fairness guarantee, asserted from the dashboard's side.
 
     Every arm must face byte-identical conditions or the comparison means
@@ -1104,8 +1106,8 @@ def test_every_arm_sees_the_identical_timeline():
     than the arm: same `num_events` sequence, same `optimum` sequence.
     """
     server = pytest.importorskip("dashboard.server")
-    started = server.race(server.RaceSpec(evaluations=80))
-    frame = load_steps(ROOT / started["path"], run_class=None)
+    started = server.race(server.RaceSpec(evaluations=80), root=tmp_path)
+    frame = load_steps(started["path"], run_class=None)
 
     reference = None
     for arm, rows in frame.groupby("arm"):
@@ -1140,7 +1142,7 @@ def test_no_controlled_arm_is_reachable_from_the_dashboard():
         assert arm not in markup, f"{arm} is offered in the UI"
 
 
-def test_a_run_id_names_a_directory_and_survives_a_restart():
+def test_a_run_id_names_a_directory_and_survives_a_restart(tmp_path):
     """The two id kinds, pinned.
 
     A graph is a pure function of its parameters, so its id is derived and
@@ -1149,11 +1151,11 @@ def test_a_run_id_names_a_directory_and_survives_a_restart():
     it is gone. Conflating them is how a stateless server grows a session.
     """
     server = pytest.importorskip("dashboard.server")
-    started = server.race(server.RaceSpec(arms=["astar"], evaluations=60))
+    started = server.race(server.RaceSpec(arms=["astar"], evaluations=60), root=tmp_path)
 
     program = textwrap.dedent(f"""
         from dashboard.server import read_run, graph_id, GraphSpec
-        back = read_run({started["run_id"]!r})
+        back = read_run({started["run_id"]!r}, root={str(tmp_path)!r})
         print(back["run_id"], back["run_class"], len(back["arms"]))
         print(graph_id(GraphSpec()))
         """)
@@ -1165,3 +1167,69 @@ def test_a_run_id_names_a_directory_and_survives_a_restart():
     assert run_line.split()[0] == started["run_id"]
     assert run_line.split()[1] == "exploratory"
     assert graph_line.strip() == server.graph_id(server.GraphSpec())
+
+
+def test_no_panel_shows_a_field_the_run_does_not_record(tmp_path):
+    """§15.6 asks for two fields the run does not carry, and they are out.
+
+    Per-edge pheromone level and per-node PSO priority statistics are
+    Layer 2 probes; §17 assigns those to Phase 2. What `probe` carries
+    today is colony- and swarm-level: `tau_ratio` and `diversity` are
+    aggregates over the whole colony and swarm, not per edge or per node.
+
+    A panel showing a plausible-looking number nobody can trace is worse
+    than a panel with a gap, so this pins the absence: the moment the
+    probes land, this test fails and the panels can be extended
+    deliberately rather than by someone noticing.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(evaluations=80), root=tmp_path)
+    frame = load_steps(started["path"], run_class=None)
+
+    keys = set()
+    for probe in frame["probe"]:
+        if probe is not None:
+            keys |= {k for k, _ in probe}
+    assert not {"pheromone", "priority"} & keys, (
+        "the Layer 2 probes have landed — the inspect panels can now show them"
+    )
+
+    # Comments stripped first. The same textual grep flagged this file's
+    # own explanation of why the field is absent — segment 9's lesson,
+    # which I re-learned here rather than remembered.
+    markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
+    app = (ROOT / "dashboard" / "static" / "app.js").read_text()
+    app = re.sub(r"/\*.*?\*/", "", app, flags=re.S)
+    app = re.sub(r"//.*", "", app)
+    markup = re.sub(r"<!--.*?-->", "", markup, flags=re.S)
+    for absent in ("pheromone", "priority"):
+        assert absent not in markup.lower(), f"the page offers {absent}, which is not recorded"
+        assert absent not in app.lower(), f"app.js reads {absent}, which is not recorded"
+
+
+def test_the_allocation_view_is_a_labelled_gap_not_a_drawing(tmp_path):
+    """T8: reserved for Phase 3, and here is the measurement behind it.
+
+    The bar shows `aco_fraction` moving as disruption lands. On the
+    uncontrolled hybrid it does not move: F7 leaves the prescheduled
+    controller built with no arguments, so it varies nothing while
+    logging itself active. A bar drawn today would be a flat line at 50%
+    presented as the project's novelty — F5's failure mode installed in
+    the one widget the thesis rests on.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(arms=["hybrid"], evaluations=120), root=tmp_path)
+    frame = load_steps(started["path"], run_class=None)
+
+    fractions = {
+        value for probe in frame["probe"] if probe is not None
+        for key, value in probe if key == "aco_fraction"
+    }
+    assert fractions, "hybrid did not record aco_fraction at all"
+    assert len(fractions) == 1, (
+        f"aco_fraction now moves ({sorted(fractions)}) — the allocation view "
+        "can be built, and this test is the reminder to build it"
+    )
+
+    markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
+    assert "Phase 3" in markup, "the reserved slot no longer names when it arrives"

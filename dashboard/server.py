@@ -485,6 +485,14 @@ def race_config(spec: RaceSpec) -> Config:
     enters a run** (§15.2) — if it is not something the CLI could also
     set, it is not here.
 
+    The run root is a parameter so the test suite can write into a
+    temporary directory instead of ``outputs/``. That is containment, not
+    convenience: ``run_class`` exists so a scratch run can never silently
+    become evidence, and a harness able to write into the live tree is a
+    hole straight through that guarantee — one corruption demo put a
+    ``manifest``-stamped run there and the provenance guard went red.
+    Detection worked; containment did not exist.
+
     ``run_class`` is ``exploratory`` and not a parameter: a dashboard run
     is a scratch run by construction (D30/D31), and offering a control
     that could stamp one `manifest` would hand a user the one mistake the
@@ -502,7 +510,7 @@ def race_config(spec: RaceSpec) -> Config:
     )
 
 
-def race(spec: RaceSpec) -> dict:
+def race(spec: RaceSpec, root: Path | None = None) -> dict:
     """Execute one real trial and write a normal run directory.
 
     **The dashboard configures and calls; it never steps a loop.**
@@ -519,7 +527,8 @@ def race(spec: RaceSpec) -> dict:
     """
     cfg = race_config(spec)
     stamp = datetime.now()
-    directory = OUTPUTS / stamp.strftime("%Y-%m-%d") / stamp.strftime("%H-%M-%S")
+    root = OUTPUTS if root is None else Path(root)
+    directory = root / stamp.strftime("%Y-%m-%d") / stamp.strftime("%H-%M-%S")
     run_id = directory.name
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -528,7 +537,7 @@ def race(spec: RaceSpec) -> dict:
 
     return {
         "run_id": run_id,
-        "path": str(directory.relative_to(ROOT)),
+        "path": str(directory),
         "run_class": cfg.run_class,
         "arms": [{"id": a, "name": ARM_DISPLAY[a]} for a in cfg.experiment.arms],
         "evaluations": cfg.budget.evaluations,
@@ -536,7 +545,7 @@ def race(spec: RaceSpec) -> dict:
     }
 
 
-def read_run(run_id: str) -> dict:
+def read_run(run_id: str, root: Path | None = None) -> dict:
     """Read a finished run back off disk.
 
     ``run_class=None`` deliberately: a dashboard run is ``exploratory``
@@ -559,9 +568,10 @@ def read_run(run_id: str) -> dict:
     Raises:
         FileNotFoundError: If no such run directory exists.
     """
-    matches = sorted(OUTPUTS.glob(f"*/{run_id}"))
+    root = OUTPUTS if root is None else Path(root)
+    matches = sorted(root.glob(f"*/{run_id}"))
     if not matches:
-        raise FileNotFoundError(f"no run directory named {run_id!r} under outputs/")
+        raise FileNotFoundError(f"no run directory named {run_id!r} under {root}")
     directory = matches[-1]
 
     frame = load_steps(directory, run_class=None)
@@ -577,13 +587,14 @@ def read_run(run_id: str) -> dict:
             "paths": [[int(n) for n in p] for p in rows["best_path"]],
             "excess": [None if pd.isna(x) else float(x) for x in rows["excess"]],
             "valid": [bool(v) for v in rows["path_valid"]],
+            "evaluations": [int(e) for e in rows["evaluations_spent"]],
             # From the analysis layer, not from the series above.
             "mean_excess": float(summary["mean_excess"].iloc[0]) if len(summary) else None,
         })
 
     return {
         "run_id": run_id,
-        "path": str(directory.relative_to(ROOT)),
+        "path": str(directory),
         "run_class": str(frame["run_class"].iloc[0]),
         "horizon": int(frame["timestep"].max()) + 1,
         "arms": arms,

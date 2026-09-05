@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import {
   RECENCY_DECAY, FADE_CUTOFF, fadeOpacity, edgeKey, classify, isUsable,
   buildStateFrames, baselineFrom, stateStyle, ledgerAt, seekEvent,
+  pickNode, pickEdge, edgeHistory,
 } from "../../dashboard/static/model.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -192,5 +193,60 @@ describe("jump-to-next-event", () => {
   test("a quiet run has nowhere to jump, and says so", () => {
     const quiet = run.steps.map((s) => ({ ...s, events: [] }));
     assert.equal(seekEvent(quiet, 0, 1), null);
+  });
+});
+
+describe("the hit-target policy", () => {
+  test("a coincident pair resolves to the same node every time", () => {
+    // The minimum edge length in a medium200 graph is sub-pixel, so at
+    // least one node pair is coincident on screen and a tie is not
+    // hypothetical. A picker that alternates between them is a wrong
+    // answer delivered confidently.
+    const xy = [[40, 40], [40, 40], [200, 200]];
+    const picks = Array.from({ length: 20 }, () => pickNode(xy, 40, 40));
+    assert.deepEqual(new Set(picks), new Set([0]), "the tie-break is not deterministic");
+  });
+
+  test("picks the nearest, not merely one within the radius", () => {
+    const xy = [[100, 100], [104, 100]];
+    assert.equal(pickNode(xy, 103, 100), 1);
+    assert.equal(pickNode(xy, 101, 100), 0);
+  });
+
+  test("returns null outside the radius, so empty space deselects", () => {
+    assert.equal(pickNode([[10, 10]], 400, 400), null);
+    assert.equal(pickEdge([[0, 0], [10, 0]], [[0, 1]], 0, 400), null);
+  });
+
+  test("edge picking measures to the segment, not to its endpoints", () => {
+    // A click at the midpoint of a long edge is far from both ends and
+    // must still select it — distance-to-endpoint would miss entirely.
+    const xy = [[0, 0], [200, 0]];
+    assert.equal(pickEdge(xy, [[0, 1]], 100, 3), 0);
+  });
+});
+
+describe("edge history comes from the run's own event lists", () => {
+  test("every event for an edge, at the timestep the engine recorded it", () => {
+    // F1's rule in a new place: the events are read out of each step's
+    // own list, which the server filled from events_at(). Nothing here
+    // derives an index.
+    const steps = run.steps;
+    const sample = steps.find((s) => s.events.length)?.events[0];
+    assert.ok(sample, "fixture has no events");
+    const history = edgeHistory(steps, sample.u, sample.v);
+    assert.ok(history.length > 0);
+    for (const h of history) {
+      const declared = steps[h.t].events
+        .some((e) => edgeKey(e.u, e.v) === edgeKey(h.u, h.v) && e.kind === h.kind);
+      assert.ok(declared, `t=${h.t} history entry is not in that step's own events`);
+    }
+  });
+
+  test("an edge nothing touched has an empty history, not a guessed one", () => {
+    const touched = new Set(run.steps.flatMap((s) => s.events.map((e) => edgeKey(e.u, e.v))));
+    const quiet = geometry.edges.find(([u, v]) => !touched.has(edgeKey(u, v)));
+    assert.ok(quiet, "every edge was touched; the test proves nothing");
+    assert.deepEqual(edgeHistory(run.steps, quiet[0], quiet[1]), []);
   });
 });

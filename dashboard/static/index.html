@@ -128,6 +128,29 @@
       <p id="chart-key" class="chart-key"></p>
     </div>
 
+    <div id="inspect" class="inspect">
+      <div class="ins-panel">
+        <h3>Inspect <span class="hint" id="ins-hint">click a road or a place</span></h3>
+        <dl id="ins-body"></dl>
+        <table id="ins-events" class="ins-events"></table>
+      </div>
+      <div class="ins-panel">
+        <h3>Per-arm, this step</h3>
+        <div id="ins-arms"></div>
+        <div class="reserved">
+          <b>Allocation view — Phase 3</b>
+          The bar showing <code>aco_fraction</code> sliding toward PSO as a
+          disruption lands needs a working controller. F7 leaves the
+          prescheduled controller built with no arguments, so it varies
+          nothing while logging itself active — measured: this run holds
+          <code>aco_fraction</code> at 0.5 for all 60 steps. A bar drawn now
+          would animate a mechanism known not to work, and would look
+          exactly like one that does. It arrives with the rebuilt control
+          layer.
+        </div>
+      </div>
+    </div>
+
     <div class="panels">
       <div class="legend">
         <div class="legend-col">

@@ -227,3 +227,63 @@ export function excessPath(series, x, y) {
   });
   return parts.join(" ");
 }
+
+
+// --- Inspect (segment 12) ---
+
+//: Click radius in view units. A 2.4px node needs a target far larger
+//: than itself: an exact-hit test on it is unusable, which is why this
+//: picks the NEAREST candidate inside a radius rather than a hit.
+export const PICK_RADIUS = 14;
+
+/**
+ * The nearest node to a point, or null.
+ *
+ * **Tie-break: lowest node index wins.** The minimum edge length in a
+ * medium200 graph is sub-pixel, so at least one node pair is coincident
+ * on screen and a tie is not hypothetical. `<` rather than `<=` keeps
+ * the first candidate encountered, and iteration is over indices in
+ * order, so the same click always selects the same node — a picker that
+ * silently alternates between two coincident nodes is a wrong answer
+ * delivered confidently.
+ */
+export function pickNode(xy, px, py, radius = PICK_RADIUS) {
+  let best = null;
+  let bestDistance = radius * radius;
+  xy.forEach(([x, y], i) => {
+    const d = (x - px) ** 2 + (y - py) ** 2;
+    if (d < bestDistance) { bestDistance = d; best = i; }
+  });
+  return best;
+}
+
+/**
+ * The nearest edge to a point, or null. Same tie-break rule: earliest in
+ * the edge list wins, and the edge list order is the core's own.
+ */
+export function pickEdge(xy, edges, px, py, radius = PICK_RADIUS) {
+  let best = null;
+  let bestDistance = radius * radius;
+  edges.forEach(([u, v], i) => {
+    const [ax, ay] = xy[u], [bx, by] = xy[v];
+    const dx = bx - ax, dy = by - ay;
+    const len = dx * dx + dy * dy;
+    const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len));
+    const d = (ax + t * dx - px) ** 2 + (ay + t * dy - py) ** 2;
+    if (d < bestDistance) { bestDistance = d; best = i; }
+  });
+  return best;
+}
+
+// Everything that happened to one edge, from the steps' own event lists —
+// which the server filled from events_at(). No index is derived here.
+export function edgeHistory(steps, u, v) {
+  const key = edgeKey(u, v);
+  const events = [];
+  for (const step of steps) {
+    for (const event of step.events) {
+      if (edgeKey(event.u, event.v) === key) events.push({ t: step.t, ...event });
+    }
+  }
+  return events;
+}

@@ -196,6 +196,33 @@ describe("the panes are the arms', not decoration", () => {
     assert.ok(new Set(lengths).size > 1, "fixture arms all agree; the test proves nothing");
   });
 
+  test("a route that stops short renders as broken, from a real synthetic run", async () => {
+    // T2: built from a real race with ACO's tail truncated over t=18..24,
+    // so every field except the one under test is what the engine
+    // produced. preserve_connectivity means no arm fails in any run
+    // obtainable from the engine, so the failing case had to be
+    // constructed — a guarantee about failure cannot be tested by data
+    // in which nothing fails.
+    const brokenRun = readFixture("race_broken.json");
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = brokenRun;
+
+    hook.show(21);   // inside the failure window
+    const panes = nodes.panes.children;
+    const aco = brokenRun.arms.findIndex((a) => a.id === "aco");
+    assert.equal(panes[aco].className, "pane broken");
+    assert.equal(panes[aco].children[0].children.at(-1).textContent, "no route");
+    // Distinct from a short path, not merely shorter: the neighbours are
+    // intact and must not be marked.
+    brokenRun.arms.forEach((_, i) => {
+      if (i !== aco) assert.equal(panes[i].className, "pane", `arm ${i} wrongly marked`);
+    });
+
+    hook.show(30);   // outside it — the same arm recovers
+    assert.equal(nodes.panes.children[aco].className, "pane",
+      "the arm stayed marked broken after its route recovered");
+  });
+
   test("a route that never reaches the goal reads as broken, not as short", async () => {
     // §15.5: "a path failing to reach the goal shows up instantly, in
     // whichever arm." Nothing exercised that — every arm reaches the goal
@@ -217,5 +244,58 @@ describe("the panes are the arms', not decoration", () => {
     assert.equal(panes[0].className, "pane", "an intact route was marked broken");
     const badge = panes[1].children[0].children.at(-1);
     assert.equal(badge.textContent, "no route");
+  });
+});
+
+describe("the inspect panel is about the thing you clicked", () => {
+  test("the edge panel shows THAT edge's history, not another's", async () => {
+    // The mutation this exists for: read edges[0] whatever was clicked.
+    // Same shape, plausible numbers, wrong road — and nothing else on the
+    // page would look different.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    const edges = hook.state.geo.edges;
+    // Pick an edge that events actually touched, so its history is not
+    // trivially empty and cannot coincide with another's by accident.
+    const touched = fixtures.timeline.steps.flatMap((s) =>
+      s.events.map((e) => [e.u, e.v, s.t]));
+    assert.ok(touched.length, "fixture has no events");
+    const [u, v] = touched[0];
+    const index = edges.findIndex(([a, b]) =>
+      (a === u && b === v) || (a === v && b === u));
+    assert.ok(index >= 0, "the touched edge is not in the base edge list");
+
+    hook.state.selection = { kind: "edge", index };
+    hook.show(59);
+
+    assert.match(nodes["ins-hint"].textContent, new RegExp(`road ${u}.${v}`));
+    const shown = nodes["ins-events"].children.length;
+    const expected = fixtures.timeline.steps
+      .flatMap((s) => s.events)
+      .filter((e) => (e.u === u && e.v === v) || (e.u === v && e.v === u)).length;
+    assert.equal(shown, expected, "the panel listed a different edge's history");
+    assert.ok(expected > 0, "chose an edge with no history; the test proves nothing");
+  });
+});
+
+describe("the highlight and the panel agree", () => {
+  test("the selection marker sits on the thing the panel describes", async () => {
+    // My uncommissioned mutation: draw the marker at xy[0] whatever was
+    // selected. The panel stayed correct, the picture pointed elsewhere,
+    // and all 42 JS tests plus the Python suite passed. It is segment 8's
+    // failure — the picture and its caption disagreeing while both look
+    // right — moved into the selection layer.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    const node = 137;
+    hook.state.selection = { kind: "node", index: node };
+    hook.show(10);
+
+    assert.match(nodes["ins-hint"].textContent, new RegExp(`place ${node}`));
+    const marker = nodes.canvas.children
+      .find((c) => c.attrs.class === "sel-node");
+    assert.ok(marker, "no selection marker was drawn");
+    const [x, y] = hook.state.xy[node];
+    assert.equal(Number(marker.attrs.cx).toFixed(2), x.toFixed(2),
+      "the marker is not on the node the panel describes");
+    assert.equal(Number(marker.attrs.cy).toFixed(2), y.toFixed(2));
   });
 });

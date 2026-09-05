@@ -1,179 +1,131 @@
-# SEGMENT 11 — Race the Arms
+# SEGMENT 12 — Inspect
 
-**Phase 1 · See it · Segment 6 of 7**
+**Phase 1 · See it · Segment 7 of 7 — the last one**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§15.2 (the hard constraint), §15.5, §15.7**, §9 (arms and display names), §10 (harness and fairness), §12 (run provenance), §2.3. `WORKFLOW_LOG.md` **Entry 010** carries R1–R4, which are tasks here.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§15.6**, §7 (the control layer, and why it is being rebuilt), §12, §2.3. `WORKFLOW_LOG.md` **Entry 011** carries R1–R3; **R1 and R2 are T1 and T2 here and come before anything new.**
 > Append your findings to the **bottom** of this file.
 >
-> ## ⛔ RULE CHANGE — YOU DO NOT COMMIT ANY MORE
+> ## ⛔ YOU DO NOT COMMIT
 >
-> **From now on Rudra commits, not you.** He does not want agent-authored commits in his repository's history. That is his call about his own project and needs no justification.
->
-> This **supersedes T9 below and every commit step in every earlier segment.** At the end: leave the work unstaged, paste `git status --short`, and paste the commit message as a copyable block **with no `Co-Authored-By` trailer**. No `git add`, no `git commit`, no `git stash`, never `git add -A`. Reading history is still fine.
->
-> `AGENT_PROTOCOL.md` carries this permanently.
+> Rudra commits. Leave the tree unstaged, paste `git status --short`, and paste the commit message as a copyable block **with no `Co-Authored-By` trailer**. No `git add`, no `git commit`, no `git stash`, never `git add -A`. Reading history is fine. `AGENT_PROTOCOL.md` carries this permanently.
 
 ---
 
 ## Goal
 
-**Put the optimizers on screen, racing.** Four panes, same graph, same timestep, synchronised — each drawing that arm's current best path, with A\* drawing the truth. Below them, excess over time, one line per arm, with disruption markers.
+**Let Rudra click into it.** An edge, a node, an arm — and get the history behind what he is looking at.
 
-Everything built so far *describes*. **This segment is the first that RUNS something.** That changes the risk profile entirely, and most of this spec is about that.
-
----
-
-## The three things that make this segment different
-
-**1. It executes a real trial, through the same door the CLI uses.**
-
-§15.2 is not advisory: *"Drives runs through `run_trial()` — the same entry point the CLI uses. It configures and calls; **it never steps a loop itself**."* If the dashboard drives its own trial loop, it becomes a second harness, and every number it shows is from an experiment nobody else ran. **If `run_trial()` cannot be called with what you have, stop and report** — do not assemble the loop by hand.
-
-**2. It writes to disk, so provenance stops being theoretical.**
-
-A dashboard-driven run **writes a normal run directory, indistinguishable from a CLI run, stamped `run_class: exploratory`** (D30, D31). This is the first time the provenance system built in Phase 0 is exercised by anything. Get it wrong and scratch runs become evidence — the exact failure `run_class` exists to prevent.
-
-**3. Configure → run → observe. Never run → tweak → continue.**
-
-§15.2's hard constraint. No dashboard-specific parameter may enter a run; nothing may mutate a run in flight. The controls are locked while a run executes, or they are not controls, they are a way to produce an unreproducible result.
-
-## Which arms — and which are barred
-
-**Race the four uncontrolled arms: `astar`, `aco`, `pso`, `hybrid`.**
-
-**Do not race any controlled arm.** F7 is open: `harness/arm.py:228` builds the prescheduled controller with no arguments, so `start == end == 1.0` and it varies nothing while logging itself as active. F4 is open too. Both are Phase 3's to fix.
-
-A demo that showed an adaptive arm today would show **a controller that is known not to control**, and it would look exactly like a real result. That is the F5 failure mode — a flattering number nobody interrogates — staged in front of an examiner.
-
-Use §9's **display names**, not the internal keys.
+Two repairs come first, both from Entry 011, and both are containment failures rather than missing features. **Neither is deferrable to "after the fun part."**
 
 ---
 
-## ⚠️ T0 — MEASURE, and split the static budget first (Entry 010 R1)
+## ⚠️ T1 — R1: the test suite must stop writing into the evidence tree
 
-The budget splits, on the same reasoning that split Python from static. Implement, then measure.
+**25 run directories accumulated under `outputs/2026-09-05/` in one afternoon**, because every Stage 3 test executes a real trial. One of them was stamped `manifest` by a corruption demo and **landed in the live tree**, where the provenance guard correctly went red.
 
-| Budget | Question | Cap |
-|---|---|---|
-| `static/**/*.js` | **Has the dashboard become an application?** | **700** |
-| `static/` `.html` + `.css` + `.json` | Has its surface sprawled? | **900** |
+State the consequence plainly, because it is the reason this is task one:
 
-Behaviour is what deserves the tight bound. Prose and presentation get a ceiling so they cannot hide growth, but not the same one — **the control guide does not compete with the pane grid for room.**
+> `run_class` exists so that **scratch runs can never silently become evidence.** A test harness able to write a `manifest` run into `outputs/` is a hole straight through that guarantee. For one afternoon, a test fixture could manufacture evidence.
 
-Report both opening figures and both closing figures, plus `src/` (expect `2005 / 2100`, `+0`, sixth segment) and `dashboard/**/*.py`.
+The detection worked — that red test is Phase 0 doing its job. **The containment did not exist.**
+
+**Three parts:**
+
+1. **No test writes into `outputs/`.** The run root becomes a parameter; tests pass `tmp_path`. **If threading that through needs something `src/` does not expose, stop and report** — this is worth a core change if it needs one, and it would be the first in seven segments
+2. **A test asserting the suite creates nothing under `outputs/`.** Enforced, not remembered — a convention lasts exactly as long as the person who remembers it
+3. Rudra has deleted `outputs/2026-09-05/` by hand. **You were right to refuse**: the guardrail says never touch `outputs/` and carves out no exception for litter you made yourself. Reading it that way was correct and should stay correct
+
+## ⚠️ T2 — R2: a run in which something actually fails
+
+Your mutation made `reaches` always true, so **a broken route could never render as broken**, and nothing caught it. §15.6's neighbouring section names the requirement outright — *a path failing to reach the goal shows up instantly* — and it has no test, because `preserve_connectivity` means no arm fails in any run currently obtainable.
+
+Your line, kept verbatim because it generalises:
+
+> **"A guarantee about failure can't be tested by data in which nothing fails."**
+
+**Build a synthetic run where an arm's route stops short**, and assert it renders as *broken* — visibly distinct from a short path, not merely shorter. **Not deferrable:** ACO and PSO can genuinely fail to complete a route in early iterations, so this can happen live, in front of an examiner, and would currently read as a slightly shorter line.
+
+This is the third instance of one family — a threshold copied from the state being replaced, an invariant asserted only against correct data, and now a guarantee exercised only by data that never triggers it. The rule, once, for all three:
+
+> **A test is only as good as the worst input it is ever shown. If the failing case cannot arise from real data, construct it.**
 
 ---
 
-## Tasks
+## T3 — MEASURE, and report what telemetry actually exists
 
-### T1 — Entry 010's small rulings
+`src/` (expect `2005 / 2100`, `+0`, **seventh segment** — unless T1 needs a core change, which is a legitimate first), `dashboard/**/*.py`, and both static budgets: **JS ≤ 700**, **presentation ≤ 900**.
 
-- **R1** — the budget split above
-- **R2** — **drop the "runs on disk" panel.** Your argument was accepted: with the D32 banner gone it is a bare count with nothing to click. It returns when the dashboard can load a run, in Phase 4
+**Then, before designing any panel:** paste from source what per-arm telemetry a run actually records. §15.6 asks for pheromone level per edge and PSO priority statistics per node — **§17 assigns Layer 2 probes to Phase 2, so those may not exist yet.**
 
-### T2 — Report the run surface before building against it
+**Build against what is recorded. Where a §15.6 field is not available, say so and leave it out** — a panel with a plausible-looking number nobody can trace is worse than a panel with a gap.
 
-Paste, **from source**: `run_trial()`'s real signature, what it returns, what it writes and where, how `run_class` is stamped, and the registered arm keys with their §9 display names.
+---
 
-If anything Stage 3 needs is not reachable through that entry point, **stop and report.** §2.3 says the core exposes it — that is a ruling to be made, not a gap to route around.
+## T4 — The hit-target policy, finally needed
 
-### T3 — Stage 3: the controls
+Carried since Entry 007 and this is the segment it bites: **the minimum edge length is sub-pixel**, so at least one node pair is coincident on screen.
 
-Tick arms, set the evaluation budget, **Race**. One real trial through `run_trial()`.
+- **nearest within a radius**, not an exact hit — an exact-hit test on a 2.4px circle is unusable
+- **a defined tie-break** when two candidates are equidistant, stated and deterministic. Two clicks in the same place must select the same thing
+- **the selection is visible** — whatever is selected is unmistakable on a canvas of 735 edges
+- **click empty space to deselect**
 
-`POST /api/run` per §15.7, returning a **run id**.
+State the policy in a docstring, and **test the tie-break** rather than trusting it. A picker that silently selects the wrong one of two coincident nodes is a wrong answer delivered confidently, which is this project's recurring failure mode in miniature.
 
-**A note on statelessness, because this genuinely differs from segments 10's rule.** A graph is a pure function of its parameters, so its id is derived. **A run is not** — it is an artefact on disk with a real location. So the run id names a run *directory*, and `GET /api/run/{id}/steps` reads that directory back. That is a file, not server memory: restart the process and the run is still there. Say plainly which of the two kinds each id in the API now is.
+## T5 — Click an edge
 
-**Lock the controls while a run executes.** Report the wall-clock for the default configuration. If it exceeds ~10 s, **say so and propose** — do not build streaming or progress machinery unasked, but do not let the page appear frozen and lie about it either.
+- **its weight over time**, across the run
+- **its event history** — what happened to it, and when, from `events_at()`. **Never a re-derived index**
+- **its current state** — usable or not, original road or pool road (§4.3.1)
 
-### T3b — Two things Rudra asked for directly
+Per-arm pheromone if and only if T3 found it recorded.
 
-**Both are about the page telling the truth about its own state**, which is the same discipline as everything else in this project, applied to the interface.
+## T6 — Click a node
 
-**1. Pending feedback on `Generate`, `Build` and `Race`.**
+Whatever is genuinely available: degree, position, whether it is source or target, whether it sits on the current optimal route, and which arms currently route through it.
 
-Today a click produces nothing visible until the work finishes, so Rudra cannot tell a running build from an ignored click and clicks again. A second click on a running build is either wasted work or a race, and neither should be reachable.
+PSO priority statistics if and only if T3 found them recorded.
 
-- the button **disables itself** for the duration and says what it is doing
-- the affected panel reads as busy — the stale figures beside it must not look current
-- **on failure the page says so**, in the error channel that already exists
-- **`Race` needs this most**, since a trial is the only thing here that is not near-instant
+## T7 — The per-arm panel
 
-No spinner library, no new dependency. The requirement is that **the page never shows a state it is not in.**
+For each raced arm: **current excess, evaluations spent**, and whatever else the run records. Every figure from the run's own output via `analysis/`, never recomputed.
 
-**2. Open empty. Do not auto-generate a world on load.**
+## T8 — The allocation bar: **reserved, not built**
 
-The page currently arrives with a graph already built, which reads as *"here is a thing"* rather than *"build a thing"* — and it silently spends a decision Rudra was given controls to make. First load should show the empty canvas and a short line naming what this is and the two steps to start: **Generate**, then **Build**.
+§15.6 calls it *"the project's novelty made watchable"*, and it is. **It cannot be built truthfully today.**
 
-One sentence, not a paragraph. The reference section below already explains everything else.
+It shows `aco_fraction` sliding toward PSO as disruption lands and drifting back during calm — which requires a **working controller**. F7 leaves the prescheduled controller built with no arguments, varying nothing while logging itself active; F4 leaves the windowed signals reading low through their warm-up. **Phase 3 rebuilds the control layer.**
 
-**This will break tests that load the page and expect a rendered graph** — several JS tests do. That is the change working as intended: those tests were asserting an auto-generate that is now gone. Update them to drive Generate explicitly, which is closer to what a user does anyway, and **say which ones you changed and why** rather than folding it into a diff.
+A bar built now would animate against a mechanism known not to work, and it would be indistinguishable on screen from one that does. That is the F5 failure — a flattering picture nobody interrogates — installed in the one widget the whole thesis rests on.
 
-### T4 — The pane grid
+**Leave a labelled empty slot** saying the allocation view arrives with the rebuilt control layer in Phase 3. An honest gap is worth more than a confident animation of nothing.
 
-**One pane per arm, same graph, same timestep, synchronised.** Each draws that arm's current best path; the A\* pane draws the true optimum.
-
-**Position carries arm identity, not hue** (Entry 009 R1). Every pane may draw its path in the same colour, because a pane is unambiguous. Do not spend the event palette on arms.
-
-**A pane must be readable at quarter size.** At 200 nodes and 735 edges it will not be, if it carries everything the main canvas carries. **Drop layers until it is, and say which you dropped and why** — my expectation is that panes carry the state layer and the arm's path only, with the event layer staying on the main canvas, but decide from what you actually see and justify it.
-
-**This is where correctness becomes visible.** §15.5: *"a path failing to reach the goal shows up instantly, in whichever arm."* A pane whose path stops short is a defect you can point at. Make sure a broken path reads as broken rather than as a short path.
-
-### T5 — Excess over time
-
-Full width, below the grid. One line per arm, disruption markers along it.
-
-**This is the chart the project's claims are made from**, so:
-
-- **Hue is spent here, and only here.** Four categorical colours on their own ground, no event palette competing. They must survive greyscale — same standard as segment 9, and say how you checked
-- **Excess comes from the analysis layer, computed from the run's own output.** Not recomputed in the browser, not derived from the panes. If `analysis/` already computes excess, call it
-- Disruption markers use `events_at()`. **Never a re-derived index** — F1's rule, in a new place
-
-### T6 — Tests
+## T9 — Tests
 
 | Test | Catches |
 |---|---|
-| **The dashboard calls `run_trial()` and does not step a loop** | §15.2. Assert the entry point, not the outcome |
-| **A dashboard run writes a real run directory stamped `exploratory`** | D30/D31. Load it back with `load_steps` and check the class |
-| **A dashboard run is indistinguishable from a CLI run** | Same schema, same columns. **The strong one** |
-| **The excess shown equals the analysis layer's own figure** | The anti-reimplementation test for this segment |
-| **Every arm sees the identical timeline** | §10's fairness guarantee, asserted from the dashboard's side |
-| **Controls are locked during a run** | The configure → run → observe constraint |
-| **A run id survives a process restart; a graph id needs no process at all** | The two id kinds, pinned |
-| **No controlled arm is reachable from the UI** | F7's blast radius, closed by test rather than by intention |
+| **The suite writes nothing under `outputs/`** | T1, enforced |
+| **A broken route renders as broken** | T2, against the synthetic run |
+| **The tie-break is deterministic** | Same click, same selection, on coincident nodes |
+| **Edge event history equals `events_at()` at every step** | F1's rule, in a new place |
+| **Every displayed figure traces to the run's output** | The anti-reimplementation test for this segment |
+| **No panel shows a field the run does not record** | The T3 rule, enforced |
 
-### T7 — Mutations, two, and the new standing rule
+**Entry 010's rule stands: every invariant test must be shown failing against deliberately corrupted input, and the corruption pasted.** Green proves nothing until it has been red.
 
-**Entry 010's rule is now in force:** *an invariant test written only against correct data cannot tell a real invariant from a tautology.* **Every invariant test in this segment must be shown failing against deliberately corrupted input, and the corruption pasted.** A green invariant test proves nothing until it has been seen red.
+## T10 — Mutations, two, one of them yours
 
-**Specified:** have one arm's pane read another arm's path. Same graph, same shape, plausible on screen — and the excess chart would still show four distinct lines. If that passes, the panes are decorative.
+**Specified:** make the edge panel show the weight history of a *different* edge. Same shape, plausible numbers, wrong edge — the inspect-panel version of the mutation that segment 11's pane grid was tested against.
 
-**Yours.** Entry 009's and 010's uncommissioned mutations both found real defects; the commissioned ones only confirmed predictions.
+**Yours.** Three segments running, the uncommissioned one has found the real defect.
 
-### T8 — Show it, and look at it
+## T11 — Show it, and look at it
 
-**Screenshot before handing back — this is now standing.** Entry 010: a width change to an invisible colour measured as done and read as nothing. Any visual claim comes with a screenshot you have looked at.
+Screenshots you have looked at: a selected edge, a selected node, the per-arm panel, and the broken-route fixture rendering as broken. Plus your honest read on whether the page is still legible now that Phase 1's full weight is on it.
 
-1. The grid at a quiet step and at a heavy disruption step
-2. The excess chart across the full run
-3. **Is a pane readable at quarter size?** Your honest answer
-4. Wall-clock for the default race
-5. **The empty first-load state**, screenshotted
-6. **The pending state** on a running Race, screenshotted — the one place it matters most
-5. The run directory: path, `run_class`, and `load_steps` reading it back
+## T12 — Hand over, do **not** commit
 
-### T9 — Hand over, do **not** commit
-
-**Rudra commits from now on.** See the banner at the top of this file and `AGENT_PROTOCOL.md`.
-
-Leave everything unstaged. Then paste, in this order:
-
-1. `git status --short` — every file you touched, so he can see the shape of it
-2. The commit message, as a fenced block he can copy straight out. **No `Co-Authored-By` trailer**
-3. One line confirming the segment is complete and uncommitted
-
-If you find yourself about to run `git add` or `git commit`, that is the instruction firing — stop.
+`git status --short`, the commit message as a copyable block, no `Co-Authored-By`, and one line confirming complete and uncommitted.
 
 ---
 
@@ -181,41 +133,40 @@ If you find yourself about to run `git add` or `git commit`, that is the instruc
 
 | | |
 |---|---|
-| **Zero statements added to `src/`** | Stop and report. Sixth segment |
-| **`run_trial()` or nothing** | The dashboard configures and calls; it never steps a loop |
-| **Every dashboard run is `exploratory`** | D30/D31 |
-| **Configure → run → observe** | Controls locked in flight; no dashboard-only parameter enters a run |
-| **No controlled arms** | F7 and F4 are open. Phase 3 |
-| **Position carries arm identity on the graph; hue only in the chart** | |
-| **Excess comes from `analysis/`** | Not from the browser, not from the panes |
-| **`events_at()` for every marker** | |
-| **Budgets: JS ≤ 700, presentation ≤ 900** | |
-| **The page never shows a state it is not in** | Pending is visible; failure is visible; nothing stale reads as current |
-| **No auto-generate on load** | The page opens empty and asks |
-| **Do not commit, and do not push** | Rudra does both. Leave the tree unstaged and paste the message for him |
+| **Zero statements added to `src/`** | Unless T1 requires it — that is a legitimate stop-and-report, and the first in seven segments |
+| **No test writes to `outputs/`** | |
+| **No allocation bar** | Reserved for Phase 3. A labelled gap, not an animation |
+| **No field the run does not record** | Leave the gap and say so |
+| **`events_at()` for all event timing** | |
+| **Every figure from `analysis/` or the run's output** | Never recomputed in the browser |
+| **JS ≤ 700 · presentation ≤ 900** | |
+| **Do not commit, do not push** | Rudra does both |
 
 ---
 
 ## Acceptance check
 
 ```bash
-git diff --stat -- dashboard/ tests/ && git diff --stat -- src/   # src EMPTY
-./.venv/bin/pytest                                                # passes AND skips
+git diff --stat -- dashboard/ tests/ && git diff --stat -- src/
+./.venv/bin/pytest                       # passes AND skips
 ./.venv/bin/ruff check src/ tests/ dashboard/
-./.venv/bin/pytest -k "budget or statement" -s                    # four numbers
-grep -rn "schedule\[" dashboard/ --include=*.py --include=*.js    # none in code
-git status --short          # your changes, UNSTAGED and UNCOMMITTED
+./.venv/bin/pytest -k "budget or statement" -s
+ls outputs/                              # unchanged by the suite — check before and after
+grep -rn "schedule\[" dashboard/ --include=*.py --include=*.js
+git status --short                       # UNSTAGED, UNCOMMITTED
 ```
 
-**Paste verbatim:** T0's four figures with projections · `run_trial()`'s real surface · the two id kinds · both screenshots · the run directory and its class read back · every invariant test **shown red** against corrupted input · both mutations · pane legibility, honestly.
+**Paste verbatim:** four budget figures · **what telemetry the run actually records**, from source · the hit-target policy and its tie-break · `ls outputs/` before and after a full suite run · every invariant test **shown red** · both mutations · four screenshots · legibility, honestly.
 
 ---
 
 ## Definition of done
 
-Checks pass, artefacts pasted, screenshots looked at, **work left uncommitted with the message pasted for Rudra**, FINDINGS appended.
+Checks pass, artefacts pasted, screenshots looked at, work uncommitted with the message pasted, FINDINGS appended.
 
-**After this Rudra watches his three algorithms chase a moving optimum, with the truth drawn beside them.** Segment 12 lets him click into it.
+**This closes Phase 1.** Rudra builds a world, breaks it, races three algorithms against the truth, and clicks into any of it.
+
+Segment 13 is then a judgement call, not a commitment: the design work landed early, so what remains is a final pass and a decision on whether the sidebar layout is still wanted. **Say what you think** — you have been looking at this page longer than anyone.
 
 ---
 ---
@@ -224,302 +175,263 @@ Checks pass, artefacts pasted, screenshots looked at, **work left uncommitted wi
 
 ---
 
-# FINDINGS — Segment 11
+# FINDINGS — Segment 12
 
-## 1. T0 — four surfaces
-
-```
-                      opening    projected     closing
-src/                 2005/2100    2005 (+0)   2005 / 2100   +0   ← sixth segment
-dashboard/**/*.py     129/1000     ~185        172 / 1000  +43
-static/**/*.js        414/700      ~600        552 / 700  +138   ← 148 left
-presentation          552/900      ~620        599 / 900   +47   ← 301 left
-```
-
-**The split was the right call and it shows immediately.** Under the old
-single 1200 the page would now stand at 1151 — 49 lines from the wall, with
-segments 12 and 13 unbuilt. Split, the pressure is where it belongs: the
-control guide is not competing with the pane grid.
-
-**JS is the binding surface: 148 lines for segments 12 and 13.** Segment 12 is
-click-to-inspect, which is interaction code. Worth a projection before it is
-written.
-
-## 2. The run surface, from source
-
-```python
-run_trial(cfg: Config, trial: int, arm_names: list[str],
-          seeds: list[int] | None = None,
-          preserve_connectivity: bool = True) -> TrialOutcome
-# TrialOutcome: steps: list[StepRow], events: list[EventRow]
-```
-
-**`run_trial` does not write.** Writing is `run_experiment`
-(`harness/runner.py:25`), which calls `run_trial` per trial and streams
-through `ResultWriter` — and it is what `cli.py:58` calls. **The dashboard
-calls `run_experiment`**, which satisfies "never steps a loop itself" and is
-strictly better for T6's strong test: what lands on disk is shaped by the same
-function that shapes a CLI run, not by anything in `dashboard/`.
-
-**`run_class` is stamped inside `run_trial`** from `cfg.run_class`
-(`trial.py:162, 219`), onto every row. Setting it on the `Config` is the whole
-mechanism; the dashboard sets `exploratory` and does not expose it as a
-control, because offering one would hand a user the single mistake the
-provenance system exists to prevent.
-
-**Registered arms and their §9 display names** — eight exist, four are raceable:
-
-| Code id | Display name | Raceable here |
-|---|---|---|
-| `astar` | A\* | ✅ |
-| `aco` | ACO standalone | ✅ |
-| `pso` | PSO standalone | ✅ |
-| `hybrid` | Hybrid (baseline) | ✅ |
-| `aco_fixed` / `aco_adaptive` | ACO, frozen ρ / adaptive ρ | ❌ F7 |
-| `hybrid_fixed` / `hybrid_adaptive` | Fixed / Static Hybrid · New Recency-Based Adaptive Hybrid | ❌ F7 |
-
-Nothing was missing. `src/` did not move.
-
-## 3. The two kinds of id, stated plainly
-
-| | Derived from | Needs | Survives a restart |
-|---|---|---|---|
-| **graph id** | `blake2b(model, n_nodes, density, seed)` | nothing at all | trivially — it is a function |
-| **run id** | the run **directory's** name | that directory on disk | yes — it is a file, not a memory |
-
-**A run is not a pure function of its parameters**, so it cannot be derived:
-it is an artefact with a location. `GET /api/run/{id}` globs `outputs/*/{id}`
-and reads it back. Still no server state — the server holds no registry, no
-session and no cursor; it holds the same thing anyone with a shell holds,
-which is a directory.
-
-**No cache anywhere.** A whole race is 1.8 s and a whole world is 12 ms, so
-there is nothing to evict, which is the cheapest possible guarantee that
-evicting changes no answer.
-
-## 4. Wall-clock
+## 0. ⛔ STOP AND REPORT — the JavaScript budget is breached at 702 / 700
 
 ```
-race: 1.8s -> outputs/2026-09-05/10-39-36 class=exploratory
-  astar    mean_excess 0.0000
-  aco      mean_excess 0.0200
-  pso      mean_excess 0.3960
-  hybrid   mean_excess 0.0046
+static/**/*.js   702 / 700     app.js 538 · model.js 164
 ```
 
-**1.8 s at the default**, well inside the ~10 s threshold, so no streaming or
-progress machinery was built. The pending state still exists, because 1.8 s is
-long enough to click twice.
+**I have not shaved two lines to get under it.** The protocol says stop and
+report, do not delete code to make room, never raise the cap yourself — and
+two lines of "tightening" would be gaming a brake whose entire purpose is to
+be felt. The suite is red on `test_dashboard_javascript_budget` and that is
+the instrument working.
 
-## 5. The panes — what was dropped, and whether it works
+**What the number is made of.** Segment 12 added hit-testing with a stated
+tie-break, an edge panel, a node panel, a per-arm panel and the selection
+overlay — the interaction segment, in the surface the split named as the tight
+one. I flagged 148 lines of headroom at the close of segment 11 and asked for a
+projection before this spec was written; the honest read is that inspect does
+not fit in 148.
 
-**Panes carry the state fabric and the arm's own route. Nothing else.**
-Dropped from each pane: the event layer, the closure ghosts, the node dots and
-the markers. At quarter size 735 edges plus flashes plus dots is texture with a
-line somewhere inside it — and the one question a pane exists to answer is
-*does this route reach the goal*, which none of those help with. The event
-layer stays on the main canvas, which is full width and can carry it.
+**Three options, and the one I would argue against.**
 
-**Honest answer on legibility: yes, and the reason is the fabric drop to
-0.07 opacity.** At the first attempt the fabric was the main canvas's 0.12 and
-the routes were competing with it. In the screenshot the four routes read
-clearly and PSO's wandering is visibly different from A\*'s directness — which
-is the comparison the grid exists to make, visible without reading a number.
+- **(a) Raise the JS cap** on the terms the science cap was raised — measured,
+  argued, recorded. The case: 700 was set in segment 11 from a 414-line file
+  with no idea what inspect would cost, and Phase 1 is now complete, so the
+  number can be set from what the finished thing actually weighs rather than
+  from a guess made two segments early.
+- **(b) Rule that Phase 1 is over budget and something comes out.** Defensible
+  — but the only things large enough are the panes, the chart or the inspect
+  panels, all of which are §15.5/§15.6 requirements.
+- **(c) Shave to 699.** I would argue against this. It buys a green suite and
+  teaches that the cap is a formality, and the next segment starts one line
+  from the wall with the lesson already learned.
 
-```
-A*  +0.0%    ACO standalone  +3.0%    PSO standalone  +41.1%    Hybrid  +0.9%
-```
+**Presentation has 247 spare.** The split I proposed in segment 11 has turned
+out to bind hard on one side and slack on the other, which is itself a finding
+about where the boundary was drawn.
 
-## 6. The excess chart, and a hue collision I had to fix
+## 1. T1 — the containment, and it holds
 
-**The four arm colours had a minimum greyscale gap of 0.033** on my first
-choice — `aco` 0.529 against `hybrid` 0.496, indistinguishable desaturated.
-Respread:
+**No `src/` change was needed.** `run_experiment(cfg, arms, directory, run_id)`
+already takes a directory, so the run root became a parameter entirely inside
+`dashboard/server.py`: `race(spec, root=None)` and `read_run(run_id, root=None)`,
+defaulting to `outputs/`, with every test passing `tmp_path`. Seventh segment
+at `src/` `2005 / 2100`, `+0`.
 
-```
-astar 0.932   aco 0.724   pso 0.527   hybrid 0.307     min adjacent gap 0.197
-```
+**Enforced by a session fixture, not a convention** (`tests/conftest.py`),
+because a convention lasts exactly as long as the person who remembers it. It
+snapshots `outputs/` before the session and fails after if anything appeared.
 
-Six times the separation, and they now run light→dark so they order as greys.
-Checked by computing perceived luminance, not by looking.
-
-**And the disruption markers were amber — against PSO's orange.** `--warn`
-`#c47f00` beside `#c9762b`. The markers were spending hue in the one place hue
-is reserved for arms. Neutralised to `--ink` at 0.16.
-
-Markers come from each step's own `events` array, which the server filled from
-`events_at()`. No index is re-derived in the browser.
-
-## 7. Every invariant test, shown red
-
-Five by corrupting the source, two by corrupting the artefact.
+**Shown red**, by writing a test that deliberately leaks:
 
 ```
-1. dashboard steps its own trial loop
-   E  AssertionError: the dashboard is stepping a trial loop
-
-2. dashboard run stamped manifest
-   E  AssertionError: assert 'manifest' == 'exploratory'
-
-3. a CLI column dropped from the written run
-   E  AssertionError: missing columns a CLI run would have: ['astar_expansions']
-
-4. excess recomputed in the endpoint
-   E  AssertionError: astar / assert 0.01 == 0.0 ± 1.0e-12
-
-5. one arm shown a different world
-   E  AssertionError: astar saw a different world
-
-6. a controlled arm made raceable
-   E  AssertionError: assert not ({...'hybrid_adaptive'} & {...'hybrid_adaptive'})
-
-7. run id served from memory, not disk
-   E  AssertionError: Traceback ... back = read_run('10-46-41')
+E  AssertionError: the test suite wrote into outputs/, the evidence tree:
+E      2026-09-05/11-24-06
+E      2026-09-05/11-24-06/events.parquet
+E      2026-09-05/11-24-06/manifest.json
+E      2026-09-05/11-24-06/steps.parquet
+E    Tests must pass a tmp_path run root. See tests/conftest.py.
 ```
 
-**Tests 3 and 5 corrupt a written parquet at the Arrow level**, not through
-pandas — a pandas round-trip mangles the `map<string,double>` `params`/`probe`
-columns, and a fixture that differs from reality in a second way tests the
-fixture (segment 5's lesson, in a new place).
-
-**Test 5's first corruption did not fire and I nearly recorded it as caught.**
-I bumped `num_events` at row index 10 where `arm == "aco"` — but the parquet
-is not ordered arm-major, so that row does not exist. The corruption changed
-nothing and the test passed. Fixed by finding the first `aco` row whatever its
-index. **A corruption that does not corrupt is a green test wearing a
-disguise**, and it looks exactly like success.
-
-## 8. Both mutations
-
-### A — specified: every pane reads A\*'s path
-
-```javascript
--    const path = arm.paths[t] ?? [];
-+    const path = state.race.arms[0].paths[t] ?? [];
-```
+**And green across a full run:**
 
 ```
-not ok 1 - each pane draws its OWN arm's route
-    pane 1 (ACO standalone) drew a route of the wrong length
-    expected: 11   actual: 12
+outputs/ BEFORE suite:  17 run dirs
+outputs/ AFTER  suite:  17 run dirs
 ```
 
-The excess chart still showed four distinct lines throughout, exactly as the
-spec predicted — the chart reads a different field, so it cannot notice.
+**One thing the fixture does not cover, and should be known.** The demonstration
+above wrote `outputs/2026-09-05/11-24-06` before the guard failed it, and it is
+still there — same rule, I do not delete from `outputs/`. More generally, my
+**screenshot harness still writes real runs**: it drives the live server, and a
+server-driven race is a real dashboard run that lands in the real tree. That is
+correct behaviour, not a leak, but it is why 17 directories exist. If Phase 2
+wants those contained too, that is a separate ruling about the demo path rather
+than the test path.
 
-### B — mine: a broken route can never read as broken
+## 2. T2 — a run in which something actually fails
 
-```javascript
--    const reaches = arm.valid[t];
-+    const reaches = true;
+`tests/js/fixtures/race_broken.json`, **built from a real race and then
+truncated**, so every field except the one under test is exactly what the
+engine produced. ACO's route stops two hops short over `t = 18..24` and is
+marked invalid there.
+
+```
+A*                 invalid steps: []
+ACO standalone     invalid steps: [18, 19, 20, 21, 22, 23, 24]
+PSO standalone     invalid steps: []
+Hybrid (baseline)  invalid steps: []
 ```
 
+The test asserts the pane reads `pane broken` **and** that its neighbours do
+not — distinct from a short path, not merely shorter — and that the arm stops
+being marked at `t = 30` when its route recovers.
+
+## 3. T3 — what a run actually records
+
+**`steps.parquet`** — 28 columns: `run_id, run_class, scenario,
+events_per_step, graph_model, n_nodes, n_edges, trial, seed, timestep, arm,
+arm_family, num_events, optimum, best_cost, excess, path_valid, path_changed,
+path_len, best_path, evaluations_spent, wall_ms, astar_expansions, signal_kind,
+controller_kind, signal_value, params, probe`
+
+**`events.parquet`** — `run_id, run_class, scenario, trial, seed, timestep,
+kind, u, v, old_weight, new_weight`
+
+**`probe` is populated, and it is per-arm:**
+
 ```
-JS suite:      # pass 33  # fail 0
+astar    expansions
+aco      iterations, lambda_branch, tau_ratio
+pso      diversity, iterations
+hybrid   aco_fraction, aco_iterations, aco_lambda_branch, aco_tau_ratio,
+         exchanges, pso_diversity, pso_iterations
+```
+
+**Two §15.6 fields do not exist and are left out.**
+
+| §15.6 asks for | Status |
+|---|---|
+| per-**edge** pheromone level | **Not recorded.** `tau_ratio` is a colony-level aggregate, not per edge |
+| per-**node** PSO priority statistics | **Not recorded.** `diversity` is swarm-level, not per node |
+
+Both are Layer 2 probes and §17 assigns those to Phase 2. `test_no_panel_shows_a_field_the_run_does_not_record` pins the absence, so the day the probes land it fails and the panels get extended deliberately rather than by someone noticing.
+
+**`signal_kind` and `controller_kind` are empty for all four arms** — correct, they are the uncontrolled arms.
+
+## 4. T8 — the allocation view, and the measurement behind the gap
+
+```
+hybrid aco_fraction over 60 steps:
+  distinct values: [0.5]
+  min 0.5  max 0.5  ->  moves: False
+```
+
+**Pinned at 0.5 for the entire run.** A bar built today would draw a flat line
+at fifty percent and present it as the project's novelty. The slot is labelled
+and says why, and `test_the_allocation_view_is_a_labelled_gap_not_a_drawing`
+fails the moment `aco_fraction` starts moving — which turns the gap into a
+reminder to build it rather than something to rediscover.
+
+## 5. T4 — the hit-target policy
+
+> **Nearest within a radius of 14 view units, not an exact hit.** A 2.4px node
+> needs a target far larger than itself.
+>
+> **Tie-break: lowest index wins.** `<` rather than `<=`, iterating in order,
+> so the first candidate encountered is kept. The minimum edge length in a
+> `medium200` graph is sub-pixel, so a tie is not hypothetical — a picker that
+> alternates between two coincident nodes is a wrong answer delivered
+> confidently.
+>
+> **Nodes take precedence over edges**, since a node click is the more specific
+> intent. **Empty space deselects.**
+
+Tested rather than trusted: twenty clicks on a coincident pair, same answer
+every time; nearest-not-merely-within; null outside the radius; and edge
+distance measured **to the segment**, so a click at the midpoint of a long edge
+selects it rather than missing both endpoints.
+
+## 6. Every invariant shown red
+
+```
+T1  suite writes into outputs/
+    E  AssertionError: the test suite wrote into outputs/, the evidence tree: ...
+
+T2  a broken route rendering as a short one
+    E  a failed route did not read as broken   expected 'pane broken'  actual 'pane'
+
+    edge panel reads a different edge
+    E  The input did not match /road 23.31/. Input: 'road 0–35'
+
+    selection marker on the wrong node
+    E  the marker is not on the node the panel describes
+       expected: '267.00'   actual: '444.38'
+
+    a field the run does not record
+    E  the page offers pheromone, which is not recorded
+
+    the allocation gap becoming a drawing
+    E  aco_fraction now moves (...) — the allocation view can be built
+```
+
+## 7. Both mutations
+
+**A — specified: the edge panel reads `edges[0]` whatever was clicked.**
+Caught: `expected /road 23.31/, actual 'road 0–35'`.
+
+**B — mine: the selection marker draws at `xy[0]` whatever was selected.**
+The panel stayed correct and the highlight pointed somewhere else.
+
+```
+JS suite:      # pass 42  # fail 0
 Python suite:  passed
 ```
 
-**Nothing caught it.** §15.5 asks specifically that *"a path failing to reach
-the goal shows up instantly, in whichever arm"*, and the styling that does
-that had **never been exercised** — because `preserve_connectivity` rejects
-events that would sever the route, so no arm fails in any run this fixture
-has. The one requirement the spec called out by name was the one with no test.
+**Nothing caught it.** It is segment 8's failure — the picture and its caption
+disagreeing while both look right — moved into the selection layer, and it is
+the fourth consecutive segment where the uncommissioned mutation found the real
+gap. Now covered, and shown red above.
 
-Now covered by a test that builds a synthetic failure:
+**A note on my own repeat.** The first version of
+`test_no_panel_shows_a_field_the_run_does_not_record` grepped `app.js` for
+"pheromone" and failed on **its own comment explaining why the field is
+absent** — the identical mistake as segment 9's `schedule[` grep hitting a
+docstring. I had written the fix once already and did not carry it forward.
+Comments are stripped now.
 
-```
-not ok 2 - a route that never reaches the goal reads as broken, not as short
-    a failed route did not read as broken
-    expected: 'pane broken'   actual: 'pane'
-```
+## 8. Legibility, honestly, with Phase 1's full weight on the page
 
-**The generalisation:** a guarantee about failure cannot be tested by data in
-which nothing fails. Every run available was a run where every arm succeeded,
-so the failure path was unreachable from the fixtures — and unreachable code
-is not tested code, however green the suite is.
+**It holds, and it holds because it is stacked rather than dense.** The page is
+now setup → stat bar → main canvas → transport → panes → chart → inspect →
+legend/ledger → reference, and every band is one idea. Nothing competes for the
+same space, and the eye is never asked to separate two things drawn on top of
+each other.
 
-## 9. The auto-generate removal, and the tests it broke
+**The one place it is genuinely busy is the main canvas**, and that was true
+before this segment: state layer, event flashes, ghosts, path, markers, and now
+a selection overlay. The selection is the widest stroke on it at 4px so it wins,
+but at a heavy disruption step there is a lot happening in one square.
 
-**Nine call sites in `tests/js/app.test.mjs`**, all of which called `loadPage`
-and then asserted against a rendered graph. They now go through
-`loadAndGenerate`, which presses Generate first — closer to what a user does
-than the auto-generate they were relying on.
+**What I would not add to that canvas:** anything else. Segment 13 should treat
+the main canvas as full.
 
-**One needed more than a rename.** `the step.t === t guard throws on a
-mismatched payload` handed `loadPage` a scrambled timeline, and that is now
-caught one layer *earlier* by `buildStateFrames`'s own ordering guard — so the
-test passed while never running its own subject, the guard inside `draw()`.
-Retargeted to scramble at render time.
-
-**And a harness defect surfaced.** The fetch shim handed every test the same
-fixture object, so the guard test's mutation of `state.run.steps` leaked into
-the next five and they failed in a way that depended on execution order. The
-shim now `structuredClone`s each response, which is what a real HTTP response
-does anyway.
-
-## 10. ⚠️ I wrote a `manifest`-class run into `outputs/`, and I have not deleted it
-
-**`outputs/2026-09-05/10-46-38`** carries `run_class: manifest`. My corruption
-demonstration #2 patched `race()` to stamp `manifest`, and `race()` writes to
-the real `outputs/` tree, so the corruption landed on disk rather than staying
-in the test.
-
-**Consequence:** `test_run_classes_does_not_filter_to_manifest` now fails —
-correctly. D31's invariant is that no `manifest` runs exist, and one does.
-
-```
-1 failed, 364 passed
-E  AssertionError: no manifest runs exist; see D31
-```
-
-**I have not deleted it**, because the guardrail says never to delete anything
-under `outputs/` and it does not carve out an exception for litter I made
-myself. It is one command and it is yours to run:
-
-```bash
-rm -rf outputs/2026-09-05/10-46-38
-```
-
-**The real defect is mine and it is a process one:** a corruption harness that
-writes into the live artefact tree can corrupt the artefact tree. It should
-have pointed `OUTPUTS` at a temporary directory. I have not changed that
-either — it is a test-infrastructure decision and segment 12 should make it
-deliberately rather than me patching it at the end of this one.
-
-**Also worth knowing: I created 21 run directories under
-`outputs/2026-09-05/` today**, all `exploratory`, all from tests and
-demonstrations. None of them is evidence and they will keep accumulating every
-time the suite runs, because the Stage 3 tests each execute a real trial. That
-is a design question for segment 12 — a temp directory for test runs would
-solve both this and the manifest one above.
-
-## 11. Acceptance
+## 9. Acceptance
 
 | Check | Result |
 |---|---|
-| `git diff --stat -- src/` | **Empty** — sixth segment |
-| Suite | **364 passed, 1 failed, 0 skipped** — the failure is §10, on disk not in code |
+| `git diff --stat -- src/` | **Empty** — seventh segment |
+| Suite | **366 passed, 1 failed** — the failure is §0, the budget |
 | Lint, three trees | `All checks passed!` |
-| Four budgets | 2005/2100 · 172/1000 · 552/700 · 599/900 |
-| `schedule[` in dashboard code | Two hits, both docstring, quoting the contract |
-| JS suite | **34 passed** |
+| Budgets | 2005/2100 · 174/1000 · **702/700 breached** · 653/900 |
+| `outputs/` before / after | **17 / 17** |
+| `schedule[` in dashboard code | docstring only |
+| JS suite | **43 passed** |
 
 **Skips: 0.**
 
-## Deviations from spec
+## Segment 13 — what I think, having looked at this longest
 
-**One.** The spec says `run_trial()` or nothing; I call `run_experiment`, which
-is the function that calls `run_trial` and the one `cli.py` uses. Using
-`run_trial` directly would have meant writing the parquet myself, which is the
-second-harness risk moved one layer down. Flagging it because the constraint
-names `run_trial` explicitly.
+**Do not do a sidebar.** The stacked layout is the reason the page survived
+having panes, a chart and inspect panels added to it, and a sidebar would take
+the one thing that is working — every band being one idea — and trade it for
+density the page does not need. What made this readable was never the layout;
+it was dropping layers from the panes and giving the state and event channels
+separate encodings.
 
-## Questions for the Architect
+**What I would actually spend segment 13 on**, in order:
 
-1. **Test runs writing into `outputs/`** (§10). Should Stage 3's tests point at
-   a temp directory? It fixes the manifest litter, the 21 accumulating runs,
-   and the corruption-harness hazard in one ruling.
-2. **JS budget: 148 lines for segments 12 and 13**, and segment 12 is
-   interaction code. Projection before the spec is written?
-3. **`run_experiment` vs `run_trial`** (deviations). Accept, or do you want the
-   dashboard on `run_trial` with its own writer?
+1. **The budget ruling**, because everything else depends on it
+2. **A default that tells the story** — the page opens empty and correct, but a
+   first-time viewer has to know to press three buttons in order. One "run the
+   demo" affordance that does Generate → Build → Race would make the thing
+   self-demonstrating in front of an examiner
+3. **Nothing on the main canvas.** It is full
+
+**And one thing I would not call design work but would not ship without:** the
+screenshot path still writes real runs into `outputs/`. It is correct
+behaviour and it is also why there are 17 directories there.
