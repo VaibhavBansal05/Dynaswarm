@@ -282,10 +282,13 @@ function showStats(world) {
   $("graph-id").textContent = world.graph_id;
   const dl = $("world-stats");
   dl.replaceChildren();
+  // Plain names, not graph-theory shorthand. |V| and |E| are correct and
+  // unreadable; anyone who wants the symbols already knows them.
   const rows = [
-    ["|V|", world.n_nodes], ["|E|", world.n_edges],
-    ["mean degree", world.mean_degree.toFixed(2)],
-    ["optimal cost", world.reachable ? world.optimum.toFixed(2) : "unreachable"],
+    ["places", world.n_nodes.toLocaleString()],
+    ["roads", world.n_edges.toLocaleString()],
+    ["roads per place", world.mean_degree.toFixed(2)],
+    ["shortest route", world.reachable ? world.optimum.toFixed(2) : "no route"],
   ];
   for (const [k, v] of rows) {
     const dt = document.createElement("dt");

@@ -113,6 +113,9 @@ h3 {
   transition: border-color .12s, box-shadow .12s;
 }
 .fields select { font-family: var(--ui); padding-right: 4px; }
+/* A truncated option is worse than a terse one: the reader cannot tell
+   which choice is selected. The two selects carry the longest text. */
+.fields label.wide { grid-column: span 2; }
 .fields input:hover, .fields select:hover { border-color: #2e343d; }
 .fields input:focus, .fields select:focus {
   outline: none;
@@ -153,6 +156,27 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, v
 }
 .stage summary:hover { color: var(--ink-dim); }
 .stage details .fields { margin-top: 11px; }
+
+/* The world panel's own figures. This rule was dropped in the rewrite,
+   which left a bare <dl> stacking each label above an indented value. */
+.stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0; margin: 16px 0 0;
+  font: 400 12.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.stats dt, .stats dd {
+  margin: 0; padding: 8px 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.stats dt { color: var(--ink-faint); font-family: var(--ui); font-size: 12px; }
+.stats dd { text-align: right; font-weight: 500; }
+.stats dt:nth-last-of-type(1), .stats dd:nth-last-of-type(1) { border-bottom: none; }
+
+/* Native <option> text cannot be fully styled on macOS, but the closed
+   control can, and that is what is on screen most of the time. */
+.fields select { font-family: var(--ui); font-size: 12.5px; }
 
 /* ---------- stat bar: the sentence the examiner reads ---------- */
 

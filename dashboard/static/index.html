@@ -17,24 +17,24 @@
     <form id="world" class="stage">
       <h2><span class="step-n">1</span> Build the world</h2>
       <div class="fields">
-        <label>preset
+        <label class="wide">preset
           <select id="tier">
-            <option value="">custom</option>
-            <option value="small30">small30 — no coordinates</option>
-            <option value="medium200" selected>medium200 — research tier</option>
-            <option value="large1000">large1000</option>
-            <option value="grid20">grid20</option>
+            <option value="">Custom</option>
+            <option value="small30">Small · 30 places · no map</option>
+            <option value="medium200" selected>Medium · 200 places</option>
+            <option value="large1000">Large · 1,000 places</option>
+            <option value="grid20">Grid · 400 places</option>
           </select>
         </label>
-        <label>model
+        <label class="wide">model
           <select id="model">
-            <option value="geometric">geometric</option>
-            <option value="grid">grid</option>
-            <option value="erdos_renyi">erdos_renyi</option>
+            <option value="geometric">Map-based</option>
+            <option value="grid">Street grid</option>
+            <option value="erdos_renyi">Random · no map</option>
           </select>
         </label>
-        <label>nodes <input id="n_nodes" type="number" min="4" max="2000" step="1" value="200"></label>
-        <label>density <input id="density" type="number" min="0.005" max="1" step="0.005" value="0.04"></label>
+        <label>places <input id="n_nodes" type="number" min="4" max="2000" step="1" value="200"></label>
+        <label>how connected <input id="density" type="number" min="0.005" max="1" step="0.005" value="0.04"></label>
         <label>seed <input id="seed" type="number" min="0" step="1" value="1000"></label>
       </div>
       <div class="stage-actions">
@@ -48,20 +48,20 @@
     <form id="disruption" class="stage">
       <h2><span class="step-n">2</span> Design the disruption</h2>
       <div class="fields">
-        <label>preset
+        <label class="wide">preset
           <select id="preset">
-            <option value="static">static — 0.0</option>
-            <option value="low">low — 0.1</option>
-            <option value="moderate" selected>moderate — 0.3</option>
-            <option value="high">high — 0.8</option>
+            <option value="static">Calm · nothing breaks</option>
+            <option value="low">Light · every ~10 steps</option>
+            <option value="moderate" selected>Moderate · every ~3 steps</option>
+            <option value="high">Severe · every other step</option>
           </select>
         </label>
-        <label>events/step <input id="events_per_step" type="number" min="0" max="10" step="0.05" value="0.3"></label>
-        <label>cluster size <input id="cluster_size" type="number" min="1" max="200" step="1" value="25"></label>
-        <label>timesteps <input id="timesteps" type="number" min="1" max="500" step="1" value="60"></label>
+        <label>breaks per step <input id="events_per_step" type="number" min="0" max="10" step="0.05" value="0.3"></label>
+        <label>roads per break <input id="cluster_size" type="number" min="1" max="200" step="1" value="25"></label>
+        <label>how long <input id="timesteps" type="number" min="1" max="500" step="1" value="60"></label>
       </div>
       <details>
-        <summary>event probabilities</summary>
+        <summary>what kind of breaks</summary>
         <div class="fields">
           <label>closure <input id="p_closure" type="number" min="0" max="1" step="0.05" value="0.15"></label>
           <label>traffic up <input id="p_traffic_up" type="number" min="0" max="1" step="0.05" value="0.30"></label>
@@ -80,13 +80,13 @@
     <div class="statbar">
       <div class="stat"><span class="stat-label">timestep</span>
         <span class="stat-value" id="stat-t">—</span></div>
-      <div class="stat"><span class="stat-label">optimum</span>
+      <div class="stat"><span class="stat-label">best route</span>
         <span class="stat-value accent" id="stat-optimum">—</span></div>
       <div class="stat"><span class="stat-label">hops</span>
         <span class="stat-value" id="stat-hops">—</span></div>
-      <div class="stat"><span class="stat-label">live edges</span>
+      <div class="stat"><span class="stat-label">roads open</span>
         <span class="stat-value" id="stat-edges">—</span></div>
-      <div class="stat"><span class="stat-label">changed this step</span>
+      <div class="stat"><span class="stat-label">broke this step</span>
         <span class="stat-value" id="stat-changed">—</span></div>
     </div>
     <p id="readout" class="readout"></p>
