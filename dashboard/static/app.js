@@ -17,14 +17,19 @@
 import {
   FADE_CUTOFF, fadeOpacity,
   buildStateFrames, baselineFrom, stateStyle, projector,
-  TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent,
+  TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent, ARM_COLORS, excessPath,
 } from "./model.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+// §9 display names. Code ids are frozen data (D23a); this map is one-way.
+const ARM_NAMES = {
+  astar: "A*", aco: "ACO standalone",
+  pso: "PSO standalone", hybrid: "Hybrid (baseline)",
+};
 const VIEW = { w: 900, h: 620, pad: 24 };
 const FRAME_MS = 320;
 
-const state = { geo: null, run: null, palette: null, t: 0, timer: null, xy: [], frames: [] };
+const state = { geo: null, run: null, race: null, palette: null, t: 0, timer: null, xy: [], frames: [] };
 
 function el(name, attrs) {
   const node = document.createElementNS(SVG_NS, name);
@@ -119,6 +124,7 @@ function draw() {
   document.getElementById("readout").textContent = "";
   document.getElementById("scrub").value = String(t);
   drawLedger(run.steps, t);
+  if (state.race) drawPanes(t);
 }
 
 function show(t) {
@@ -155,6 +161,120 @@ function wire() {
     else if (e.key === "ArrowRight") show(state.t + 1);
     else if (e.key === " ") { e.preventDefault(); toggle(); }
   });
+}
+
+// The page must never show a state it is not in. A click that produces
+// nothing visible is indistinguishable from an ignored click, so the
+// second click is either wasted work or a race — and the stale figures
+// beside it go on looking current while they are not.
+async function pending(button, label, panel, work) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = label;
+  if (panel) panel.classList.add("busy");
+  document.getElementById("readout").textContent = "";
+  try {
+    return await work();
+  } catch (error) {
+    document.getElementById("readout").textContent = error.message;
+    throw error;
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+    if (panel) panel.classList.remove("busy");
+  }
+}
+
+const PANE = { w: 240, h: 180, pad: 8 };
+
+// Panes carry the state fabric and the arm's own route, and nothing else.
+// At quarter size the event layer, the ghosts and the node dots turn 735
+// edges into texture with a line somewhere inside it; dropping them is
+// what makes "does this route reach the goal" answerable at a glance,
+// which is the one question a pane exists to answer (§15.5).
+function drawPanes(t) {
+  const host = document.getElementById("panes");
+  host.replaceChildren();
+  const at = projector(state.geo.positions, PANE.w, PANE.h, PANE.pad);
+  const xy = state.geo.positions.map(at);
+
+  for (const arm of state.race.arms) {
+    const path = arm.paths[t] ?? [];
+    const reaches = arm.valid[t];
+    const pane = document.createElement("div");
+    pane.className = reaches ? "pane" : "pane broken";
+
+    const head = document.createElement("h4");
+    head.textContent = arm.name;
+    const excess = arm.excess[t];
+    const badge = document.createElement("span");
+    badge.textContent = excess === null ? "no route" : `+${(excess * 100).toFixed(1)}%`;
+    head.append(badge);
+
+    const svg = el("svg", { viewBox: `0 0 ${PANE.w} ${PANE.h}` });
+    const fabric = el("g", { class: "fabric" });
+    for (const [u, v] of state.geo.edges) {
+      fabric.append(el("line", { x1: xy[u][0], y1: xy[u][1], x2: xy[v][0], y2: xy[v][1] }));
+    }
+    const route = el("g", { class: "arm-path" });
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const a = xy[path[i]], b = xy[path[i + 1]];
+      route.append(el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1] }));
+    }
+    const ends = el("g", { class: "ends" });
+    ends.append(el("circle", { cx: xy[state.geo.source][0], cy: xy[state.geo.source][1], r: 4, class: "start" }));
+    ends.append(el("circle", { cx: xy[state.geo.target][0], cy: xy[state.geo.target][1], r: 3.5, class: "goal" }));
+    svg.append(fabric, route, ends);
+
+    pane.append(head, svg);
+    host.append(pane);
+  }
+}
+
+const CHART = { w: 1180, h: 190, left: 44, right: 10, top: 12, bottom: 20 };
+
+function drawExcess() {
+  const svg = document.getElementById("excess");
+  const run = state.race, steps = state.run.steps;
+  svg.replaceChildren();
+  svg.setAttribute("viewBox", `0 0 ${CHART.w} ${CHART.h}`);
+
+  const all = run.arms.flatMap((a) => a.excess).filter((v) => v !== null);
+  const top = Math.max(0.05, Math.max(...all)) * 1.1;
+  const x = (t) => CHART.left + (t / (run.horizon - 1)) * (CHART.w - CHART.left - CHART.right);
+  const y = (v) => CHART.h - CHART.bottom - (v / top) * (CHART.h - CHART.top - CHART.bottom);
+
+  // Markers come from the timeline's own events — events_at() server-side,
+  // never an index re-derived here (F1's rule, in a new place).
+  const marks = el("g", { class: "marker" });
+  steps.forEach((step) => {
+    if (step.events.length) marks.append(el("line", { x1: x(step.t), y1: CHART.top, x2: x(step.t), y2: CHART.h - CHART.bottom }));
+  });
+
+  const axis = el("g", { class: "axis" });
+  axis.append(el("line", { x1: CHART.left, y1: CHART.h - CHART.bottom, x2: CHART.w - CHART.right, y2: CHART.h - CHART.bottom }));
+  for (const frac of [0, 0.5, 1]) {
+    const label = el("text", { x: CHART.left - 6, y: y(top * frac) + 3, "text-anchor": "end" });
+    label.textContent = `${Math.round(top * frac * 100)}%`;
+    axis.append(label, el("line", { x1: CHART.left - 3, y1: y(top * frac), x2: CHART.left, y2: y(top * frac) }));
+  }
+
+  const series = el("g", { class: "series" });
+  for (const arm of run.arms) {
+    series.append(el("path", { d: excessPath(arm.excess, x, y), stroke: ARM_COLORS[arm.id] ?? "#888" }));
+  }
+  svg.append(marks, axis, series);
+
+  const key = document.getElementById("chart-key");
+  key.replaceChildren();
+  for (const arm of run.arms) {
+    const item = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.borderTopColor = ARM_COLORS[arm.id] ?? "#888";
+    swatch.style.borderTopStyle = "solid";
+    item.append(swatch, document.createTextNode(`${arm.name} · ${(arm.mean_excess * 100).toFixed(1)}% avg`));
+    key.append(item);
+  }
 }
 
 // §4.3.1's identity, on screen. It is not a statistic — it is an
@@ -234,6 +354,10 @@ if (typeof globalThis.__TEST__ !== "undefined") {
   globalThis.__TEST__.state = state;
   globalThis.__TEST__.show = show;
   globalThis.__TEST__.draw = draw;
+  // The page no longer auto-generates, so a test must drive Stage 1 and
+  // Stage 3 the way a user does.
+  globalThis.__TEST__.generate = () => generate();
+  globalThis.__TEST__.race = () => runRace();
 }
 
 // --- Stage 1 / Stage 2: the page now asks for a world, rather than
@@ -301,6 +425,11 @@ function showStats(world) {
 
 async function generate() {
   const world = await post("/api/graph", graphSpec());
+  $("empty").hidden = true;
+  // A new world invalidates any race run on the old one.
+  state.race = null;
+  $("grid-wrap").hidden = true;
+  $("race-id").textContent = "";
   state.geo = world;
   showStats(world);
   if (!world.has_coordinates) return refuse(world);
@@ -323,6 +452,37 @@ async function rebuild() {
   show(0);
 }
 
+function armPicks() {
+  return [...document.querySelectorAll("#arm-picks input:checked")].map((i) => i.value);
+}
+
+async function runRace() {
+  const started = await post("/api/run", {
+    graph: graphSpec(), scenario: scenarioSpec(),
+    arms: armPicks(), evaluations: num("evaluations"),
+  });
+  const loaded = await fetch(`/api/run/${started.run_id}`).then((r) => r.json());
+  state.race = loaded;
+  $("race-id").textContent = `${started.run_id} · ${started.run_class}`;
+  $("grid-wrap").hidden = false;
+  drawExcess();
+  show(state.t);
+}
+
+function buildArmPicks() {
+  const host = $("arm-picks");
+  host.replaceChildren();
+  for (const [id, name] of Object.entries(ARM_NAMES)) {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = id;
+    box.checked = true;
+    label.append(box, document.createTextNode(name));
+    host.append(label);
+  }
+}
+
 function applyTierPreset() {
   const preset = TIER_PRESETS[$("tier").value];
   if (!preset) return;
@@ -339,11 +499,13 @@ fetch("/static/palette.json")
     wire();
     $("world").addEventListener("submit", (e) => {
       e.preventDefault();
-      generate().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+      pending(e.submitter ?? $("world").querySelector("button[type=submit]"),
+        "generating…", $("world"), generate).catch(() => {});
     });
     $("disruption").addEventListener("submit", (e) => {
       e.preventDefault();
-      rebuild().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+      pending(e.submitter ?? $("disruption").querySelector("button[type=submit]"),
+        "building…", $("disruption"), rebuild).catch(() => {});
     });
     $("tier").addEventListener("change", applyTierPreset);
     $("preset").addEventListener("change", () => {
@@ -351,26 +513,16 @@ fetch("/static/palette.json")
     });
     $("reroll").addEventListener("click", () => {
       $("seed").value = String(Math.floor(Math.random() * 100000));
-      generate().catch((err) => { $("readout").textContent = `error: ${err.message}`; });
+      pending($("reroll"), "generating…", $("world"), generate).catch(() => {});
     });
-    return generate();
+    $("race").addEventListener("submit", (e) => {
+      e.preventDefault();
+      pending(e.submitter ?? $("race").querySelector("button[type=submit]"),
+        "racing…", $("race"), runRace).catch(() => {});
+    });
+    buildArmPicks();
+    // No auto-generate. The page opens empty and asks: arriving with a
+    // world already built reads as "here is a thing" rather than "build a
+    // thing", and silently spends a decision the controls exist to give.
   })
   .catch((e) => { $("readout").textContent = `error: ${e.message}`; });
-
-fetch("/api/runs")
-  .then((r) => r.json())
-  .then((data) => {
-    const dl = document.getElementById("runs");
-    dl.replaceChildren();
-    for (const [k, v] of Object.entries(data.run_classes)) {
-      const dt = document.createElement("dt");
-      dt.textContent = k;
-      const dd = document.createElement("dd");
-      dd.textContent = String(v);
-      dl.append(dt, dd);
-    }
-    const warning = document.getElementById("warning");
-    warning.textContent = data.warning;
-    warning.hidden = false;
-  })
-  .catch(() => {});

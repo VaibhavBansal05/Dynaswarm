@@ -368,3 +368,38 @@ kbd {
 @media (max-width: 900px) {
   .guide-grid, .notes { grid-template-columns: 1fr; }
 }
+
+/* ---------- stage 3: panes and the excess chart ---------- */
+.arms { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+.arms label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-dim); }
+.arms input { accent-color: var(--accent); }
+.section-label { margin: 22px 0 9px; }
+.panes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.pane { background: #08090b; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.pane h4 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+}
+.pane h4 span { font: 400 10.5px/1 var(--mono); color: var(--ink-faint); }
+.pane svg { display: block; width: 100%; height: auto; }
+.pane .fabric line { stroke: var(--ink); stroke-opacity: 0.07; stroke-width: 0.5; }
+.pane .arm-path line { stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; }
+.pane.broken { border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); }
+.pane.broken .arm-path line { stroke: var(--bad); stroke-dasharray: 3 2; }
+.pane .ends .start { fill: none; stroke: var(--ink); stroke-width: 1.6; opacity: 0.85; }
+.pane .ends .goal { fill: var(--good); }
+.excess { width: 100%; height: auto; background: #08090b;
+          border: 1px solid var(--line); border-radius: 6px; }
+.excess .axis line { stroke: var(--line); stroke-width: 1; }
+.excess .axis text { fill: var(--ink-faint); font: 400 9px var(--mono); }
+/* Neutral, not amber: the markers sat at #c47f00 against PSO's #c9762b
+   and the two competed. Hue in this chart belongs to the arms alone. */
+.excess .marker line { stroke: var(--ink); stroke-opacity: 0.16; stroke-width: 1; }
+.excess .series path { fill: none; stroke-width: 1.8; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; font-size: 12px; }
+.chart-key span { display: flex; align-items: center; gap: 6px; color: var(--ink-dim); }
+.chart-key i { display: inline-block; width: 18px; height: 0; border-top-width: 2.5px; }
+@media (max-width: 900px) { .panes { grid-template-columns: repeat(2, 1fr); } }
+.stage.busy .stats, .stage.busy .mono { opacity: 0.35; }
+button:disabled { opacity: 0.55; cursor: default; }
+.stage-wide { grid-column: 1 / -1; }

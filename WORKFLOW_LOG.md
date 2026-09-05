@@ -911,3 +911,79 @@ vClaude swept the uncommitted Entry 008 into its commit via `git add -A`, notice
 **347 passed, 0 skipped** — node present, so the JavaScript genuinely ran: **21 assertions**, the first in this project's history. Lint clean. `src/` **2005 / 2100** `+0` (fourth segment). `dashboard/` Python **76 / 1000** `+0`. `static/` **361 / 1200**, projected 520 — under, because the price came from the payload rather than a new endpoint.
 
 The picture now tells the truth about what happened and keeps telling it at `t=59`. Segment 10 hands Rudra the controls.
+
+---
+
+## Entry 010 — Segment 10: Hand Over the Controls (+ an out-of-order design pass)
+
+**Phase** 1 · **Segment** 5 of 7 · **Overall segment** 10
+**Verified** 5 Sept 2026 · **Status** COMPLETE
+**Commits** `b86c1ba` (segment), then `fb34242`, `a797a54`, `641eb56`, `fc9381d` (design, out of order at Rudra's request)
+
+### Result
+
+`src/` **2005 / 2100**, `+0` — **fifth consecutive segment.** Everything Stages 1 and 2 needed was already public. Python `125 / 1000`. **357 passed, 0 skipped; JS suite 32.**
+
+The ledger holds, against the engine's own count, at every one of 60 steps:
+
+```
+t=0    735 + 0  + 0 − 0  − 0  = 735    balances
+t=30   735 + 75 + 0 − 0  − 25 = 785    balances
+t=59   735 + 75 + 9 − 50 − 25 = 744    balances
+```
+
+`|E|` moves **735 → 785 → 744**. The picture was hiding that for three segments.
+
+**R2 was not cosmetic.** Adding `.json` to the static budget moved it **+59 on its own** — `palette.json` was 9% of the budget and invisible to the brake from the day it was created. Third dead-instrument finding in this project (F5, the `*.py` glob, and now this). **The pattern: every measurement instrument in this repo has been wrong at least once, and each was found by someone asking what it actually counts rather than reading its output.**
+
+### The finding of the segment — and it outranks the feature
+
+vClaude's own mutation made the ledger reconcile against its **own arithmetic** instead of the engine's count. The test named for the property **passed**: `assert balances === true` is satisfied by a ledger that can never be false.
+
+Then the obvious repair also failed. Asserting `engineCount === steps[t].n_active_edges` passes on correct data, because there the predicted value *is* that number. It only works when handed data that ought to break it — so it now perturbs a step by `+7`.
+
+> **An invariant test written only against correct data cannot tell a real invariant from a tautology. Both are green.**
+
+**Standing rule, all future segments:** an invariant test must be shown failing against deliberately corrupted input, and the corruption pasted. A green invariant test proves nothing until it has been seen red. This joins Entry 009's threshold rule — the two together are the same lesson from opposite ends: *a test must be anchored to something outside the thing it measures.*
+
+Also worth keeping: mutation A (id ignores `seed`) produced `assert 'efce1e910f78' != 'efce1e910f78'` — **the round-trip test still passed.** Determinism survived; only distinctness broke. Two properties, one test, and only one of them was being checked.
+
+The derived id is **blake2b, not `hash()`** — Python salts `hash()` per process, so the same graph would be renamed on every restart. No cache: a full run rebuilds in **74 ms**, cheaper than the statelessness a cache would spend.
+
+### The design pass, out of order — accepted
+
+Rudra looked at the delivered page and asked for the design work directly. vClaude **flagged the scope breach before doing it** rather than after, which is the correct handling and is why this reads as a decision rather than drift.
+
+Two things came out of it that matter beyond appearance:
+
+- **vClaude can now screenshot the page headlessly** (Chrome, `--screenshot`). It stopped designing blind, and immediately caught truncated dropdowns and a legend swatch for "road removed" that was **invisible** — `#7a2b2e` on `#08090b`. Segment 10 had asked for that fix and it had only widened the line: **the problem was luminance, not weight.** A width change to an invisible colour is a fix that measures as done and reads as nothing. **From here, any visual claim is accompanied by a screenshot vClaude has looked at.**
+- **`Cache-Control: no-store` on the dev server.** Two rounds of "the design didn't apply" were a browser reusing cached CSS while the server sent correct bytes. Fixed at the server rather than by telling Rudra to refresh harder.
+
+Labels moved to plain English throughout — `places`, `roads`, `roads per place`, `shortest route`, `Map-based`, `Moderate · every ~3 steps`. **Per D23a the option *values* are untouched**; they key configs and tests. Only what is displayed changed. `|V|` and `|E|` are correct and unreadable.
+
+The control guide was written as prose, rejected by Rudra as unreadable, and rewritten as a reference table with three callouts. Its facts were **checked against source, not assumed** — that the seed feeds both `stream(seed, "graph")` and `stream(seed, "events")`, that `density` is ignored by `grid`, and that a scenario preset changes exactly one number.
+
+### Rulings
+
+**R1 — The static budget splits in two, on the same reasoning that split Python from static.**
+
+At `966 / 1200` with segments 11–13 unwritten, vClaude was right to raise it before segment 11 rather than let it hit the wall mid-flight. But raising 1200 to a bigger number treats a reference table and a pane grid as the same kind of growth, and they are not.
+
+| Budget | Question | Now | Cap |
+|---|---|---|---|
+| `static/**/*.js` | **Has the dashboard become an application?** | ~413 | **700** |
+| `static/` html + css + json | Has its surface sprawled? | ~553 | **900** |
+
+Behaviour is the thing worth bounding tightly; presentation and prose still get a ceiling so they cannot hide growth either, but not the same one. Segment 11 implements the split and reports both opening figures. **The guide does not count against behaviour** — that answers vClaude's question directly.
+
+**R2 — "Runs on disk": drop it.** vClaude's argument is accepted. With the D32 banner gone it is a bare `exploratory: 9240` with nothing to click, answering a question nobody in front of this page is asking. It earns its place back when the dashboard can load a run — Phase 4. Four lines to restore.
+
+**R3 — Segment 13 survives but is re-scoped.** Most of its content shipped early. What remains: a final pass once the pane grid and inspect panels exist, and **a decision then** on whether the sidebar layout is still needed — it was drawn when the page was ugly and the stacked layout now reads well. It may be dropped entirely; that is a judgement to make with 11 and 12 on screen, not now.
+
+**R4 — Rudra committed mid-segment** (`c525489`), sweeping `dashboard/server.py` in beside Architect edits to `ARCHITECTURE.md` and the spec. Nothing lost; segment 10's work is split across two commits. vClaude correctly left his history alone. **Convention: no commits from any party while a segment is in flight** — the tree has three writers and only one commit discipline.
+
+### Close
+
+Phase 1 is **5 of 7**. `src/` untouched for five segments running, which is now itself evidence: §2.3 claimed the core exposes what the dashboard needs, and five segments have failed to falsify it.
+
+Segment 11 races the arms. It is the largest remaining segment and the first time the project's actual optimizers appear on screen.

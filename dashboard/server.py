@@ -17,9 +17,12 @@ here — see :func:`tier`.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,12 +30,21 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from pydantic import BaseModel, Field
 
-from dynaswarm.analysis.load import load_steps
-from dynaswarm.config import GraphCfg, ScenarioCfg, register
+from dynaswarm.analysis.load import load_steps, per_trial_excess
+from dynaswarm.config import (
+    BudgetCfg,
+    Config,
+    ExperimentCfg,
+    GraphCfg,
+    ScenarioCfg,
+    register,
+)
 from dynaswarm.core.generate import build
 from dynaswarm.core.oracle import shortest_path
 from dynaswarm.core.rng import stream
 from dynaswarm.core.timeline import GraphTimeline, build_schedule
+from dynaswarm.harness.runner import run_experiment
+from dynaswarm.io.writer import write_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
@@ -437,6 +449,147 @@ def build_run(graph: GraphSpec, scenario: ScenarioSpec) -> dict:
     }
 
 
+#: Display names (ARCHITECTURE.md §9). Code ids are frozen data — they key
+#: ARM_BUILDERS, land in the `arm` column of every parquet and are asserted
+#: in tests (D23a) — so the map is display-only and travels one way.
+ARM_DISPLAY = {
+    "astar": "A*",
+    "aco": "ACO standalone",
+    "pso": "PSO standalone",
+    "hybrid": "Hybrid (baseline)",
+}
+
+#: Every arm the dashboard may race. Deliberately only the uncontrolled
+#: four: F7 leaves `harness/arm.py:228` building the prescheduled
+#: controller with no arguments, so `start == end == 1.0` and it varies
+#: nothing while logging itself active. Racing a controlled arm today
+#: would put a controller that is known not to control on screen, and it
+#: would look exactly like a result — F5's failure mode, staged in front
+#: of an examiner. Phase 3 fixes F7; until then this list is the guard.
+RACEABLE = tuple(ARM_DISPLAY)
+
+
+class RaceSpec(BaseModel):
+    """One trial of some arms on one world, at one budget."""
+
+    graph: GraphSpec = Field(default_factory=GraphSpec)
+    scenario: ScenarioSpec = Field(default_factory=ScenarioSpec)
+    arms: list[str] = Field(default_factory=lambda: list(RACEABLE))
+    evaluations: int = Field(default=300, ge=10, le=20000)
+
+
+def race_config(spec: RaceSpec) -> Config:
+    """Assemble the configuration a race runs under.
+
+    Every field is a real ``Config`` field. **No dashboard-only parameter
+    enters a run** (§15.2) — if it is not something the CLI could also
+    set, it is not here.
+
+    ``run_class`` is ``exploratory`` and not a parameter: a dashboard run
+    is a scratch run by construction (D30/D31), and offering a control
+    that could stamp one `manifest` would hand a user the one mistake the
+    provenance system exists to prevent.
+    """
+    unknown = [arm for arm in spec.arms if arm not in RACEABLE]
+    if unknown:
+        raise ValueError(f"arm(s) {unknown} are not raceable; permitted: {list(RACEABLE)}")
+    return Config(
+        run_class="exploratory",
+        graph=_graph_cfg(spec.graph),
+        scenario=ScenarioCfg(name="custom", **spec.scenario.model_dump()),
+        experiment=ExperimentCfg(arms=list(spec.arms), n_trials=1, parallel_jobs=1),
+        budget=BudgetCfg(evaluations=spec.evaluations),
+    )
+
+
+def race(spec: RaceSpec) -> dict:
+    """Execute one real trial and write a normal run directory.
+
+    **The dashboard configures and calls; it never steps a loop.**
+    ``run_experiment`` is the CLI's own door (`cli.py:58`) — it calls
+    ``run_trial`` per trial and streams rows through ``ResultWriter``, so
+    what lands on disk is shaped by the same code that shapes a CLI run,
+    not by anything here.
+
+    Returns:
+        The run id — which, unlike a graph id, **names a directory**. A
+        graph is a pure function of its parameters and can be rebuilt from
+        them; a run is an artefact with a location, and survives a restart
+        because it is a file rather than a memory.
+    """
+    cfg = race_config(spec)
+    stamp = datetime.now()
+    directory = OUTPUTS / stamp.strftime("%Y-%m-%d") / stamp.strftime("%H-%M-%S")
+    run_id = directory.name
+    directory.mkdir(parents=True, exist_ok=True)
+
+    write_manifest(directory, run_id, asdict(cfg))
+    summary = run_experiment(cfg, list(cfg.experiment.arms), directory, run_id)
+
+    return {
+        "run_id": run_id,
+        "path": str(directory.relative_to(ROOT)),
+        "run_class": cfg.run_class,
+        "arms": [{"id": a, "name": ARM_DISPLAY[a]} for a in cfg.experiment.arms],
+        "evaluations": cfg.budget.evaluations,
+        "summary": {arm: {k: float(v) for k, v in m.items()} for arm, m in summary.items()},
+    }
+
+
+def read_run(run_id: str) -> dict:
+    """Read a finished run back off disk.
+
+    ``run_class=None`` deliberately: a dashboard run is ``exploratory``
+    by construction, so the manifest-only default — which exists to stop
+    scratch runs being aggregated into evidence (D30) — would return an
+    empty frame for every run this page has ever made. One named run is
+    not an aggregation.
+
+    Excess comes from ``analysis.per_trial_excess``, the same function
+    the CLI's report uses. Recomputing it here would be a second answer
+    to a question the analysis layer already answers.
+
+    Args:
+        run_id: Directory name, as returned by :func:`race`.
+
+    Returns:
+        Per-arm paths per timestep for the panes, and the excess series
+        for the chart.
+
+    Raises:
+        FileNotFoundError: If no such run directory exists.
+    """
+    matches = sorted(OUTPUTS.glob(f"*/{run_id}"))
+    if not matches:
+        raise FileNotFoundError(f"no run directory named {run_id!r} under outputs/")
+    directory = matches[-1]
+
+    frame = load_steps(directory, run_class=None)
+    trials = per_trial_excess(frame)
+
+    arms = []
+    for arm in frame["arm"].unique():
+        rows = frame[frame["arm"] == arm].sort_values("timestep")
+        summary = trials[trials["arm"] == arm]
+        arms.append({
+            "id": str(arm),
+            "name": ARM_DISPLAY.get(str(arm), str(arm)),
+            "paths": [[int(n) for n in p] for p in rows["best_path"]],
+            "excess": [None if pd.isna(x) else float(x) for x in rows["excess"]],
+            "valid": [bool(v) for v in rows["path_valid"]],
+            # From the analysis layer, not from the series above.
+            "mean_excess": float(summary["mean_excess"].iloc[0]) if len(summary) else None,
+        })
+
+    return {
+        "run_id": run_id,
+        "path": str(directory.relative_to(ROOT)),
+        "run_class": str(frame["run_class"].iloc[0]),
+        "horizon": int(frame["timestep"].max()) + 1,
+        "arms": arms,
+    }
+
+
 def run_classes() -> dict[str, int]:
     """Row counts per ``run_class`` across every run in ``outputs/``.
 
@@ -495,6 +648,18 @@ def api_build_graph(spec: GraphSpec) -> dict:
 def api_build_timeline(graph: GraphSpec, scenario: ScenarioSpec) -> dict:
     """Stage 2: break that world on demand."""
     return build_run(graph, scenario)
+
+
+@app.post("/api/run")
+def api_race(spec: RaceSpec) -> dict:
+    """Stage 3: run one real trial. The id names a directory on disk."""
+    return race(spec)
+
+
+@app.get("/api/run/{run_id}")
+def api_read_run(run_id: str) -> dict:
+    """Read a finished run back. Survives a restart; it is a file."""
+    return read_run(run_id)
 
 
 @app.get("/api/runs")

@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from dynaswarm.analysis.load import load_steps, per_trial_excess
 from dynaswarm.core.generate import build
 from dynaswarm.core.oracle import shortest_path
 from dynaswarm.core.rng import stream
@@ -395,9 +396,12 @@ def test_a_tier_without_coordinates_answers_and_refuses():
 # The second budget (Entry 007 R1)
 # ---------------------------------------------------------------------------
 
-#: Ceiling on the dashboard's browser-side surface, in **non-blank,
-#: non-comment lines** of ``.js``, ``.css`` and ``.html``.
-MAX_STATIC_LINES = 1200
+#: Two ceilings, because they answer two different questions (Entry 010
+#: R1). Behaviour is what deserves the tight bound; prose and presentation
+#: get a ceiling so they cannot hide growth, but not the same one — the
+#: control guide must not compete with the pane grid for room.
+MAX_JS_LINES = 700
+MAX_PRESENTATION_LINES = 900
 
 STATIC = DASHBOARD / "static"
 # .json is in here because the budget's question is "has this become an
@@ -447,17 +451,31 @@ def _static_files() -> list[Path]:
     return sorted(p for p in STATIC.rglob("*") if p.suffix in STATIC_SUFFIXES)
 
 
-def test_dashboard_static_line_budget():
+def test_dashboard_javascript_budget():
     """*Has the dashboard become an application?*
 
-    A different question from the Python cap's *has it become a second
-    engine?*, which is why they are two budgets and not one stretched
-    over both. See :func:`_static_lines` on why this one is deliberately
-    the cruder measure.
+    The tight one. Every line here is behaviour that can disagree with
+    the engine, which is the risk the whole boundary exists to bound.
+    See :func:`_static_lines` on why the measure is deliberately crude.
     """
-    total = sum(_static_lines(p) for p in _static_files())
-    assert total < MAX_STATIC_LINES, (
-        f"dashboard/static/ is {total} lines, ceiling is {MAX_STATIC_LINES}"
+    total = sum(_static_lines(p) for p in _static_files() if p.suffix == ".js")
+    assert total < MAX_JS_LINES, (
+        f"dashboard/static JavaScript is {total} lines, ceiling is {MAX_JS_LINES}"
+    )
+
+
+def test_dashboard_presentation_budget():
+    """*Has its surface sprawled?*
+
+    Markup, styling and palette data. A looser ceiling on purpose: an
+    explanation that makes the instrument usable is not the same kind of
+    growth as another hundred lines of logic, and charging them to one
+    budget would make the guide compete with the pane grid.
+    """
+    total = sum(_static_lines(p) for p in _static_files() if p.suffix != ".js")
+    assert total < MAX_PRESENTATION_LINES, (
+        f"dashboard/static presentation is {total} lines, "
+        f"ceiling is {MAX_PRESENTATION_LINES}"
     )
 
 
@@ -970,3 +988,180 @@ def test_an_added_road_is_first_class_and_never_becomes_reopen_eligible():
             f"cycle {cycle}: a closed pool road cannot be re-added"
         )
     assert not base[slot], "base_active was mutated; it must be fixed at construction"
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: racing the arms (segment 11)
+# ---------------------------------------------------------------------------
+
+
+def test_the_dashboard_calls_run_trial_and_does_not_step_its_own_loop():
+    """§15.2, asserted at the entry point rather than at the outcome.
+
+    A dashboard that assembled the trial loop itself would be a second
+    harness, and every number it showed would come from an experiment
+    nobody else ran. Checking the *result* cannot tell the two apart —
+    a hand-rolled loop would produce plausible rows too. So this asserts
+    the door: `run_experiment` is called (the CLI's own path, cli.py:58),
+    and it is what calls `run_trial` per trial.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    calls = []
+    real = server.run_experiment
+
+    def spy(cfg, arm_names, directory, run_id):
+        calls.append((list(arm_names), cfg.experiment.n_trials, cfg.run_class))
+        return real(cfg, arm_names, directory, run_id)
+
+    server.run_experiment = spy
+    try:
+        server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
+    finally:
+        server.run_experiment = real
+
+    assert len(calls) == 1, "the dashboard did not go through run_experiment exactly once"
+    arms, n_trials, run_class = calls[0]
+    assert arms == ["astar", "aco"]
+    assert run_class == "exploratory"
+
+    source = (ROOT / "dashboard" / "server.py").read_text()
+    assert "for trial in range" not in source, "the dashboard is stepping a trial loop"
+
+
+def test_a_dashboard_run_writes_a_real_directory_stamped_exploratory():
+    """D30/D31, exercised rather than assumed.
+
+    Phase 0 built the provenance system; this is the first thing that
+    puts a run through it. If a dashboard run landed as `manifest`, every
+    scratch experiment would become evidence — the exact failure
+    `run_class` exists to prevent.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
+
+    directory = ROOT / started["path"]
+    assert (directory / "steps.parquet").exists()
+    assert (directory / "manifest.json").exists()
+
+    manifest = json.loads((directory / "manifest.json").read_text())
+    assert manifest["config"]["run_class"] == "exploratory"
+
+    frame = load_steps(directory, run_class=None)
+    assert set(frame["run_class"].unique()) == {"exploratory"}
+    assert load_steps(directory, run_class="manifest").empty, (
+        "a dashboard run is reachable under the manifest default"
+    )
+
+
+def test_a_dashboard_run_is_indistinguishable_from_a_cli_run():
+    """The strong one: same schema, same columns, same dtypes.
+
+    Not "it has the columns we remembered to check" — the comparison is
+    against `StepRow`'s own fields, so a column added to the harness that
+    the dashboard path silently drops fails here rather than surfacing as
+    a missing series in Phase 4.
+    """
+    from dataclasses import fields
+
+    from dynaswarm.harness.trial import StepRow
+
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(arms=["astar", "aco"], evaluations=60))
+    frame = load_steps(ROOT / started["path"], run_class=None)
+
+    expected = {f.name for f in fields(StepRow)} | {"run_id"}
+    assert expected <= set(frame.columns), (
+        f"missing columns a CLI run would have: {sorted(expected - set(frame.columns))}"
+    )
+
+
+def test_the_excess_shown_is_the_analysis_layers_own_figure():
+    """The anti-reimplementation test for this segment.
+
+    The panes and the chart both quote excess. If the endpoint computed
+    it — a mean over the series it is already sending, say — the number
+    would look right and would be a second answer to a question
+    `analysis/` already answers. This compares against
+    `per_trial_excess`, called independently here.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(arms=["astar", "aco", "pso"], evaluations=80))
+    back = server.read_run(started["run_id"])
+
+    frame = load_steps(ROOT / started["path"], run_class=None)
+    trials = per_trial_excess(frame)
+    for arm in back["arms"]:
+        expected = trials[trials["arm"] == arm["id"]]["mean_excess"].iloc[0]
+        assert arm["mean_excess"] == pytest.approx(float(expected)), arm["id"]
+
+
+def test_every_arm_sees_the_identical_timeline():
+    """§10's fairness guarantee, asserted from the dashboard's side.
+
+    Every arm must face byte-identical conditions or the comparison means
+    nothing. Checked through the columns that describe the world rather
+    than the arm: same `num_events` sequence, same `optimum` sequence.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(evaluations=80))
+    frame = load_steps(ROOT / started["path"], run_class=None)
+
+    reference = None
+    for arm, rows in frame.groupby("arm"):
+        rows = rows.sort_values("timestep")
+        world = list(zip(rows["num_events"], rows["optimum"], strict=True))
+        if reference is None:
+            reference = world
+        assert world == reference, f"{arm} saw a different world"
+
+
+def test_no_controlled_arm_is_reachable_from_the_dashboard():
+    """F7's blast radius, closed by test rather than by intention.
+
+    `harness/arm.py:228` builds the prescheduled controller with no
+    arguments, so `start == end == 1.0` and it varies nothing while
+    logging itself active. A controlled arm on screen today would show a
+    controller known not to control, and it would look like a result.
+    """
+    from dynaswarm.harness.arm import ARM_BUILDERS
+
+    server = pytest.importorskip("dashboard.server")
+    controlled = {k for k in ARM_BUILDERS if k.endswith(("_fixed", "_adaptive"))}
+    assert controlled, "no controlled arms found; this test is checking nothing"
+    assert not (set(server.RACEABLE) & controlled)
+
+    for arm in sorted(controlled):
+        with pytest.raises(ValueError, match="not raceable"):
+            server.race_config(server.RaceSpec(arms=[arm]))
+
+    markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
+    for arm in sorted(controlled):
+        assert arm not in markup, f"{arm} is offered in the UI"
+
+
+def test_a_run_id_names_a_directory_and_survives_a_restart():
+    """The two id kinds, pinned.
+
+    A graph is a pure function of its parameters, so its id is derived and
+    needs no process at all. A run is an artefact with a location, so its
+    id names a directory — and is still there after the process that made
+    it is gone. Conflating them is how a stateless server grows a session.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(server.RaceSpec(arms=["astar"], evaluations=60))
+
+    program = textwrap.dedent(f"""
+        from dashboard.server import read_run, graph_id, GraphSpec
+        back = read_run({started["run_id"]!r})
+        print(back["run_id"], back["run_class"], len(back["arms"]))
+        print(graph_id(GraphSpec()))
+        """)
+    done = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, cwd=ROOT
+    )
+    assert done.returncode == 0, done.stderr
+    run_line, graph_line = done.stdout.strip().splitlines()
+    assert run_line.split()[0] == started["run_id"]
+    assert run_line.split()[1] == "exploratory"
+    assert graph_line.strip() == server.graph_id(server.GraphSpec())

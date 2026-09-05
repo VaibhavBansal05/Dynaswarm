@@ -146,7 +146,19 @@ It always contains **exactly one segment**: the goal, the rationale, the files i
 
 - Before declaring a segment complete, run the full test suite and the linter and paste the **actual** output. Not remembered output, not summarised output.
 - **Never `git push`.** Rudra pushes, and only after the Architect has verified the segment — nothing unreviewed reaches the remote. Do not create or switch branches unless instructed.
-- **One local commit per segment**, when the segment asks for it, using the message the segment supplies. Do not commit work in progress, and do not amend a previous segment's commit.
+- **⛔ DO NOT COMMIT. Rudra commits, from 5 Sept 2026 onward.**
+
+  This supersedes every earlier instruction about committing, including any `git commit` step written into a segment spec — **if a segment's task list says to commit, ignore that step**, and say in FINDINGS that you left it to Rudra.
+
+  He does not want commits authored by an agent in his repository's history. That is his call about his own project and it needs no engineering justification.
+
+  **What you do instead, at the end of a segment:**
+  1. Leave the work in the working tree, unstaged. Do not `git add`, do not `git commit`, do not `git stash`, never `git add -A`
+  2. Run `git status --short` and paste it, so he can see exactly what changed
+  3. **Paste the commit message the segment supplies, as a fenced block he can copy** — without a `Co-Authored-By` trailer
+  4. Say plainly that the segment is complete and uncommitted
+
+  Reading git history (`git log`, `git show`, `git diff`) stays fine and is often necessary. It is *writing* to history that stops.
 - Do not install new dependencies without the segment authorising it. If one is genuinely required, report it and wait.
 
 ### Honesty

@@ -74,6 +74,18 @@
       </details>
       <div class="stage-actions"><button type="submit">Build</button></div>
     </form>
+
+    <form id="race" class="stage stage-wide">
+      <h2><span class="step-n">3</span> Race the algorithms</h2>
+      <div class="arms" id="arm-picks"></div>
+      <div class="fields">
+        <label>search budget <input id="evaluations" type="number" min="10" max="20000" step="10" value="300"></label>
+      </div>
+      <div class="stage-actions">
+        <button type="submit">Race</button>
+        <span id="race-id" class="mono"></span>
+      </div>
+    </form>
   </section>
 
   <section>
@@ -94,6 +106,8 @@
     <div id="figure">
       <svg id="canvas" role="img" aria-label="graph over time"></svg>
       <p id="refusal" class="refusal" hidden></p>
+      <p id="empty" class="refusal">Nothing built yet. Press
+        <b>Generate</b> to make a world, then <b>Build</b> to break it.</p>
     </div>
 
     <div id="controls" class="controls">
@@ -104,6 +118,14 @@
       <button id="fwd" type="button" title="next step (→)">→</button>
       <button id="next-event" type="button" title="next step with events">⏩</button>
       <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="timestep">
+    </div>
+
+    <div id="grid-wrap" hidden>
+      <h3 class="section-label">Each algorithm's best route at this step</h3>
+      <div id="panes" class="panes"></div>
+      <h3 class="section-label">How far above the true optimum, over the run</h3>
+      <svg id="excess" class="excess" role="img" aria-label="excess over time"></svg>
+      <p id="chart-key" class="chart-key"></p>
     </div>
 
     <div class="panels">
@@ -190,11 +212,6 @@
         </dl>
       </div>
     </div>
-  </section>
-
-  <section>
-    <h2>Runs on disk</h2>
-    <dl id="runs"><dd class="pending">reading outputs/…</dd></dl>
   </section>
 
   <script type="module" src="/static/app.js"></script>

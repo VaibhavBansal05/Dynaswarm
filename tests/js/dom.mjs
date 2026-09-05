@@ -110,7 +110,11 @@ export async function loadPage(fixtures) {
     const p = String(url).replace(/^https?:\/\/[^/]+/, "");
     calls.push({ path: p, method: init?.method ?? "GET", body: init?.body });
     if (!(p in routes)) throw new Error(`unshimmed fetch: ${p}`);
-    return { ok: true, status: 200, json: async () => routes[p] };
+    // Cloned, not shared. Handing every test the same fixture object let
+    // one test's mutation of `state.run.steps` leak into the next five —
+    // a real HTTP response is fresh each time, and the harness has to be
+    // too, or tests pass or fail depending on their order.
+    return { ok: true, status: 200, json: async () => structuredClone(routes[p]) };
   };
 
   globalThis.setInterval = () => 0;
