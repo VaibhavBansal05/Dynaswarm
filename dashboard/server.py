@@ -509,6 +509,25 @@ def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
 
 
+@app.middleware("http")
+async def _never_cache(request, call_next):
+    """Serve everything uncached.
+
+    A development tool whose stylesheet is edited between refreshes must
+    not be able to show a stale one — the browser revalidates against an
+    ETag, a plain reload reuses the cached copy, and the page silently
+    disagrees with the file on disk. That cost Rudra two rounds of
+    "it still looks wrong" against a server that was serving the right
+    bytes the whole time.
+
+    Correct for a loopback dev server and nowhere else; this is not
+    deployed (synopsis O1).
+    """
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    return response
+
+
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
