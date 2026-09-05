@@ -322,3 +322,19 @@ section > h2 { margin-top: 30px; }
 @media (max-width: 900px) {
   .stages, .panels, .legend { grid-template-columns: 1fr; }
 }
+
+/* ---------- the guide ---------- */
+.guide { margin-top: 34px; padding-top: 28px; border-top: 1px solid var(--line); }
+.guide-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+.guide-grid > div > h3:not(:first-child) { margin-top: 22px; }
+.guide dl { margin: 0; }
+.guide dt {
+  margin-top: 12px; font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.guide dt:first-child { margin-top: 0; }
+.guide dd {
+  margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-dim);
+}
+.guide dd b { color: var(--ink); font-weight: 550; }
+.guide dd i { font-style: italic; }
+@media (max-width: 900px) { .guide-grid { grid-template-columns: 1fr; } }

@@ -39,7 +39,7 @@
       </div>
       <div class="stage-actions">
         <button type="submit">Generate</button>
-        <button type="button" id="reroll" title="new seed, same shape">re-roll seed</button>
+        <button type="button" id="reroll" title="new seed, same shape">Re-roll seed</button>
         <span id="graph-id" class="mono"></span>
       </div>
       <dl id="world-stats" class="stats"></dl>
@@ -125,6 +125,110 @@
         <h3>edge ledger — must balance</h3>
         <dl id="ledger-stats"></dl>
         <p id="ledger-balance" class="balance"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="guide">
+    <h2><span class="step-n">?</span> What every control does</h2>
+
+    <div class="guide-grid">
+      <div>
+        <h3>1 · Build the world</h3>
+        <dl>
+          <dt>preset</dt>
+          <dd>Fills the four fields below from a known setup. Editing any field
+              afterwards is fine — the preset is a starting point, not a lock.</dd>
+
+          <dt>model</dt>
+          <dd>How roads connect. <b>Map-based</b> gives every place a real
+              position and joins nearby ones, which is why it can be drawn.
+              <b>Street grid</b> is a regular lattice. <b>Random</b> joins places
+              with no regard to distance and has <b>no positions at all</b>, so
+              the page refuses to draw it rather than invent a layout.</dd>
+
+          <dt>places</dt>
+          <dd>How many junctions. More places means a longer route and a harder
+              search.</dd>
+
+          <dt>how connected</dt>
+          <dd>How readily two places get a road. Higher means more roads and more
+              alternatives when one breaks. <b>Ignored by Street grid</b>, whose
+              connections are fixed by the lattice.</dd>
+
+          <dt>seed</dt>
+          <dd>The one number that decides everything random. <b>The same seed
+              always gives the same world and the same sequence of breaks</b> —
+              that is what makes a result reproducible. Change it and you get a
+              different world <i>and</i> a different disruption.</dd>
+
+          <dt>Generate</dt>
+          <dd>Builds the world and immediately rebuilds the timeline for it.</dd>
+
+          <dt>Re-roll seed</dt>
+          <dd>Picks a random seed and generates again — for browsing variants of
+              the same settings.</dd>
+        </dl>
+      </div>
+
+      <div>
+        <h3>2 · Design the disruption</h3>
+        <dl>
+          <dt>preset</dt>
+          <dd><b>Sets one number only</b> — breaks per step. Everything else stays
+              where it is. That is genuinely all the four named scenarios differ
+              by.</dd>
+
+          <dt>breaks per step</dt>
+          <dd>How often something goes wrong, on average. 0.3 means most steps are
+              quiet — roughly three in four. Set it to 0 for a world that never
+              breaks.</dd>
+
+          <dt>roads per break</dt>
+          <dd>How many roads a single break takes out at once. Breaks are
+              <b>clustered around one place</b>, not scattered, so this reads as a
+              whole neighbourhood going dark rather than one road closing.</dd>
+
+          <dt>how long</dt>
+          <dd>How many timesteps the run lasts.</dd>
+
+          <dt>what kind of breaks</dt>
+          <dd>The mix of what can happen: roads closing, reopening, getting
+              slower or faster, being removed, or new ones appearing. The numbers
+              are relative weights, not percentages.</dd>
+
+          <dt>Build</dt>
+          <dd>Rebuilds the timeline on the current world, leaving the world alone.</dd>
+        </dl>
+      </div>
+
+      <div>
+        <h3>Playback</h3>
+        <dl>
+          <dt>⏮</dt><dd>Back to the start.</dd>
+          <dt>⏪ ⏩</dt>
+          <dd>Jump to the nearest step where something actually breaks. Most steps
+              are quiet, so stepping one at a time is mostly waiting.</dd>
+          <dt>← →</dt><dd>One step. Arrow keys do the same.</dd>
+          <dt>play</dt><dd>Runs it. Space bar toggles.</dd>
+          <dt>slider</dt><dd>Drag to any step.</dd>
+        </dl>
+
+        <h3>Reading the numbers</h3>
+        <dl>
+          <dt>best route</dt>
+          <dd>The true cheapest route right now, recomputed exactly at every step.
+              <b>Watch it move</b> — that is the problem this project exists to
+              solve.</dd>
+          <dt>broke this step</dt>
+          <dd>A break that lands away from the route <b>costs nothing</b>, so this
+              can be large while the best route does not budge. Disruption and
+              <i>relevant</i> disruption are different things.</dd>
+          <dt>edge ledger</dt>
+          <dd>Roads are never really created or destroyed, only opened and closed,
+              so the count must always balance. If it ever says DIVERGED,
+              something is wrong and the page will say so rather than hide it.</dd>
+        </dl>
       </div>
     </div>
   </section>

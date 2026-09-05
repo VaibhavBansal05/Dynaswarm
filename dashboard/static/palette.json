@@ -48,10 +48,10 @@
     },
     "delete": {
       "cls": "e-deleted",
-      "color": "#7a2b2e",
+      "color": "#b0555a",
       "dash": "1 6",
       "width": 2.0,
-      "opacity": 0.85,
+      "opacity": 0.7,
       "usable": false,
       "label": "road removed"
     }
