@@ -987,3 +987,68 @@ Behaviour is the thing worth bounding tightly; presentation and prose still get 
 Phase 1 is **5 of 7**. `src/` untouched for five segments running, which is now itself evidence: §2.3 claimed the core exposes what the dashboard needs, and five segments have failed to falsify it.
 
 Segment 11 races the arms. It is the largest remaining segment and the first time the project's actual optimizers appear on screen.
+
+---
+
+## Entry 011 — Segment 11: Race the Arms
+
+**Phase** 1 · **Segment** 6 of 7 · **Overall segment** 11
+**Verified** 5 Sept 2026 · **Status** COMPLETE — **uncommitted, handed to Rudra**
+
+**First segment under the new rule: vClaude does not commit.** It left the tree unstaged, pasted `git status --short` and the message, and touched neither `AGENT_PROTOCOL.md` nor `WORKFLOW_LOG.md`. Clean handover on the first attempt.
+
+### What landed
+
+The optimizers are on screen. Four panes, one per arm, position carrying identity so the event palette is not spent on arms. Excess over time from `analysis.per_trial_excess` rather than recomputed. A whole race is **1.8 s**, so no streaming machinery was needed. Pending states on every button; the page opens empty instead of auto-generating a world.
+
+Two unprompted colour corrections worth recording, because both were found by *checking* rather than by taste: the first arm palette left a **greyscale gap of 0.033 between ACO and Hybrid** — invisible to a colour-blind viewer in the one chart the project's claims are read from — respread to **0.197**; and disruption markers moved off amber, which was competing with PSO's orange on the same ground.
+
+### R1 — The test suite is writing into the evidence tree. Stop it. **This is the entry's most serious item.**
+
+**25 run directories under `outputs/2026-09-05/`**, all created today by tests, because every Stage 3 test executes a real trial. Confirmed from disk.
+
+Worse: a corruption demo stamped one of them `manifest`, and **it landed in the live tree**, where `test_run_classes_does_not_filter_to_manifest` correctly reported D31's invariant violated.
+
+Read that consequence plainly. `run_class` exists so that **scratch runs can never silently become evidence**. A test harness that can write a `manifest` run into `outputs/` is a hole straight through that guarantee — not a tidiness problem. The one system built specifically to prevent fabricated evidence was, for one afternoon, reachable by a test fixture.
+
+**And it is the provenance system that caught it.** A red test naming the violation is exactly the behaviour Phase 0 paid for. The system worked; the containment did not exist.
+
+**Ruled, three parts:**
+
+1. **No test may write into `outputs/`.** Ever. The run root becomes a parameter; tests pass `tmp_path`. If threading that through needs something `src/` does not expose, **stop and report** — this one is worth a core change if it needs one.
+2. **A test asserting the suite creates nothing under `outputs/`.** The rule enforced rather than remembered — otherwise it survives exactly as long as the person who remembers it.
+3. **Deleting today's 25 directories is authorised**, and vClaude was right to refuse: the guardrail says never touch `outputs/` and does not exempt litter it made itself. **Refusing to clean up its own mess, because the rule did not carve out an exception for it, is the correct reading of a guardrail.** Rudra deletes `outputs/2026-09-05/` by hand.
+
+Segment 12, first task.
+
+### R2 — A guarantee about failure cannot be tested by data in which nothing fails
+
+vClaude's uncommissioned mutation made `reaches` always true, so **a broken route could never render as broken**. Nothing caught it — not Python, not JS.
+
+§15.5 names this requirement explicitly: *"a path failing to reach the goal shows up instantly, in whichever arm."* It had no test, because `preserve_connectivity` means no arm fails in any run currently obtainable.
+
+Its own summary, verbatim, because it generalises past this case:
+
+> **"A guarantee about failure can't be tested by data in which nothing fails."**
+
+**Third instance of one family** — Entry 009's threshold copied from the state being replaced, Entry 010's invariant asserted only against correct data, and now a guarantee exercised only by data that never triggers it. Stated once, for all of them:
+
+> **A test is only as good as the worst input it is ever shown. If the failing case cannot arise from real data, it must be constructed.**
+
+**Ruled:** segment 12 adds a **synthetic broken-route fixture** — a constructed run where an arm's path stops short — and asserts it renders as broken rather than as a short line. Not deferrable: ACO and PSO genuinely can fail to complete a route in early iterations, so this can happen live, in front of an examiner, and would currently look like a slightly shorter path.
+
+### R3 — `run_experiment` instead of `run_trial`: accepted, and **the constraint was mine and was wrong**
+
+vClaude called `run_experiment` — the function `cli.py` calls, which calls `run_trial` per trial and streams through `ResultWriter`. Going direct to `run_trial` would have meant writing the parquet by hand, **which is the second-harness risk moved down a layer** rather than avoided.
+
+§15.2's intent is *"the same door the CLI uses; do not build a second harness."* `run_experiment` **is** that door; `run_trial` is a layer inside it. The letter of my constraint pointed at the wrong function, and following it literally would have produced exactly the defect the constraint exists to prevent.
+
+**vClaude read the intent, took it, and flagged the letter.** That is the right order, and it is the second time this project has been saved by an implementer declining to follow a spec into a wall.
+
+`ARCHITECTURE.md` §15.2 is amended: **"drives runs through the CLI's own entry point (`run_experiment`, which calls `run_trial`), never a loop of its own."**
+
+### Close
+
+**364 passed, 1 failed** — and the failure is the correct behaviour of a guardrail, not a defect. It clears when `outputs/2026-09-05/` is removed.
+
+Phase 1 is **6 of 7**. `src/` untouched for six segments. Segment 12 opens with R1 and R2 before anything new is built.
