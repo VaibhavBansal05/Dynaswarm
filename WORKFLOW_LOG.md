@@ -1052,3 +1052,105 @@ vClaude called `run_experiment` — the function `cli.py` calls, which calls `ru
 **364 passed, 1 failed** — and the failure is the correct behaviour of a guardrail, not a defect. It clears when `outputs/2026-09-05/` is removed.
 
 Phase 1 is **6 of 7**. `src/` untouched for six segments. Segment 12 opens with R1 and R2 before anything new is built.
+
+---
+
+## Entry 012 — Segment 12: Inspect — **PHASE 1 CLOSED**
+
+**Phase** 1 · **Segment** 7 of 7 · **Overall segment** 12
+**Verified** 6 Sept 2026 · **Status** COMPLETE — uncommitted, handed to Rudra
+
+### R1 — The JS cap: raised to **900**. And the cap was my error, of the exact kind this project keeps cataloguing.
+
+**702 / 700. vClaude refused to shave two lines, and that refusal is the correct answer.**
+
+Two lines of "tightening" would have bought a green suite and taught that the cap is a formality. A brake whose whole purpose is to be *felt* cannot be quietly stepped around by the agent it is meant to constrain. **Stopping and reporting was right, and would have been right at 701.**
+
+Now the part that matters more:
+
+> I set 700 in Entry 010 **from a 414-line file**, before anyone knew what inspect would cost.
+
+That is **precisely** Entry 009's defect, committed by me. vClaude's anti-mud test asserted `< 244` — the number it was improving on — and I ruled then:
+
+> *"A threshold copied from the state you're leaving behind is a memento, not a guard."*
+
+700 was a memento. It was lifted from where the file happened to be, not derived from what the dashboard should be allowed to become. **Three segments after writing that rule, I broke it in the same repository.** Knowing a rule is not the same as not breaking it — which is why the mutation step exists, and apparently why the log does too.
+
+**Raised on D28's terms — measured, argued, recorded**, and this time *derived*:
+
+| | |
+|---|---|
+| Phase 1 dashboard, complete | **702** |
+| Phase 3's allocation view — the one substantial JS build left | ~**120**, the size of the excess chart it most resembles |
+| A demo affordance, plus slack for Phase 2's probe panels | ~**80** |
+| **JS cap** | **900** |
+
+Presentation stays at **900** (≈653 used).
+
+**vClaude's observation that the split "binds hard on one side and slack on the other" is itself the finding**, and it is the split working exactly as designed: it says, in one number, that this dashboard's growth is **behavioural**, not decorative. A single combined budget would have shown comfortable headroom and told us nothing.
+
+Segment 13 implements the new cap and **reports the excess chart's real line count**, so 900 is checked against evidence rather than resting on my estimate.
+
+### R2 — No sidebar. Segment 13 re-scoped to vClaude's proposal.
+
+I drew that sidebar when the page was ugly, and said the decision would be made with 11 and 12 on screen. They are, and vClaude has looked at this page longer than either of us:
+
+> *"The stacked layout is why the page survived having panes, a chart and inspect panels added to it — every band is one idea. What made it readable was dropping layers from the panes and separating the state and event channels, not the layout."*
+
+**Accepted, and the reasoning is the valuable part:** the legibility was bought by *reducing what each band carries*, not by rearranging bands. A sidebar would have moved the problem, not solved it — and the fix that actually worked would have been credited to the wrong thing.
+
+**Segment 13 is now: the raised cap, and a single "run the demo" affordance** — one control that walks the page through the whole story in front of an examiner. **Nothing on the main canvas; it is full.**
+
+### The allocation gap was measured, not merely accepted
+
+I ruled the allocation bar out on the argument that F7 leaves the controller inert. vClaude did not take the ruling on trust — it measured:
+
+> **The uncontrolled hybrid holds `aco_fraction` at 0.5 for all 60 steps.**
+
+So a bar built today would be **a flat line at fifty percent, presented as the project's novelty.** Not a subtly wrong widget — a completely static one, captioned as the thing that moves. **And a test now fails the moment it starts moving**, which turns the gap from a note into a tripwire: the day the control layer works, the suite says so.
+
+That is the difference between accepting a ruling and confirming it. Same conclusion, evidence underneath.
+
+### Mutation B — fourth segment running
+
+The selection marker drew at `xy[0]` whatever was clicked. **The panel stayed correct; the highlight pointed elsewhere.** All 42 JS tests and the entire Python suite passed.
+
+Segment 8's failure exactly — **the picture disagreeing with the caption** — relocated into the selection layer. Now covered, and shown red.
+
+**Four consecutive segments in which the uncommissioned mutation found the real defect and the commissioned one confirmed a prediction.** That is no longer a pattern, it is the method: *the Architect's mutation tests the spec; the implementer's tests the code.*
+
+### A repeated mistake, owned
+
+The "no unrecorded field" test grepped `app.js` for `pheromone` and failed on **its own comment explaining why the field is absent** — identical to segment 9's `schedule[` grep hitting a docstring. Comments are stripped now.
+
+Worth keeping because it is small and instructive: **a grep over source is a search over prose as well as code**, and this repository documents heavily by design. Any future source-scanning test strips comments first.
+
+### What shipped
+
+- **Containment holds.** Run root is a parameter, every test passes `tmp_path`, and **no `src/` change was needed** — `run_experiment` already took a directory. A session fixture in `tests/conftest.py` fails the run if anything appears under `outputs/`. **17 run directories before a full suite, 17 after.**
+- **A synthetic broken run**, built from a real race and then truncated, so every field except the one under test is what the engine produced. The failing case had to be constructed because `preserve_connectivity` means none arises.
+- **Edge inspect:** price now and at `t=0`, open or closed, original or pool road, full event history from the steps' own event lists. **Node inspect:** live degree, position, role, which arms route through it.
+- **Hit-target policy:** nearest-within-radius, tie-break **lowest index wins**, stated and tested — the minimum edge length is sub-pixel, so a tie is not hypothetical.
+- **Pheromone and PSO priority are absent, deliberately.** `probe` carries colony- and swarm-level aggregates only; the per-edge and per-node probes are Layer 2, which §17 assigns to Phase 2. **A test pins the absence**, so the panels get extended deliberately when those land rather than filled with something plausible.
+
+`43` JS tests, `45` dashboard tests, one red — the budget, correctly.
+
+---
+
+## PHASE 1 CLOSED
+
+Seven segments. `src/` **2005 / 2100**, `+0` **in every one of them** — §2.3 claimed the core already exposes what a view needs, and seven segments failed to falsify it.
+
+What exists now: Rudra builds a world, designs how it breaks, races three optimizers against A\*'s truth, scrubs through sixty steps, and clicks into any edge, node or arm — with every number on screen traceable to the engine that produced it, and every gap labelled as a gap.
+
+**Five rules came out of this phase, and they are the transferable part:**
+
+1. **Observe the effect, not the call** — how I2 caught F1
+2. **Read the output; do not trust the setup** — the fixture and the demo that were wrong first
+3. **A threshold must come from the property protected, never the measurement replaced** — and I broke this myself three segments later
+4. **An invariant test written only against correct data cannot tell an invariant from a tautology**
+5. **A guarantee about failure cannot be tested by data in which nothing fails**
+
+The last three are one idea from three directions: **a test is only as good as the worst input it is ever shown.**
+
+Segment 13 is a short close-out. Then Phase 2 — trust it.
