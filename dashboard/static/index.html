@@ -130,104 +130,63 @@
   </section>
 
   <section class="guide">
-    <h2><span class="step-n">?</span> What every control does</h2>
+    <h2><span class="step-n">?</span> Reference</h2>
+
+    <div class="notes">
+      <div class="note"><b>One seed, one run.</b> The seed fixes the world
+        <i>and</i> its sequence of breaks. Same seed, same everything.</div>
+      <div class="note"><b>Breaks come in clusters.</b> A neighbourhood goes
+        dark, not a single road.</div>
+      <div class="note"><b>Not every break matters.</b> One away from the route
+        costs nothing — the count moves, the route doesn't.</div>
+    </div>
 
     <div class="guide-grid">
       <div>
         <h3>1 · Build the world</h3>
         <dl>
-          <dt>preset</dt>
-          <dd>Fills the four fields below from a known setup. Editing any field
-              afterwards is fine — the preset is a starting point, not a lock.</dd>
-
-          <dt>model</dt>
-          <dd>How roads connect. <b>Map-based</b> gives every place a real
-              position and joins nearby ones, which is why it can be drawn.
-              <b>Street grid</b> is a regular lattice. <b>Random</b> joins places
-              with no regard to distance and has <b>no positions at all</b>, so
-              the page refuses to draw it rather than invent a layout.</dd>
-
-          <dt>places</dt>
-          <dd>How many junctions. More places means a longer route and a harder
-              search.</dd>
-
-          <dt>how connected</dt>
-          <dd>How readily two places get a road. Higher means more roads and more
-              alternatives when one breaks. <b>Ignored by Street grid</b>, whose
-              connections are fixed by the lattice.</dd>
-
-          <dt>seed</dt>
-          <dd>The one number that decides everything random. <b>The same seed
-              always gives the same world and the same sequence of breaks</b> —
-              that is what makes a result reproducible. Change it and you get a
-              different world <i>and</i> a different disruption.</dd>
-
-          <dt>Generate</dt>
-          <dd>Builds the world and immediately rebuilds the timeline for it.</dd>
-
-          <dt>Re-roll seed</dt>
-          <dd>Picks a random seed and generates again — for browsing variants of
-              the same settings.</dd>
+          <dt>preset</dt><dd>Fills the fields below. Edit any of them after.</dd>
+          <dt>model</dt><dd>Map-based has real positions. Street grid is a
+            lattice. Random has none, so it can't be drawn.</dd>
+          <dt>places</dt><dd>How many junctions.</dd>
+          <dt>how connected</dt><dd>More roads, more alternatives.
+            <em>Ignored by Street grid.</em></dd>
+          <dt>seed</dt><dd>The one random number behind everything.</dd>
+          <dt>Generate</dt><dd>Build it, and rebuild the timeline for it.</dd>
+          <dt>Re-roll seed</dt><dd>Random seed — browse variants.</dd>
         </dl>
       </div>
 
       <div>
         <h3>2 · Design the disruption</h3>
         <dl>
-          <dt>preset</dt>
-          <dd><b>Sets one number only</b> — breaks per step. Everything else stays
-              where it is. That is genuinely all the four named scenarios differ
-              by.</dd>
-
-          <dt>breaks per step</dt>
-          <dd>How often something goes wrong, on average. 0.3 means most steps are
-              quiet — roughly three in four. Set it to 0 for a world that never
-              breaks.</dd>
-
-          <dt>roads per break</dt>
-          <dd>How many roads a single break takes out at once. Breaks are
-              <b>clustered around one place</b>, not scattered, so this reads as a
-              whole neighbourhood going dark rather than one road closing.</dd>
-
-          <dt>how long</dt>
-          <dd>How many timesteps the run lasts.</dd>
-
-          <dt>what kind of breaks</dt>
-          <dd>The mix of what can happen: roads closing, reopening, getting
-              slower or faster, being removed, or new ones appearing. The numbers
-              are relative weights, not percentages.</dd>
-
-          <dt>Build</dt>
-          <dd>Rebuilds the timeline on the current world, leaving the world alone.</dd>
+          <dt>preset</dt><dd>Sets breaks per step. <em>Nothing else.</em></dd>
+          <dt>breaks per step</dt><dd>How often. 0.3 leaves ~3 in 4 steps quiet;
+            0 never breaks.</dd>
+          <dt>roads per break</dt><dd>How many roads go at once.</dd>
+          <dt>how long</dt><dd>Timesteps in the run.</dd>
+          <dt>what kind</dt><dd>Relative weights, not percentages.</dd>
+          <dt>Build</dt><dd>New timeline, same world.</dd>
         </dl>
       </div>
 
       <div>
         <h3>Playback</h3>
-        <dl>
+        <dl class="keys">
           <dt>⏮</dt><dd>Back to the start.</dd>
-          <dt>⏪ ⏩</dt>
-          <dd>Jump to the nearest step where something actually breaks. Most steps
-              are quiet, so stepping one at a time is mostly waiting.</dd>
-          <dt>← →</dt><dd>One step. Arrow keys do the same.</dd>
-          <dt>play</dt><dd>Runs it. Space bar toggles.</dd>
-          <dt>slider</dt><dd>Drag to any step.</dd>
+          <dt>⏪ ⏩</dt><dd>Nearest step that actually breaks.</dd>
+          <dt>← →</dt><dd>One step. Arrow keys too.</dd>
+          <dt>play</dt><dd>Run it. <kbd>space</kbd> toggles.</dd>
+          <dt>slider</dt><dd>Jump anywhere.</dd>
         </dl>
 
         <h3>Reading the numbers</h3>
         <dl>
-          <dt>best route</dt>
-          <dd>The true cheapest route right now, recomputed exactly at every step.
-              <b>Watch it move</b> — that is the problem this project exists to
-              solve.</dd>
-          <dt>broke this step</dt>
-          <dd>A break that lands away from the route <b>costs nothing</b>, so this
-              can be large while the best route does not budge. Disruption and
-              <i>relevant</i> disruption are different things.</dd>
-          <dt>edge ledger</dt>
-          <dd>Roads are never really created or destroyed, only opened and closed,
-              so the count must always balance. If it ever says DIVERGED,
-              something is wrong and the page will say so rather than hide it.</dd>
+          <dt>best route</dt><dd>The true cheapest route, recomputed exactly at
+            every step. <em>Watch it move.</em></dd>
+          <dt>broke this step</dt><dd>Roads lost this step.</dd>
+          <dt>edge ledger</dt><dd>Roads are only opened and closed, never made or
+            destroyed — so it must always balance.</dd>
         </dl>
       </div>
     </div>
