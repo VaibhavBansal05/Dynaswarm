@@ -400,7 +400,16 @@ def test_a_tier_without_coordinates_answers_and_refuses():
 #: R1). Behaviour is what deserves the tight bound; prose and presentation
 #: get a ceiling so they cannot hide growth, but not the same one — the
 #: control guide must not compete with the pane grid for room.
-MAX_JS_LINES = 700
+# Raised from 700 in Entry 012 R1. The 700 was set in Entry 010 from a
+# 414-line file — a threshold taken from the state being left behind,
+# which is the memento rule from Entry 009 broken three segments after it
+# was written. 900 is derived: 702 as Phase 1 closed, plus room for
+# Phase 3's allocation view and Phase 2's probe panels.
+#
+# Segment 13 was asked to check the derivation against evidence rather
+# than an estimate. The estimate priced the allocation view at ~120 lines,
+# "the excess chart's size"; the excess chart is **36**. See FINDINGS.
+MAX_JS_LINES = 900
 MAX_PRESENTATION_LINES = 900
 
 STATIC = DASHBOARD / "static"

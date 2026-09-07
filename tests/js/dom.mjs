@@ -28,6 +28,7 @@ function makeElement(tag, value = "") {
     attrs: {},
     style: {},
     hidden: false,
+    checked: false,
     _text: "",
     classList: {
       _set: new Set(),
@@ -94,6 +95,22 @@ export async function loadPage(fixtures) {
     createElementNS: (_ns, tag) => makeElement(tag),
     createTextNode: (text) => ({ text }),
     addEventListener() {},
+    // Narrow on purpose: only the selectors app.js actually uses are
+    // supported, and an unknown one throws rather than quietly returning
+    // an empty list. A shim that answers every query with "nothing found"
+    // makes a broken selector look like an empty page.
+    querySelectorAll(selector) {
+      if (selector === "#arm-picks input:checked") {
+        return nodes["arm-picks"].children
+          .flatMap((label) => label.children)
+          .filter((el) => el.tag === "input" && el.checked);
+      }
+      throw new Error(`unshimmed selector: ${selector}`);
+    },
+    querySelector(selector) {
+      const found = this.querySelectorAll(selector);
+      return found[0] ?? null;
+    },
   };
 
   const routes = {
@@ -102,6 +119,8 @@ export async function loadPage(fixtures) {
     "/api/timeline": fixtures.timeline,
     "/static/palette.json": fixtures.palette,
     "/api/runs": fixtures.runs ?? { run_classes: {} },
+    "/api/run": fixtures.started ?? { run_id: "fixture-run", run_class: "exploratory" },
+    "/api/run/fixture-run": fixtures.raced ?? null,
   };
   // Records what the page asked for, so a test can assert that Stage 1
   // and Stage 2 actually POST rather than merely that they rendered.

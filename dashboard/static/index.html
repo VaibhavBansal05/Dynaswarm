@@ -11,6 +11,9 @@
     <h1>Dynaswarm</h1>
     <p class="sub">A shortest path that will not hold still. Build a world,
        break it, and watch the optimum move.</p>
+    <button id="demo" type="button" class="demo">▶ Run the demo</button>
+    <p id="demo-note" class="demo-note">Builds a world, breaks it, races the
+      algorithms and plays it through — the three steps below, in order.</p>
   </header>
 
   <section class="stages" aria-label="setup">
@@ -120,8 +123,23 @@
       <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="timestep">
     </div>
 
+    <div class="legend">
+        <div class="legend-col">
+          <h3>state — persists</h3>
+          <p><span class="swatch state-dearer"></span> dearer than at t=0</p>
+          <p><span class="swatch state-cheaper"></span> cheaper than at t=0</p>
+          <p><span class="swatch state-ghost"></span> closed right now</p>
+          <p class="hint">(a deleted road is not drawn at all)</p>
+        </div>
+        <div class="legend-col">
+          <h3>event — flashes, then fades</h3>
+          <ul id="legend-events"></ul>
+        </div>
+    </div>
+
     <div id="grid-wrap" hidden>
       <h3 class="section-label">Each algorithm's best route at this step</h3>
+      <p id="shared" class="shared"></p>
       <div id="panes" class="panes"></div>
       <h3 class="section-label">How far above the true optimum, over the run</h3>
       <svg id="excess" class="excess" role="img" aria-label="excess over time"></svg>
@@ -152,20 +170,6 @@
     </div>
 
     <div class="panels">
-      <div class="legend">
-        <div class="legend-col">
-          <h3>state — persists</h3>
-          <p><span class="swatch state-dearer"></span> dearer than at t=0</p>
-          <p><span class="swatch state-cheaper"></span> cheaper than at t=0</p>
-          <p><span class="swatch state-ghost"></span> closed right now</p>
-          <p class="hint">(a deleted road is not drawn at all)</p>
-        </div>
-        <div class="legend-col">
-          <h3>event — flashes, then fades</h3>
-          <ul id="legend-events"></ul>
-        </div>
-      </div>
-
       <div class="ledger">
         <h3>edge ledger — must balance</h3>
         <dl id="ledger-stats"></dl>

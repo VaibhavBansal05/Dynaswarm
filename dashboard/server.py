@@ -17,6 +17,7 @@ here — see :func:`tier`.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -588,15 +589,31 @@ def read_run(run_id: str, root: Path | None = None) -> dict:
             "excess": [None if pd.isna(x) else float(x) for x in rows["excess"]],
             "valid": [bool(v) for v in rows["path_valid"]],
             "evaluations": [int(e) for e in rows["evaluations_spent"]],
+            # cost and hops are recorded columns, not derived from the
+            # path above: a pane must not compute a figure it could
+            # instead be told, and `path_len` is what the harness counted.
+            "cost": [None if pd.isna(c) else float(c) for c in rows["best_cost"]],
+            "hops": [int(h) for h in rows["path_len"]],
             # From the analysis layer, not from the series above.
             "mean_excess": float(summary["mean_excess"].iloc[0]) if len(summary) else None,
         })
 
+    # Derived from the graph config the RUN recorded, not from whatever
+    # the form currently holds. If someone edits the world after racing,
+    # this id keeps naming the graph the arms actually ran on — which is
+    # what makes the shared-timeline line evidence rather than a caption.
+    manifest = json.loads((directory / "manifest.json").read_text())
+    graph = manifest["config"]["graph"]
     return {
         "run_id": run_id,
         "path": str(directory),
         "run_class": str(frame["run_class"].iloc[0]),
         "horizon": int(frame["timestep"].max()) + 1,
+        "graph_id": graph_id(GraphSpec(
+            model=graph["model"], n_nodes=graph["n_nodes"],
+            density=graph["density"], seed=manifest["config"]["root_seed"],
+        )),
+        "seed": int(frame["seed"].iloc[0]),
         "arms": arms,
     }
 

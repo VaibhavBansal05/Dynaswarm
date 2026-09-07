@@ -221,6 +221,17 @@ const PANE = { w: 240, h: 180, pad: 8 };
 function drawPanes(t) {
   const host = document.getElementById("panes");
   host.replaceChildren();
+
+  // Every pane is showing the same timestep of one timeline that was
+  // built and frozen before any arm ran (§10.2). This is deliberately a
+  // STATEMENT, not a check: a tick that can never be red is a tautology
+  // wearing a UI costume. What makes it evidence rather than assertion is
+  // that the identifiers are shared — one seed and one graph id produce
+  // one schedule, and there is only one of each on screen to point at.
+  document.getElementById("shared").textContent =
+    `All ${state.race.arms.length} panes show timestep ${t} of one timeline, ` +
+    `frozen before any algorithm ran — seed ${state.geo.spec.seed}, ` +
+    `graph ${state.race.graph_id}, ${state.run.steps[t].n_active_edges} roads open.`;
   const at = projector(state.geo.positions, PANE.w, PANE.h, PANE.pad);
   const xy = state.geo.positions.map(at);
 
@@ -232,10 +243,20 @@ function drawPanes(t) {
 
     const head = document.createElement("h4");
     head.textContent = arm.name;
-    const excess = arm.excess[t];
     const badge = document.createElement("span");
-    badge.textContent = excess === null ? "no route" : `+${(excess * 100).toFixed(1)}%`;
+    badge.textContent = arm.excess[t] === null
+      ? "no route"
+      : `+${(arm.excess[t] * 100).toFixed(1)}%`;
     head.append(badge);
+
+    // Cost in the same units and precision as the main readout, so the
+    // A* pane and the headline optimum can be checked against each other
+    // by eye. A percentage alone is a number with nothing to compare to.
+    const figures = document.createElement("p");
+    figures.className = "pane-figures";
+    figures.textContent = arm.cost[t] === null
+      ? "—"
+      : `${arm.cost[t].toFixed(2)} · ${arm.hops[t]} hops`;
 
     const svg = el("svg", { viewBox: `0 0 ${PANE.w} ${PANE.h}` });
     const fabric = el("g", { class: "fabric" });
@@ -252,7 +273,7 @@ function drawPanes(t) {
     ends.append(el("circle", { cx: xy[state.geo.target][0], cy: xy[state.geo.target][1], r: 3.5, class: "goal" }));
     svg.append(fabric, route, ends);
 
-    pane.append(head, svg);
+    pane.append(head, figures, svg);
     host.append(pane);
   }
 }
@@ -492,6 +513,8 @@ if (typeof globalThis.__TEST__ !== "undefined") {
   // Stage 3 the way a user does.
   globalThis.__TEST__.generate = () => generate();
   globalThis.__TEST__.race = () => runRace();
+  globalThis.__TEST__.demo = (pace = 0) => demo(pace);
+  globalThis.__TEST__.tellingSteps = tellingSteps;
 }
 
 // --- Stage 1 / Stage 2: the page now asks for a world, rather than
@@ -617,6 +640,33 @@ function buildArmPicks() {
   }
 }
 
+// The steps where the optimum actually moves, read out of the run rather
+// than listed here: a fixed list would drift the moment the seed, the
+// scenario or the horizon changed, and would then be showing an examiner
+// the wrong moments with complete confidence.
+function tellingSteps(steps) {
+  const out = [0];
+  for (let t = 1; t < steps.length; t += 1) {
+    if (steps[t].optimum !== steps[t - 1].optimum) out.push(t);
+  }
+  return out;
+}
+
+//: How long each telling moment holds. Long enough to read the numbers
+//: change, short enough that an examiner's attention is not the cost.
+const DEMO_PACE_MS = 1400;
+
+async function demo(pace = DEMO_PACE_MS) {
+  await generate();
+  await runRace();
+  const stops = tellingSteps(state.run.steps);
+  for (const [i, at] of stops.entries()) {
+    show(at);
+    if (i < stops.length - 1 && pace) await new Promise((r) => setTimeout(r, pace));
+  }
+  return stops;
+}
+
 function applyTierPreset() {
   const preset = TIER_PRESETS[$("tier").value];
   if (!preset) return;
@@ -655,6 +705,8 @@ fetch("/static/palette.json")
         "racing…", $("race"), runRace).catch(() => {});
     });
     buildArmPicks();
+    $("demo").addEventListener("click", (e) =>
+      pending(e.currentTarget, "running the demo…", null, demo).catch(() => {}));
     // No auto-generate. The page opens empty and asks: arriving with a
     // world already built reads as "here is a thing" rather than "build a
     // thing", and silently spends a decision the controls exist to give.

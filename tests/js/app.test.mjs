@@ -299,3 +299,124 @@ describe("the highlight and the panel agree", () => {
     assert.equal(Number(marker.attrs.cy).toFixed(2), y.toFixed(2));
   });
 });
+
+describe("the demo affordance", () => {
+  test("drives the same three steps a user drives, not a fourth path", async () => {
+    // It must go through generate() and runRace(), not assemble its own
+    // sequence of fetches — a second route into the engine is a second
+    // way to be wrong, and it would drift the first time either step
+    // changed.
+    const raced = readFixture("race.json");
+    const { calls, test: hook } = await loadPage({ ...fixtures, raced });
+    // pace 0: the walk's timing is not what this test is about, and
+    // waiting 1.4s per moment would make it the slowest test in the suite.
+    const stops = await hook.demo(0);
+
+    assert.equal(stops[0], 0, "the demo did not start at the beginning");
+    assert.equal(hook.state.t, stops.at(-1), "the demo did not end on its last stop");
+
+    const posts = calls.filter((c) => c.method === "POST").map((c) => c.path);
+    assert.deepEqual(posts, ["/api/graph", "/api/timeline", "/api/run"],
+      "the demo did not walk Generate -> Build -> Race in order");
+    assert.ok(hook.state.race, "the demo finished without a race loaded");
+  });
+});
+
+describe("the panes carry figures a viewer can check", () => {
+  const raced = readFixture("race.json");
+
+  test("the A* pane's cost equals the main readout's optimum at every t", async () => {
+    // The one relationship a viewer will check by eye: A* IS the optimum,
+    // so the pane and the headline must agree by construction. If they
+    // ever drift, the demo is wrong in the most visible way available.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+    const astar = raced.arms.find((a) => a.id === "astar");
+
+    for (let t = 0; t < raced.horizon; t += 1) {
+      hook.show(t);
+      assert.equal(astar.cost[t].toFixed(2), nodes["stat-optimum"].textContent,
+        `A* pane and headline optimum disagree at t=${t}`);
+    }
+  });
+
+  test("cost, hops and excess are the run's own columns, not derived", async () => {
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+    hook.show(21);
+
+    nodes.panes.children.forEach((pane, i) => {
+      const arm = raced.arms[i];
+      const figures = pane.children.find((c) => c.className === "pane-figures");
+      assert.equal(figures.textContent, `${arm.cost[21].toFixed(2)} · ${arm.hops[21]} hops`);
+      // hops is the recorded path_len, which need not equal the drawn
+      // route's segment count — asserting they match would be inventing
+      // a relationship the run does not claim.
+      assert.equal(typeof arm.hops[21], "number");
+    });
+  });
+
+  test("panes are labelled with display names, never code ids", async () => {
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+    hook.show(0);
+
+    const labels = nodes.panes.children.map((p) => p.children[0].textContent);
+    for (const id of ["astar", "aco", "pso", "hybrid"]) {
+      assert.ok(!labels.some((l) => l.includes(id)), `pane labelled with code id ${id}`);
+    }
+    assert.ok(labels.some((l) => l.startsWith("A*")));
+    assert.ok(labels.some((l) => l.startsWith("Hybrid (baseline)")));
+  });
+
+  test("the demo visits the steps where the optimum moves, computed from the run", async () => {
+    // Not a fixed list: a hardcoded set of timesteps would drift the
+    // moment the seed or scenario changed, and would then walk an
+    // examiner through the wrong moments with total confidence.
+    const { test: hook } = await loadPage(fixtures);
+    const steps = fixtures.timeline.steps;
+    const stops = hook.tellingSteps(steps);
+
+    assert.equal(stops[0], 0, "the demo does not start at the beginning");
+    for (const t of stops.slice(1)) {
+      assert.notEqual(steps[t].optimum, steps[t - 1].optimum,
+        `t=${t} is not a step where the optimum moved`);
+    }
+    const moved = steps.filter((s, t) => t > 0 && s.optimum !== steps[t - 1].optimum).length;
+    assert.equal(stops.length, moved + 1, "the demo skips a moment that matters");
+    assert.ok(moved > 1, "fixture has nothing to show; the test proves nothing");
+  });
+});
+
+describe("the shared-timeline line", () => {
+  const raced = readFixture("race.json");
+
+  test("names real identifiers, never 'undefined'", async () => {
+    // It shipped once reading "graph undefined" — read_run returned no
+    // graph_id and the template interpolated the gap without complaint.
+    // A caption that renders a missing value as a word is worse than one
+    // that fails, because it looks like information.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+    hook.show(21);
+
+    const line = nodes.shared.textContent;
+    assert.ok(!/undefined|null|NaN/.test(line), `shared line reads: ${line}`);
+    assert.ok(line.includes(raced.graph_id), "the graph id is not the run's own");
+    assert.ok(line.includes(String(raced.seed)), "the seed is not the run's own");
+  });
+
+  test("reports the graph the RUN used, not whatever the form now holds", async () => {
+    // This is what makes the line evidence rather than a caption: edit
+    // the world after racing and the id keeps naming the graph the arms
+    // actually ran on, so the two visibly disagree instead of silently
+    // agreeing.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = { ...raced, graph_id: "aaaaaaaaaaaa", seed: 4242 };
+    hook.show(21);
+
+    assert.ok(nodes.shared.textContent.includes("aaaaaaaaaaaa"));
+    assert.ok(!nodes.shared.textContent.includes(hook.state.geo.graph_id),
+      "the line is reading the current form rather than the run");
+  });
+});
