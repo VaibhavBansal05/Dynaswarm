@@ -1351,3 +1351,84 @@ That sentence is the standard for Phase 2's remaining segments and for how the r
 **376 passed**, green. Lint clean. `src/` **2015 / 2100**. `outputs/` unchanged.
 
 One of three optimizers can now be shown to have actually run. Segment 15 does PSO and the Hybrid.
+
+---
+
+## Entry 015 — Segment 15: Prove PSO and the Hybrid Run
+
+**Phase** 2 · **Segment** 2 of 3 · **Overall segment** 15
+**Verified** 9 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+### Verification
+
+`hybrid.py:140-152` read: `aco_spent` / `pso_spent` come from `self._split` — **the sub-meters' actual spend** — and `aco_fraction` is reported separately beside them. The declared and the realised are two fields, which is the whole point. Entry 014 intact and untouched. `src/` **2037 / 2100**, `+22`, margin **63**.
+
+### Claim 1 is safe, and now it is measured rather than assumed
+
+```
+t= 0  declared 0.50  realised 0.500  spent 150/150  exch 1
+t=21  declared 0.50  realised 0.500  spent 150/150  exch 1
+t=59  declared 0.50  realised 0.500  spent 150/150  exch 1
+```
+
+Exact, every step, from realised spend. The exchange fires every step.
+
+**And the flatness is the instrument, not a null result.** The probe reading 0.50 flat today is the same probe that will show allocation moving in Phase 3 — **from realised spend, not from what the controller asked for.** A probe built against the working mechanism would have been built to read `aco_fraction`, and would have kept reading whatever was requested on the day the controller started requesting something else.
+
+### R1 — PSO's velocity collapses thirteen orders of magnitude. Phase 3 must answer this before §17.1.
+
+```
+t= 0  flown 222  repaired 44  speed 1.119e-01
+t=21  flown 300  repaired  0  speed 3.798e-06
+t=59  flown 264  repaired  0  speed 5.112e-14
+```
+
+The flight step still runs 264 times at `t=59` and still displaces particles — **by amounts at the edge of float resolution.**
+
+**The contrast is the datum.** In isolation, with no disruptions, velocity settles at ~`1.4e-02` and stays there. The collapse is **specific to a disrupted run** — which is backwards from the naive expectation that disruption would shake a swarm up rather than deaden it.
+
+vClaude reported it **without a verdict** and declined to chase the cause, on the grounds that diagnosing it is a verdict. **That was right**, and it is the discipline this phase was built to produce.
+
+**Three consequences, ruled:**
+
+1. **It bears on how Claim 1 is stated.** PSO standalone runs 27–41% above the optimum. If a meaningful part of that is a swarm with no velocity left, then *"the hybrid beats its components"* is partly *"the hybrid beats a degraded PSO"* — a weaker claim than the words suggest. **Phase 3 either fixes it or the report discloses it.** Both are defensible; silence is not.
+2. **It makes §17.1's "formally drop inertia" much harder to defend.** Adaptive inertia is precisely the lever that addresses velocity collapse — raise inertia when disruption lands, re-energise the swarm. §17.1 offered *implement* or *formally drop* as equally defensible; **this measurement is not neutral between them**, and the decision must now be made against this number rather than in the abstract. `inertia` is applied at `pso.py:204` and absent from `EXPLORE_SIGN`: implemented and un-adaptable.
+3. **Reproduce the isolation-versus-disrupted contrast before attempting any fix.** It is the only evidence available about the mechanism, and a fix applied before the contrast is understood is a change whose effect nobody can read.
+
+**Logged as F13**, assigned to Phase 3, ahead of the inertia decision rather than beside it.
+
+### R2 — The formatter is part of the instrument
+
+> *"My print format was `:.4f`, so `3.8e-06` rendered as `0.0000` and I was one step from reporting 'velocity is exactly zero.' I read the display instead of the value — the same error this phase exists to find, committed while looking for it."*
+
+Caught, and worth more than the catch. **Standing rule:** any probe value shown to a human is formatted so that a live value cannot render as zero — significant figures or scientific notation, never fixed decimals on a quantity whose scale is unknown.
+
+A probe is only as good as its last rendering step, and "reported inert" is the specific claim this phase exists to make. A formatter that manufactures it is the whole phase failing quietly at the last inch.
+
+### R3 — A probe found insufficient, recorded rather than strengthened
+
+`speed_mean` **cannot detect a frozen swarm** — with `_move` disabled, the velocity array keeps its healthy-looking random initial value. `particles_flown` is what detects it.
+
+vClaude recorded the insufficiency **at the assertion**, so nobody later "tidies" the test into using the weaker signal.
+
+**This is the correct handling and it should be the standard.** The tempting move is to quietly strengthen `speed_mean` until it appears adequate; the honest one is to say which signal does the work and why the other cannot. **A probe that is documented as insufficient is safe. One that is silently patched into looking sufficient is the next segment's defect.**
+
+### Two mechanisms through one channel
+
+The first flight probe reported **14 particles moved on a swarm with `_move` disabled** — because `_repair` also writes positions. Two mechanisms observed through one measurement, so the measurement could not distinguish them.
+
+Fixed by counting the displacement **inside `_move`**, with `particles_repaired` carrying the other separately. Same family as segment 14's bounds probe: **the probe was watching a place, not a mechanism.**
+
+### Mutation B — not caught, seventh segment running
+
+Counting flight **per call** rather than per displacement passed all 18 tests.
+
+It matters because of R1: at `t=59` the flight step runs **264 times and moves nothing measurable**, so a per-call counter reports a swarm in vigorous motion at precisely the moment the interesting thing is that it is not. Now pinned — `263 flights counted with zero velocity`.
+
+**Seven consecutive segments.** The commissioned mutation confirms a prediction; the uncommissioned one finds the defect.
+
+### Close
+
+**386 passed**, green. `src/` **2037 / 2100**, margin **63**. Phase 2 has spent 32 of the projected 55–60, with segment 16 at 10–15.
+
+All three optimizers can now be shown to have actually run — and one of them has a measurement against it that Phase 3 has to answer. **That is the phase working.** A verification layer that found nothing would have been the result worth distrusting.
