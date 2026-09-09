@@ -1154,3 +1154,103 @@ What exists now: Rudra builds a world, designs how it breaks, races three optimi
 The last three are one idea from three directions: **a test is only as good as the worst input it is ever shown.**
 
 Segment 13 is a short close-out. Then Phase 2 — trust it.
+
+---
+
+## Entry 013 — Segment 13: Ship It — **PHASE 1 COMPLETE**
+
+**Phase** 1 · **Segment** 8 of 8 · **Overall segment** 13
+**Verified** 9 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+### The cap: raised to 900, and the derivation did not survive its own check
+
+That is the entry's finding, and it is about method rather than the number.
+
+I raised the cap on the argument that a derived number beats a picked one, and priced Phase 3's allocation view at **~120 lines, "the size of the excess chart it most resembles."** vClaude measured:
+
+```
+drawExcess       36     <- the excess chart, priced at ~120
+drawPanes        34
+inspectEdge      27
+drawArmPanel     24
+drawLedger       21
+inspectNode      18
+```
+
+**3.3× out, and nothing on the page exceeds 36.** On the same benchmark the allocation view is ~40, so the honest arithmetic is `702 + ~40 + ~80 ≈ 820`. The demo affordance came in at **11 lines against ~80 budgeted** — the same estimate running high a second time, independently.
+
+**900 stands.** It errs in the safe direction and Entry 012 demonstrated the cost of the other error. What matters is the correction to the *reasoning*:
+
+> **"Derived, not picked" only beats "picked" if the derivation is checkable.** This one was checked and came back 3× out.
+
+So the cap now carries ~80 lines more headroom than its own justification intended — a fact to hold at the next raise, not a thing to correct now. vClaude proposing no change while reporting the discrepancy is the right handling: **the number was fine and the argument for it was not, and those are separate things.**
+
+Closing: JS **734 / 900**, presentation **667 / 900**.
+
+### T4 shipped reading "graph undefined" — and only the screenshot caught it
+
+`read_run` returned no `graph_id`. The template interpolated the gap and rendered the word. **Every test passed.** Green suite, correct panes, and directly beneath them a line reading `graph undefined` — which would have gone in front of an examiner.
+
+> **A caption that renders a missing value as a word is worse than one that fails, because it looks like information.**
+
+**Second time the standing screenshot rule has paid for itself** — the first was `delete` being invisible in segment 10, where a width change to an unreadable colour measured as done and showed as nothing. Both defects were invisible to the suite and obvious to an eye. The rule stays.
+
+The fix is the interesting part: `graph_id` now comes from the manifest **the run recorded**, not from the form. So editing the world after racing leaves the line naming the graph the arms actually ran on, and the two **visibly disagree** rather than silently agreeing. That is what makes it evidence rather than a caption — and it is why T4 was specified as a statement rather than a check. Pinned by two tests, both shown red.
+
+### The panes now carry a number a viewer can check
+
+```
+All 4 panes show timestep 21 of one timeline, frozen before any algorithm ran
+— seed 1000, graph 1e06d1c7b60e, 760 roads open.
+
+  A*                 110.54 · 12 hops    +0.0%
+  ACO standalone     113.80 · 11 hops    +3.0%
+  PSO standalone     155.96 · 17 hops   +41.1%
+  Hybrid (baseline)  111.57 · 13 hops    +0.9%
+```
+
+A\*'s **110.54 is the headline optimum to the digit**, asserted at *every* timestep rather than sampled.
+
+`cost` and `hops` are the run's own `best_cost` and `path_len` columns — and the test deliberately **does not** assert that `hops` equals the drawn route's segment count, because the run makes no such claim and asserting it would invent a relationship nobody measured. That restraint is worth recording; it is the same discipline as refusing to show pheromone in segment 12.
+
+Space was not the problem I anticipated: three figures fit at quarter size by going on two lines, no type shrunk.
+
+### A correction to vClaude's own mutation method
+
+Its first attempt at mutation A reassigned a `const`, so it **threw** rather than producing the silent wrong-pairing it meant to demonstrate — and tripped three unrelated tests, which *reads* like a strong catch and is nothing of the kind.
+
+Caught and redone so the mutation is silent and the failure is the one claimed. **A mutation that crashes tests the interpreter, not the suite** — the same lesson as Entry 005's demo that was wrong first, in a new place.
+
+### Demo readiness — the honest read
+
+Asked whether the page is ready for an examiner, vClaude said yes, with a caveat about the room rather than the page:
+
+> **The demo is over in about eight seconds.** Five moments at 1.4 s each — the right length for attention, the wrong length for someone who has never seen it. They will not know where to look before it has moved on.
+
+**Practical instruction for Rudra: press the demo once to show the shape, then scrub to `t=21` and talk over it.** That is a better piece of advice than any code change would have been.
+
+### The one thing left undone, named clearly
+
+> *"The main canvas at a heavy disruption step. Every other band was made legible by reducing what it carries; the canvas never got that treatment, because every segment had a reason to add to it and none had a reason to take something off."*
+
+**Recorded as the standing recommendation for Phase 5's demo preparation, not as a defect.** It is a design debt with a known shape and a known fix — spend a segment deciding what comes *off* — and it is worth carrying forward precisely because no segment will ever raise it on its own. Every future task will have a reason to add.
+
+---
+
+## PHASE 1 COMPLETE
+
+**Eight segments. `src/` unmoved at `2005 / 2100` in every one of them.** §2.3 asserted the core would already expose what a view needs; eight consecutive segments failed to falsify it, which is now the strongest structural claim this project can make about its own architecture.
+
+Final: **367 Python tests, 50 JavaScript tests, 0 skipped.** `dashboard/` Python **177 / 1000**, JS **734 / 900**, presentation **667 / 900**. `outputs/` unchanged by the suite — 24 before, 24 after.
+
+**What exists:** Rudra builds a world, designs how it breaks, races three optimizers against A\*'s truth, scrubs sixty steps, clicks into any edge, node or arm, and presses one button that walks the whole story. Every number traceable to the engine that produced it. Every gap labelled as a gap — including the allocation view, which is an honest empty slot because the controller behind it is known not to work.
+
+**The transferable result — five consecutive segments, now stated as a finding rather than an observation:**
+
+> **The uncommissioned mutation found the real defect five times running** — the panes, the ledger, the broken-route styling, the selection marker, and the shared line. **The commissioned one confirmed a prediction every time.**
+>
+> A spec can only mutate what its author already imagined going wrong. **The defect that matters is by construction the one nobody thought to ask for.**
+
+That is not a habit to carry into Phase 2. It is the reason Phase 2 exists.
+
+**Next: Phase 2 — trust it.** Every mechanism proven live or reported inert.
