@@ -111,6 +111,8 @@ class ACO:
         self._visits = np.zeros(view.n_nodes, dtype=np.float64)
         self._best: Solution | None = None
         self._iterations = 0
+        self._tau_before = self._tau.copy()
+        self._mech = dict.fromkeys(("evaporated", "deposited", "clamped"), 0.0)
         self._goal_cost = self._compute_goal_cost()
         self._refresh_visibility()
 
@@ -140,6 +142,8 @@ class ACO:
         constructions — an overrun that grows precisely when the
         controller enlarges the colony.
         """
+        self._tau_before = self._tau.copy()
+        self._mech = dict.fromkeys(self._mech, 0.0)
         while not meter.exhausted:
             found: list[tuple[list[int], float]] = []
             for _ in range(int(self._p["n_ants"])):
@@ -179,11 +183,50 @@ class ACO:
         self._sync_lists(structure=True)
 
     def probe(self) -> dict[str, float]:
-        """Internal telemetry, including the branching measure."""
+        """Internal telemetry, including the branching measure.
+
+        The ``tau_*`` fields report **whether the mechanism ran**, not
+        whether it ran well, and they report counts rather than verdicts:
+        a probe that says ``"pheromone: OK"`` has replaced the evidence
+        with the conclusion it was supposed to support.
+
+        Each one is falsifiable, and each is demonstrated reporting zero
+        against a deliberately disabled mechanism in the segment's
+        findings — a probe that has only ever said "working" is not
+        evidence that anything works:
+
+        * ``tau_changed`` 0 — the trail table is frozen. ACO is then a
+          random walk that still produces routes and still produces
+          excess, and nothing else on the page would look different
+        * ``tau_evaporated`` 0 — no evaporation, so the colony converges
+          early and never re-explores. That reads as *"ACO recovers
+          poorly from disruption"*, which is a finding one would report
+        * ``tau_clamped`` 0 — the MAX--MIN bounds never bind, and this is
+          plain Ant System being reported as MAX--MIN
+        * ``tau_deposited`` 0 — the best ant reinforces nothing
+
+        What aggregating gives up: which edges changed. Per-edge trails
+        at every step of every trial is the payload that took a response
+        from 34 KB to 1.7 MB, and Phase 4 runs this at >=100 trials per
+        arm. Colony-level counts answer "did it run"; they cannot answer
+        "did it run on the right edges", and ``tau_deposited`` is the
+        partial substitute — the deposit walks the best path, so a
+        non-zero count is deposit on the route by construction.
+        """
+        active = np.asarray(self._view.active)
+        moved = active & (self._tau != self._tau_before)
+        trails = self._tau[active]
         return {
             "lambda_branch": self._lambda_branching(),
             "tau_ratio": self._tau_ratio(),
             "iterations": float(self._iterations),
+            "tau_changed": float(moved.sum()),
+            "tau_active": float(active.sum()),
+            "tau_min": float(trails.min()) if trails.size else 0.0,
+            "tau_max": float(trails.max()) if trails.size else 0.0,
+            "tau_evaporated": self._mech["evaporated"],
+            "tau_deposited": self._mech["deposited"],
+            "tau_clamped": self._mech["clamped"],
         }
 
     def reset_learned_state(self, strength: float) -> None:
@@ -306,7 +349,9 @@ class ACO:
             self._best = Solution(cost, tuple(path))
 
     def _evaporate(self) -> None:
+        before = float(self._tau.sum())
         self._tau *= 1.0 - self._p["rho"]
+        self._mech["evaporated"] += before - float(self._tau.sum())
 
     def _deposit(self, path: list[int], cost: float) -> None:
         """Reinforce one path, symmetrically across both directions."""
@@ -319,6 +364,7 @@ class ACO:
             if slot >= 0:
                 self._tau[slot] += amount
                 self._tau[int(rev[slot])] += amount
+                self._mech["deposited"] += 1.0
 
     def _clamp_trails(self) -> None:
         """Apply the MAX--MIN bounds once a reference cost exists."""
@@ -330,7 +376,16 @@ class ACO:
         tau_max = 1.0 / (rho * self._best.cost)
         tau_min = tau_max / (2.0 * max(self._view.n_nodes, 2))
         active = np.asarray(self._view.active)
+        # Counted from the EFFECT of the clip, not from how many slots
+        # were outside the bounds beforehand. Written the other way
+        # first, and removing `np.clip` entirely still reported 22800
+        # clamps — a probe reporting the need for a mechanism that was no
+        # longer there, which in a report reads as "MAX--MIN bounds
+        # active" about plain Ant System. Segment 4's rule, in the
+        # instrument layer: observe the effect, not the call.
+        before = self._tau.copy()
         np.clip(self._tau, tau_min, tau_max, out=self._tau, where=active)
+        self._mech["clamped"] += float((active & (self._tau != before)).sum())
 
     # -- state ------------------------------------------------------------
 

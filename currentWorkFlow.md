@@ -180,3 +180,251 @@ Green suite, artefacts pasted, **every probe demonstrated inert**, uncommitted w
 ---
 
 <!-- vClaude: append your FINDINGS block below this line, using the template in AGENT_PROTOCOL.md §6 -->
+
+---
+
+# FINDINGS — Segment 14
+
+## 1. T0 — the Phase 2 projection, against the 95
+
+**It fits, with roughly 15–20 to spare, and I am not counting on Phase 3.**
+
+| | statements | note |
+|---|---|---|
+| `src/` at segment start | **2005 / 2100** | margin **95** |
+| T1 (F10) | **−2** | delegating removes a branch |
+| Segment 14 — ACO probes | **+12** | measured, not estimated |
+| Segment 15 — PSO | ~25 | sketched against `pso.py`'s existing probe |
+| Segment 15 — Hybrid-specific | ~8 | see below |
+| Segment 16 — walkthrough | ~10–15 | likely `scripts/`, possibly 0 in `src/` |
+| **Phase 2 total** | **~55–60** | leaves **35–40** |
+
+**The structural finding that made this fit: Hybrid's probe is a
+prefix-wrapper over ACO's and PSO's.**
+
+```python
+out = {f"aco_{k}": v for k, v in self._aco.probe().items()}
+out.update({f"pso_{k}": v for k, v in self._pso.probe().items()})
+```
+
+Every field added to ACO appears in Hybrid automatically, prefixed, **at zero
+statement cost**. My first projection assumed Hybrid needed its own set and came
+out at ~90 of 95 — a five-statement margin, which is not a margin. The real
+figure is roughly 30 lower because the composition already exists.
+
+**A second thing that keeps the cost down and is worth stating, because it
+would otherwise look like an error:** extending the probe's returned dictionary
+costs **nothing**. `return {...}` is one `Return` statement whether it carries
+three keys or thirty. The cost of a probe is entirely in the computation behind
+it, which is where it should be.
+
+**I am not counting on Phase 3's restructure paying for any of this.** The
+numbers above are against today's 95 with no assumed refactor credit. If
+`allocation/` turns out statement-negative, that is Phase 3's margin, not this
+phase's.
+
+**Actual at close: `src/` 2015 / 2100, delta +10, margin 85.** Dashboard
+unchanged — 177/1000 Python, 734/900 JS, 667/900 presentation.
+
+## 2. T1 — F10 closed, and it was hiding a real difference
+
+```python
+-        if t <= 0:
+-            return 0
+-        return len(self.schedule[t - 1])
++        return len(self.events_at(t))
+```
+
+**Statement-negative: −2.**
+
+**Identical at every timestep — 3 seeds × 60 steps = 180 comparisons, zero
+mismatches.** Confirmed by capturing every value before the change and
+comparing after, not by argument.
+
+**And the duplication was hiding a behavioural difference, not just a stylistic
+one.** Past the horizon the two doors did not agree at all:
+
+```
+before:  changed_edges(61)  ->  IndexError: tuple index out of range
+after:   changed_edges(61)  ->  0        (events_at(61) returns ())
+```
+
+`events_at` guards its upper bound because F1's fix put the bound there
+deliberately. `changed_edges` never had it. So F10 was not only *"the same
+arithmetic in two places"* — the second copy was already subtly different, and
+nobody had looked because nothing calls it past the horizon yet.
+
+## 3. T2 — the probe surface that already exists
+
+**Where:** `optimizer.probe()`, called once per timestep per arm at
+`harness/trial.py:187`, written into `steps.parquet`'s `probe` map column at
+`:245`. Not conditional — **every step, every arm, every trial.**
+
+**What each arm recorded before this segment:**
+
+| Arm | Fields |
+|---|---|
+| `astar` | `expansions` |
+| `aco` | `lambda_branch`, `tau_ratio`, `iterations` |
+| `pso` | `diversity`, `iterations` |
+| `hybrid` | those two sets, prefixed, plus `aco_fraction`, `exchanges` |
+
+**Cost:** `_lambda_branching()` and `_tau_ratio()` each scan the active mask,
+O(n_slots) — ~1500 elements at `medium200`. Measured at **<2 ms per call** and
+pinned by a test, because Phase 4 runs this at ≥100 trials per arm and "cheap"
+is exactly the claim that stops being true unnoticed.
+
+**Built on it rather than beside it.** `tau_ratio` already answers *"is there
+any spread in the trails"*, so no second measure of spread was added; the new
+fields answer the four questions it cannot.
+
+## 4. T3 — the ACO probes, live
+
+```
+ACO probe, live (seed 1000, 300 evaluations):
+  t= 0  changed 1470/1470  evap  345.32  dep  434  clamp   1470  tau [0.0150, 0.0425]
+  t= 1  changed 1470/1470  evap   20.54  dep  276  clamp      0  tau [0.0031, 0.0569]
+  t=21  changed 1520/1520  evap    3.41  dep  165  clamp  22492  tau [0.0002, 0.0879]
+  t=59  changed   28/1488  evap    3.77  dep  165  clamp  21900  tau [0.0002, 0.0966]
+```
+
+Numbers, not verdicts. And they say something: **28 changed of 1488 at t=59**
+is a colony that has converged, which no `"pheromone: OK"` would have told
+anyone.
+
+**What aggregating gives up, stated plainly:** *which* edges changed. Per-edge
+trails at every step of every trial is the payload that took a response from
+34 KB to 1.7 MB in segment 10, and Phase 4 multiplies that by ≥100 trials.
+Colony-level counts answer *did it run*; they cannot answer *did it run on the
+right edges*. `tau_deposited` is the partial substitute — the deposit loop
+walks the best path, so a non-zero count is deposit-on-route by construction.
+
+## 5. T4 — every probe shown inert, and one of them failed
+
+Each mechanism disabled at source, run, probe pasted. All at `t=21`:
+
+```
+LIVE                          changed 1520/1520  evap  3.41  dep  165  clamp 22492
+
+1. PHEROMONE FROZEN           changed    0/1520  evap  0.00  dep  462  clamp 22800
+2. EVAPORATION OFF            changed  626/1520  evap  0.00  dep  410  clamp  1266
+3. MAX-MIN BOUNDS REMOVED     changed 1420/1520  evap  2.49  dep  165  clamp     0
+4. BEST ANT DEPOSITS NOTHING  changed 1520/1520  evap  0.43  dep    0  clamp 22800
+```
+
+Three of the four were unmistakable first time. **The third was not, and it is
+the finding of this segment.**
+
+### The bounds probe reported 22800 clamps on a codebase with no clamp in it
+
+First version counted slots that were **outside** the bounds and then clipped:
+
+```python
+outside = active & ((self._tau < tau_min) | (self._tau > tau_max))
+self._mech["clamped"] += float(outside.sum())
+np.clip(...)
+```
+
+Delete `np.clip` entirely and it still reports **22800**. It was measuring the
+*need* for a mechanism, not the mechanism. In a report that reads as
+**"MAX–MIN bounds active"** about plain Ant System — which is exactly the claim
+§5.2 says the bounds exist to support.
+
+Fixed by measuring the clip's effect:
+
+```python
+before = self._tau.copy()
+np.clip(self._tau, tau_min, tau_max, out=self._tau, where=active)
+self._mech["clamped"] += float((active & (self._tau != before)).sum())
+```
+
+**This is segment 4's lesson in the instrument layer.** F1 was invisible in
+`events_at`'s argument and visible only in which index was read: *observe the
+effect, not the call.* I wrote a probe that observed the call.
+
+**The other direction is checked too** — every inert test asserts the remaining
+mechanisms still report non-zero, so a probe cannot pass by everything going
+quiet at once.
+
+## 6. Both mutations
+
+**A — specified: the probe reads the pre-update table.**
+
+```
+E  AssertionError: trails never moved in a working colony
+E  assert 0.0 > 0
+```
+
+F1's shape in the instrument layer, caught.
+
+**B — mine: the per-call counters never reset.**
+
+```
+JS/Python suite:  8 passed
+```
+
+**Nothing caught it**, and what it reports is the problem:
+
+```
+  t= 0  evap   345.32  dep    434  clamp    1470
+  t=10  evap   401.84  dep   2255  clamp  154194
+  t=30  evap   473.00  dep   5555  clamp  603090
+  t=59  evap   580.28  dep  10662  clamp 1267734
+```
+
+Every number rises smoothly and every number is plausible. A reader concludes
+**"clamping intensifies sharply over the run"** — from an artefact of never
+zeroing a counter. My eight tests all asserted `> 0`, which a running total
+satisfies trivially.
+
+Now covered by a test that silences the mechanism for a *second* call and
+asserts exactly zero, so a cumulative counter still carrying the first call's
+total fails:
+
+```
+E  AssertionError: deposits carried over from the previous call: 376.0
+```
+
+**Six consecutive segments.** The commissioned mutation confirmed a prediction;
+the uncommissioned one found the defect.
+
+## 7. Acceptance
+
+| Check | Result |
+|---|---|
+| Suite | **376 passed, 0 failed, 0 skipped** |
+| Lint, three trees | `All checks passed!` |
+| `src/` | **2015 / 2100**, delta **+10**, margin 85 |
+| Dashboard budgets | 177/1000 · 734/900 · 667/900 |
+| `outputs/` before / after | **26 / 26** |
+| New tests | `tests/test_probes.py`, **9 passed** |
+
+## 8. Would I believe a number ACO produced?
+
+**Yes — for the four things now instrumented, and no further, and the boundary
+matters more than the answer.**
+
+What I would now defend: that pheromone moves, that evaporation removes mass,
+that the MAX–MIN bounds actually bind, that the best ant reinforces something.
+Each is a count, each is falsifiable, and each has been seen reporting zero
+against a broken mechanism. Before this segment none of that was checkable from
+a recorded run — `tau_ratio` would have looked perfectly healthy on a frozen
+table, because a frozen table still has spread.
+
+**What I would not yet defend, and nobody should quote:**
+
+- **That deposit lands on the *right* edges.** `tau_deposited` counts slots the
+  loop touched. It walks `best_path`, so the count is deposit-on-route by
+  construction — but if `find_slot` returned the wrong slot the count would be
+  identical. Catching that needs per-edge data, which is the payload we
+  deliberately did not send.
+- **That the *magnitudes* are right.** Every probe here answers *did it run*.
+  None answers *did it run correctly* — an evaporation rate ten times too high
+  reports a large `tau_evaporated` and looks healthy.
+- **Anything about PSO or the Hybrid.** Segment 15.
+
+**The honest summary: ACO is no longer a black box that produces plausible
+numbers. It is a box with four windows in it.** That is a real change from
+where this started, and it is less than "ACO is verified" — which is the
+distinction Phase 2's gate was written to force, and the reason it says
+*"reported inert"* rather than *"confirmed working"*.

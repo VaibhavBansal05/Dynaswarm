@@ -267,7 +267,18 @@ class GraphTimeline:
         return view
 
     def changed_edges(self, t: int) -> int:
-        """Undirected edges altered between ``t-1`` and ``t``."""
-        if t <= 0:
-            return 0
-        return len(self.schedule[t - 1])
+        """Undirected edges altered between ``t-1`` and ``t``.
+
+        Asks :meth:`events_at` rather than indexing ``schedule`` again
+        (F10).  The arithmetic was correct here, but it was F1's
+        arithmetic written a second time, in the place the tests do not
+        point at — and a later change to the indexing convention would
+        have left this behind silently.  F1 made every component read a
+        timestep into the future and voided every recency-driven result
+        the project had; it does not get a second door.
+
+        Delegating also fixes a difference the duplication was hiding:
+        past the horizon this raised ``IndexError`` where ``events_at``
+        returns empty.
+        """
+        return len(self.events_at(t))
