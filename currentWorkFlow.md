@@ -1,8 +1,8 @@
-# SEGMENT 14 — Prove ACO Runs
+# SEGMENT 15 — Prove PSO and the Hybrid Run
 
-**Phase 2 · Trust it · Segment 1 of 3**
+**Phase 2 · Trust it · Segment 2 of 3**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.2 (ACO), §2.1 (the layers), §10.3 (Layer 1 invariants), §17**, and `decisionLedger.md`. `WORKFLOW_LOG.md` **Entry 013** closes Phase 1; **Entry 008 logs F10, which is T1 here.**
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.3 (PSO), §6 (the Hybrid — §6.1 the budget split, §6.2 the exchange), §17.1 (PSO inertia)**, §2.1. `WORKFLOW_LOG.md` **Entry 014** carries R1, which is T1 here.
 > Append your findings to the **bottom** of this file.
 >
 > ## ⛔ YOU DO NOT COMMIT
@@ -11,128 +11,114 @@
 
 ---
 
-## What Phase 2 is, and why it is not more building
+## Goal
 
-Phase 1 made the system **visible**. Phase 2 makes it **believable**.
+Same discipline as segment 14, on the two components left. **Your standard from last segment is the standard:**
 
-§17's gate is one sentence and it is unusual:
+> *"Every probe answers **did it run**. None answers **did it run correctly**."*
 
-> **Every mechanism proven live or reported inert.**
+Claim exactly that much and no more.
 
-Read the second half. The deliverable is not "we confirmed everything works." It is **an instrument that would have told us if something did not** — and the only way to earn that claim is to break each mechanism deliberately and watch the instrument say so.
-
-This project has now hit the same failure five separate times, under five names: a threshold copied from the state being replaced, an invariant asserted only against correct data, a guarantee tested by data in which nothing fails, a ledger reconciled against its own arithmetic, a green tick that could never be red. Entry 013 stated the common root:
-
-> **A test is only as good as the worst input it is ever shown.**
-
-A probe is a test with a UI. It inherits the whole problem, and it inherits it in the place where it matters most — because the numbers a probe reports are the ones that go into your report.
-
-**So the central requirement of this segment, above every feature in it:**
-
-> **Every probe must be demonstrated reporting `inert` against a deliberately disabled mechanism.** Paste the disabling and paste the output. A probe that has only ever reported "working" is not evidence that anything works.
+**The Hybrid matters more than PSO here**, and it is worth saying why up front. Claim 1 of the project is *"the hybrid beats its components."* If the budget split does not actually happen — if one component quietly gets the whole budget — then the hybrid is a component wearing a different name, and Claim 1 is comparing a thing to itself. **That is not a bug that would show up in the numbers. It would show up as a clean, publishable, wrong result.**
 
 ---
 
-## ⚠️ T0 — MEASURE, and this time **project the whole phase before writing a line**
+## ⚠️ T0 — MEASURE
 
-**`src/` is at `2005 / 2100`. Ninety-five statements of margin.** It has not moved in eight segments because nothing in Phase 1 belonged in the science surface. **Probes do.** That streak ends here, and it should.
+`src/` **2015 / 2100**, margin **85**. Your projection was ~33 for this segment (PSO ~25 + Hybrid ~8, the Hybrid cheap because its probe is a prefix-wrapper).
 
-Ninety-five is not obviously enough for Phase 2's probes *and* Phase 3's restructure.
-
-**Before writing any probe code:** project the statement cost of **all of Phase 2** — ACO here, PSO and Hybrid next segment, the walkthrough after — and report it against the 95.
-
-**If it does not fit, stop and report.** Do not start, discover the wall at 2098, and then be choosing between deleting something that mattered and asking for a raise under pressure. That is exactly how segment 12 ended at `702 / 700`, and the lesson from it was not "raise caps sooner" — it was **find out before you are committed.**
-
-Note in passing that Phase 3 restructures the control layer into `allocation/`, which may be statement-negative. **Say whether you are counting on that**, because a projection that quietly assumes a future refactor will pay for today's spending is a projection that has already failed.
-
-Also report `dashboard/` Python, JS, and presentation, unchanged expectations.
+**Report projection then actual.** If the wrapper insight does not hold up in practice, say so before spending — that projection is what made Phase 2 fit.
 
 ---
 
-## T1 — F10: the F1 arithmetic still lives in two places
+## T1 — Entry 014's R1: `state_at` stays, and the reason gets written down
 
-Logged in Entry 008 and assigned here.
+`timeline.py:262` — `state_at` still does `for event in self.schedule[t - 1]`. You did not flag it, and **leaving it was right.**
 
-`changed_edges` derives `schedule[t - 1]` independently instead of calling `events_at()`. **It is correct today.** The defect is that F1's arithmetic exists in two places, and **the second one is not the one the tests point at.**
+But it must be written down or a future segment will delegate it in the name of F10 and make things worse:
 
-A future edit to `events_at()` — a horizon change, an indexing convention, anything — leaves this behind, silently. F1 was the off-by-one that made every component read one timestep into the future and voided every recency-driven result the project had. **It does not get a second door.**
+- `state_at` **is** the definition. Applying `schedule[t-1]` to state `t-1` is what *"the state at `t`"* means. `events_at` reports that fact; `state_at` enacts it
+- `events_at`'s out-of-range guard cuts the **other** way here. Delegating would turn an `IndexError` past the horizon into **silently returning the previous state** — the quiet-wrong-answer class this project keeps finding
 
-One line: `changed_edges` asks `events_at()`. Statement-neutral or better. **Confirm the values are identical before and after**, at every timestep, not by argument.
-
----
-
-## T2 — Report the probe surface that already exists
-
-Segment 12 found that `probe` carries **colony- and swarm-level aggregates**, and that per-edge and per-node probes do not exist. That is the extent of what is known.
-
-**Before designing anything, paste from source:**
-
-- what `probe` records today, field by field, and where it is written
-- when it fires — every step, every arm, conditionally?
-- what it costs when nobody is looking. **A probe that runs during Phase 4's manifest at ≥100 trials is a probe that changes what it measures if it is expensive**, and §10.2's fairness guarantees do not survive an instrument that slows one arm more than another
-- whether it is already recorded to `steps.parquet` or dropped
-
-**Build on what is there.** If the existing probe already answers a question below, say so and do not build a second one — a second instrument that disagrees with the first is this project's founding failure.
+**Two things:** a comment at that line naming it the definitional site and saying why it does not delegate, and a test asserting `state_at` past the horizon still raises. **The guard is the feature.**
 
 ---
 
-## T3 — The ACO probes
+## T2 — Report what PSO and the Hybrid record today
 
-**ACO first, deliberately.** It is the most mechanism-heavy component — pheromone, evaporation, MAX–MIN bounds, the best ant's deposit — and it is the one where *"is this actually running"* is most checkable and most consequential. §5.2 is the contract.
+From source, before designing anything. What `probe` already carries for each, when it fires, what it costs.
 
-Whatever the answers to T2, these are the questions Phase 2 must be able to answer about ACO from a recorded run, per step:
+**Confirm the prefix-wrapper.** Your projection rests on the Hybrid inheriting every component field for free. If that is a design you are about to build rather than one that exists, say which.
+
+---
+
+## T3 — The PSO probes (§5.3)
+
+PSO here is **priority-vector encoding** — memory on nodes, not edges. The questions Phase 2 must be able to answer per step:
 
 | Question | Why it cannot be assumed |
 |---|---|
-| **Is pheromone changing at all?** | A frozen pheromone table is an ACO that is really a random walk. It would still produce routes, still produce excess, still look like a result |
-| **Is evaporation happening?** | Without it, ACO converges early and never re-explores — which would look like *"ACO recovers poorly from disruption,"* a finding you would report |
-| **Are the MAX–MIN bounds actually binding?** | The bounds are the *point* of MAX–MIN Ant System. If they never clamp, this is plain ACO under a different name in the report |
-| **Is the best ant depositing on the route it found?** | Deposit on the wrong edges is a mechanism that runs and does nothing |
+| **Are particle positions actually moving?** | A frozen swarm is a fixed set of random guesses re-evaluated. It produces routes, produces excess, looks like a result |
+| **Is velocity being applied, and is it bounded?** | Velocity that explodes or collapses to zero both look like "PSO explores poorly," which is a finding you would report |
+| **Are personal bests updating?** | Without them there is no memory, and PSO's whole claim here is *memory on nodes* |
+| **Is the global best updating — and how often?** | A global best frozen after iteration two is premature convergence, and it is indistinguishable from a hard problem unless you count it |
 
-**Report the numbers, not a verdict.** *"Pheromone changed on 47 of 735 edges this step, min 0.012, max 0.891, bounds [0.01, 0.9], clamped 12"* is a probe. *"pheromone: OK"* is a claim, and a claim is what a probe is supposed to replace.
+**One note, not a task.** §17.1 records that PSO's **inertia** was promised in the synopsis and never delivered — `EXPLORE_SIGN` has seven entries and none is `inertia`. **Resolving that is Phase 3's.** But if a probe here makes its status visible, say so plainly in FINDINGS — Phase 3 has to decide *implement or formally drop*, and a measurement beats an argument.
 
-**Aggregate, do not stream.** Per-edge pheromone at every step for every trial is the payload that made a 34 KB response into 1.7 MB in segment 10. Colony-level aggregates per step, and **say what you are giving up** by aggregating.
+## T4 — The Hybrid probes (§6.1, §6.2)
 
-## T4 — Prove each probe can say `inert`
+**The two that matter most in the project:**
 
-**The task the phase exists for.** For every probe in T3:
+| Question | Why it decides a claim |
+|---|---|
+| **Is the budget actually split in the declared ratio?** | Evaluations spent by each component, per step, against `aco_fraction` and the total budget. **If this is not true, Claim 1 compares the hybrid to itself** |
+| **Does the exchange actually happen?** | §6.2. Count exchanges, not "exchange enabled". An exchange mechanism that never fires makes the hybrid two solvers in one process, which is not what the report will say it is |
 
-1. **Disable the mechanism it watches** — pin evaporation to zero, freeze the pheromone table, remove the bounds, deposit on a fixed edge set
-2. **Run and paste the probe's output**
-3. **It must be unmistakable.** Not a number a careful reader could interpret as inert — a report that says so
+**And the reading that matters for Phase 3:** with the uncontrolled hybrid, `aco_fraction` sits at 0.5 for all 60 steps — vClaude measured that in segment 12. **A probe that reports the split should show that flatness**, so the day the adaptive controller works, the same probe shows it moving. **The probe that proves the mechanism is inert today is the one that proves it live in Phase 3.**
 
-**If a probe cannot distinguish a disabled mechanism from a working one, it is not a probe and it does not ship.** Say so and say what you would need instead.
+## T5 — Prove each probe can say `inert`
 
-**And check the other direction too.** A probe that reports inert when the mechanism *is* running is worse than none — it would send someone hunting a defect that is not there, in a codebase where two of the last six real defects were found by someone following exactly such a trail.
+**The task the phase exists for**, unchanged from segment 14:
 
-## T5 — Tests
+1. Disable the mechanism — freeze the swarm, zero the velocity, stop personal-best updates, force the split to 100/0, disable the exchange
+2. Run and paste the output
+3. It must be **unmistakable**, and shown in both directions — a probe that reports inert while the mechanism runs is worse than none
+
+**Two traps you found last segment, now checked for by name:**
+
+- **Does the probe measure the effect or the call?** The bounds probe counted the *need* for a clip and would have reported "MAX–MIN active" with `np.clip` deleted. Ask it of every probe here before you demonstrate it
+- **Do the counters reset per call?** All eight tests passed on monotonic totals last time. `> 0` is satisfied trivially by anything cumulative
+
+## T6 — Tests
 
 | Test | Catches |
 |---|---|
-| **F10: `changed_edges` and `events_at()` agree at every timestep** | Before and after the fix |
-| **Each probe reports inert against its disabled mechanism** | T4, as a test rather than a demonstration |
-| **Each probe reports live against the working one** | The other direction |
-| **Probes do not change what they measure** | Same seed, same run, probes on and off → identical `best_cost` at every step. **The strong one** |
-| **Probe cost is bounded** | Whatever T2 finds, pinned, since Phase 4 runs this ≥100 times |
+| **`state_at` past the horizon raises** | T1 |
+| **Each probe inert against its disabled mechanism** | |
+| **Each probe live against the working one** | |
+| **Counters reset per call** | Silence the mechanism on a second call, require exactly zero |
+| **Probes do not change what they measure** | Same seed, probes on and off → identical `best_cost` at every step |
+| **The budget split sums to the budget** | And matches `aco_fraction`. **The one that guards Claim 1** |
 
 **Every invariant test shown failing against corrupted input, and the corruption pasted.**
 
-## T6 — Mutations, two, one of them yours
+## T7 — Mutations, two, one of them yours
 
-**Specified:** make a probe read the pheromone table *before* the update instead of after. It reports plausible, changing, in-bounds numbers — and they are one step stale. This is F1's shape moved into the instrument layer, and it is the failure that would be hardest to ever notice.
+**Specified:** make the Hybrid's split probe report the *requested* fraction rather than the evaluations actually spent. It would read 0.50 forever and be right by coincidence today — and would keep reading whatever was asked for on the day the controller starts asking for something else. **A probe that reports the input instead of the outcome is the exact shape of the bounds probe you already caught.**
 
-**Yours.** Five consecutive segments say the uncommissioned mutation is the one that finds the real defect. Entry 013 stated why: **a spec can only mutate what its author already imagined going wrong.**
+**Yours.** Six consecutive segments. Entry 013 stated why it works: **a spec can only mutate what its author already imagined going wrong.**
 
-## T7 — Show it
+## T8 — Show it
 
-1. **T0's projection for all of Phase 2**, against the 95 — before anything else
-2. F10's before/after equality
-3. The existing probe surface, from source
-4. **Each ACO probe, live and inert, side by side** — the artefact of this segment
-5. Both mutations
-6. **Your read: after this, would you believe a number ACO produced?** Not a formality — you have been closer to this code than either of us
+1. T0 projection vs actual
+2. T1's comment and the horizon test
+3. What PSO and the Hybrid record today, from source
+4. **Every probe live and inert, side by side** — the artefact
+5. **The budget split, measured** — evaluations to each component per step, against `aco_fraction`
+6. Both mutations
+7. **Your read: would you now believe a Hybrid number?** And say what you would still not defend
 
-## T8 — Hand over, do **not** commit
+## T9 — Hand over, do **not** commit
 
 `git status --short`, the commit message as a copyable block, no `Co-Authored-By`, one line confirming complete and uncommitted.
 
@@ -142,15 +128,15 @@ Whatever the answers to T2, these are the questions Phase 2 must be able to answ
 
 | | |
 |---|---|
-| **`src/` will move — project the whole phase first** | Stop and report if Phase 2 does not fit in 95 |
-| **Every probe must be shown reporting inert** | Non-negotiable. An unproven probe does not ship |
+| **Project before spending** | Margin is 85 |
+| **Every probe shown reporting inert** | Non-negotiable. An unproven probe does not ship |
 | **Probes report numbers, not verdicts** | |
+| **Measure the effect, not the call** | |
+| **Counters reset per call** | |
 | **Probes must not change what they measure** | Phase 4 runs this ≥100 times per arm |
-| **Aggregate; do not stream per-edge state** | And say what aggregating gives up |
-| **Build on the existing probe** | Never a second instrument beside the first |
-| **No PSO, no Hybrid, no walkthrough** | Segments 15 and 16 |
-| **No control-layer changes** | F4, F7, F8 are Phase 3 |
-| **No dashboard work** | Phase 1 is closed. The panels segment 12 left empty get filled when the data exists, not before |
+| **No control-layer changes** | F4, F7, F8 and PSO inertia are Phase 3. **Measure and report; do not fix** |
+| **No dashboard work** | The empty panels fill when the data exists |
+| **No walkthrough** | Segment 16 |
 | **Do not commit, do not push** | |
 
 ---
@@ -158,15 +144,15 @@ Whatever the answers to T2, these are the questions Phase 2 must be able to answ
 ## Acceptance check
 
 ```bash
-git diff --stat -- src/ tests/          # src/ MOVES this time — report by how much
-./.venv/bin/pytest                       # passes AND skips
+git diff --stat -- src/ tests/
+./.venv/bin/pytest
 ./.venv/bin/ruff check src/ tests/ dashboard/
 ./.venv/bin/pytest -k "budget or statement" -s
-ls outputs/                              # unchanged before and after
+ls outputs/
 git status --short                       # UNSTAGED, UNCOMMITTED
 ```
 
-**Paste verbatim:** the Phase 2 projection against the 95 · F10 before/after · the existing probe surface from source · **every probe live and inert** · both mutations · every invariant test shown red · your read on whether you would now believe an ACO number.
+**Paste verbatim:** projection vs actual · every probe live and inert · the measured budget split against `aco_fraction` · both mutations · every invariant test shown red · your read on believing a Hybrid number, and what you would still not defend.
 
 ---
 
@@ -174,7 +160,7 @@ git status --short                       # UNSTAGED, UNCOMMITTED
 
 Green suite, artefacts pasted, **every probe demonstrated inert**, uncommitted with the message pasted, FINDINGS appended.
 
-**After this, one of the three optimizers can be trusted to have actually run.** Segment 15 does PSO and the Hybrid.
+**After this all three optimizers can be shown to have actually run.** Segment 16 is the Layer 3 walkthrough, and closes Phase 2.
 
 ---
 ---
@@ -183,248 +169,193 @@ Green suite, artefacts pasted, **every probe demonstrated inert**, uncommitted w
 
 ---
 
-# FINDINGS — Segment 14
+# FINDINGS — Segment 15
 
-## 1. T0 — the Phase 2 projection, against the 95
+## 1. T1 — `state_at` stays, and the reason is now at the line
 
-**It fits, with roughly 15–20 to spare, and I am not counting on Phase 3.**
+Comment added at `timeline.py:262` and pinned by
+`test_state_at_past_the_horizon_raises_rather_than_answering`:
 
-| | statements | note |
-|---|---|---|
-| `src/` at segment start | **2005 / 2100** | margin **95** |
-| T1 (F10) | **−2** | delegating removes a branch |
-| Segment 14 — ACO probes | **+12** | measured, not estimated |
-| Segment 15 — PSO | ~25 | sketched against `pso.py`'s existing probe |
-| Segment 15 — Hybrid-specific | ~8 | see below |
-| Segment 16 — walkthrough | ~10–15 | likely `scripts/`, possibly 0 in `src/` |
-| **Phase 2 total** | **~55–60** | leaves **35–40** |
+```
+state_at(20).t == 20        # last in-range state reachable
+state_at(21)   -> IndexError
+events_at(21)  -> ()        # deliberately different
+```
 
-**The structural finding that made this fit: Hybrid's probe is a
-prefix-wrapper over ACO's and PSO's.**
+The reason, written where someone reaching for consistency will meet it:
+`changed_edges` was **a copy of the definition**, so F10 collapsing it was
+right. `state_at` **is** the definition — applying `schedule[t-1]` to state
+`t-1` is what "the state at t" means. Delegating would inherit `events_at`'s
+out-of-range guard and turn the `IndexError` into **silently returning the
+previous state under a later timestep's name**, in the one function every arm
+reads its world from. **The guard is the feature.**
+
+## 2. T2 — the prefix-wrapper is real, not planned
 
 ```python
 out = {f"aco_{k}": v for k, v in self._aco.probe().items()}
 out.update({f"pso_{k}": v for k, v in self._pso.probe().items()})
 ```
 
-Every field added to ACO appears in Hybrid automatically, prefixed, **at zero
-statement cost**. My first projection assumed Hybrid needed its own set and came
-out at ~90 of 95 — a five-statement margin, which is not a margin. The real
-figure is roughly 30 lower because the composition already exists.
+`hybrid.py:133-134`, already there. **Segment 14's projection rested on this and
+it held**: every ACO field added last segment appeared in the Hybrid this
+segment at zero cost, and every PSO field added today did the same. Only the
+Hybrid's own two questions needed new code.
 
-**A second thing that keeps the cost down and is worth stating, because it
-would otherwise look like an error:** extending the probe's returned dictionary
-costs **nothing**. `return {...}` is one `Return` statement whether it carries
-three keys or thirty. The cost of a probe is entirely in the computation behind
-it, which is where it should be.
+**`src/` 2015 → 2037, +22, margin 63.** Phase 2 has spent 32 of the 95 with
+one segment left; segment 16 was projected at 10–15.
 
-**I am not counting on Phase 3's restructure paying for any of this.** The
-numbers above are against today's 95 with no assumed refactor credit. If
-`allocation/` turns out statement-negative, that is Phase 3's margin, not this
-phase's.
-
-**Actual at close: `src/` 2015 / 2100, delta +10, margin 85.** Dashboard
-unchanged — 177/1000 Python, 734/900 JS, 667/900 presentation.
-
-## 2. T1 — F10 closed, and it was hiding a real difference
-
-```python
--        if t <= 0:
--            return 0
--        return len(self.schedule[t - 1])
-+        return len(self.events_at(t))
-```
-
-**Statement-negative: −2.**
-
-**Identical at every timestep — 3 seeds × 60 steps = 180 comparisons, zero
-mismatches.** Confirmed by capturing every value before the change and
-comparing after, not by argument.
-
-**And the duplication was hiding a behavioural difference, not just a stylistic
-one.** Past the horizon the two doors did not agree at all:
+## 3. T3 — PSO, live
 
 ```
-before:  changed_edges(61)  ->  IndexError: tuple index out of range
-after:   changed_edges(61)  ->  0        (events_at(61) returns ())
+  t= 0 flown  222 repaired  44  speed 1.119e-01  pbest  93 gbest  7
+  t=21 flown  300 repaired   0  speed 3.798e-06  pbest  20 gbest  0
+  t=59 flown  264 repaired   0  speed 5.112e-14  pbest  20 gbest  0
 ```
 
-`events_at` guards its upper bound because F1's fix put the bound there
-deliberately. `changed_edges` never had it. So F10 was not only *"the same
-arithmetic in two places"* — the second copy was already subtly different, and
-nobody had looked because nothing calls it past the horizon yet.
+**The finding: velocity collapses by thirteen orders of magnitude over a
+disrupted run.** 1.1e-01 at t=0, 3.8e-06 by t=21, **5.1e-14 by t=59.** The
+flight step still runs hundreds of times and still displaces particles, but by
+amounts at the edge of float resolution. The swarm is not exploring; it is
+being nudged.
 
-## 3. T2 — the probe surface that already exists
+**Reported as a measurement, not a verdict.** I have not concluded it is a
+defect and it may be correct convergence behaviour. But it is exactly the
+shape §17.1's open question is about — **`inertia` is applied
+(`pso.py:204`) but is absent from `EXPLORE_SIGN`, so it is implemented and
+un-adaptable** — and Phase 3 has to decide *implement or formally drop*. This
+number is what that decision should be made against: whatever inertia is
+doing, by t=59 there is almost no velocity left for it to carry.
 
-**Where:** `optimizer.probe()`, called once per timestep per arm at
-`harness/trial.py:187`, written into `steps.parquet`'s `probe` map column at
-`:245`. Not conditional — **every step, every arm, every trial.**
+**In isolation, without disruptions, velocity settles at ~1.4e-02 and stays
+there.** The collapse is specific to a disrupted run. I did not chase why —
+that is Phase 3's, and guessing would be a verdict.
 
-**What each arm recorded before this segment:**
+### I nearly reported this wrong, twice
 
-| Arm | Fields |
+**First:** my print format was `:.4f`, so 3.8e-06 rendered as `0.0000` and I
+was one step from reporting *"PSO's velocity is exactly zero"*. It is not; it
+is small. I read the display instead of the value — the same class of error as
+everything else this phase has found, committed while looking for it.
+
+**Second:** the probe first counted `particles_moved` by diffing positions
+across the call, and reported **14 moved on a swarm with `_move` disabled**.
+`_repair` also writes positions (`pso.py:264`), so the probe was answering
+*"did anything move a particle"* when the question was *"is the swarm
+flying"* — two mechanisms through one channel, which is the confusion segment
+9 split the picture to avoid. Now counted inside `_move`, and `particles_repaired`
+carries the other mechanism separately.
+
+## 4. T4 — the Hybrid, and Claim 1 is safe
+
+```
+  t= 0 declared 0.50 realised 0.500  spent 150/150  exch 1
+  t=21 declared 0.50 realised 0.500  spent 150/150  exch 1
+  t=59 declared 0.50 realised 0.500  spent 150/150  exch 1
+```
+
+**The split is real and exact.** `aco_share_realised` is computed from the
+sub-meters' actual spend, not from `aco_fraction` — 150 evaluations each out of
+300, at every step. **Claim 1 is not comparing the hybrid to itself.**
+
+**The exchange fires every step** (`exchanged_this_step` 1). The hybrid is not
+two solvers sharing a process.
+
+**And the flatness is the point.** `aco_fraction` sits at 0.50 for all 60 steps
+because the uncontrolled hybrid has nothing moving it — segment 12 measured the
+same thing from the other side. **The probe that shows this flat today is the
+one that shows the allocation moving in Phase 3**, and it will show it from
+realised spend rather than from the number the controller asked for.
+
+## 5. T5 — every probe shown inert
+
+| Mechanism disabled | Probe reports |
 |---|---|
-| `astar` | `expansions` |
-| `aco` | `lambda_branch`, `tau_ratio`, `iterations` |
-| `pso` | `diversity`, `iterations` |
-| `hybrid` | those two sets, prefixed, plus `aco_fraction`, `exchanges` |
+| swarm frozen (`_move` silenced) | `particles_flown` **0** |
+| personal bests can never update | `own_best_updates` **0** |
+| PSO given nothing to spend | `pso_spent` **0**, `aco_share_realised` **1.0** |
+| exchange silenced | `exchanged_this_step` **0** |
+| velocity and all pulls zeroed | `particles_flown` **0**, `speed_mean` **0** |
 
-**Cost:** `_lambda_branching()` and `_tau_ratio()` each scan the active mask,
-O(n_slots) — ~1500 elements at `medium200`. Measured at **<2 ms per call** and
-pinned by a test, because Phase 4 runs this at ≥100 trials per arm and "cheap"
-is exactly the claim that stops being true unnoticed.
+Each also asserts the *other* mechanisms still report non-zero, so a probe
+cannot pass by everything going quiet together.
 
-**Built on it rather than beside it.** `tau_ratio` already answers *"is there
-any spread in the trails"*, so no second measure of spread was added; the new
-fields answer the four questions it cannot.
+**One probe was checked and found insufficient, and it is recorded rather than
+quietly strengthened.** `speed_mean` **cannot** detect a frozen swarm: with
+`_move` disabled the velocity array simply keeps its random initial value —
+0.05, entirely healthy-looking. `particles_flown` is what detects it. The test
+says so at the assertion, so nobody later "tidies" it into asserting zero speed.
 
-## 4. T3 — the ACO probes, live
+## 6. Both traps from segment 14, checked on every probe
 
-```
-ACO probe, live (seed 1000, 300 evaluations):
-  t= 0  changed 1470/1470  evap  345.32  dep  434  clamp   1470  tau [0.0150, 0.0425]
-  t= 1  changed 1470/1470  evap   20.54  dep  276  clamp      0  tau [0.0031, 0.0569]
-  t=21  changed 1520/1520  evap    3.41  dep  165  clamp  22492  tau [0.0002, 0.0879]
-  t=59  changed   28/1488  evap    3.77  dep  165  clamp  21900  tau [0.0002, 0.0966]
-```
+**Effect or call?** Caught two:
 
-Numbers, not verdicts. And they say something: **28 changed of 1488 at t=59**
-is a colony that has converged, which no `"pheromone: OK"` would have told
-anyone.
+- `particles_flown` — first version diffed positions, which `_repair` also
+  changes. Now counted at the displacement inside `_move`
+- `aco_share_realised` — measured from spend, never from `aco_fraction`
 
-**What aggregating gives up, stated plainly:** *which* edges changed. Per-edge
-trails at every step of every trial is the payload that took a response from
-34 KB to 1.7 MB in segment 10, and Phase 4 multiplies that by ≥100 trials.
-Colony-level counts answer *did it run*; they cannot answer *did it run on the
-right edges*. `tau_deposited` is the partial substitute — the deposit loop
-walks the best path, so a non-zero count is deposit-on-route by construction.
+**Do the counters reset?** Checked by test for PSO
+(`test_the_swarm_counters_report_this_call_not_a_running_total`) rather than by
+inspection, because inspection is what missed it last segment.
 
-## 5. T4 — every probe shown inert, and one of them failed
+## 7. Both mutations
 
-Each mechanism disabled at source, run, probe pasted. All at `t=21`:
+**A — specified: the split probe echoes the requested fraction.**
 
 ```
-LIVE                          changed 1520/1520  evap  3.41  dep  165  clamp 22492
-
-1. PHEROMONE FROZEN           changed    0/1520  evap  0.00  dep  462  clamp 22800
-2. EVAPORATION OFF            changed  626/1520  evap  0.00  dep  410  clamp  1266
-3. MAX-MIN BOUNDS REMOVED     changed 1420/1520  evap  2.49  dep  165  clamp     0
-4. BEST ANT DEPOSITS NOTHING  changed 1520/1520  evap  0.43  dep    0  clamp 22800
+E  AssertionError: a one-sided split did not read as one-sided
+E  assert 0.5 == 1.0
 ```
 
-Three of the four were unmistakable first time. **The third was not, and it is
-the finding of this segment.**
+On a hybrid where PSO was given nothing, the echo reports a perfect 50/50.
+Caught.
 
-### The bounds probe reported 22800 clamps on a codebase with no clamp in it
-
-First version counted slots that were **outside** the bounds and then clipped:
-
-```python
-outside = active & ((self._tau < tau_min) | (self._tau > tau_max))
-self._mech["clamped"] += float(outside.sum())
-np.clip(...)
-```
-
-Delete `np.clip` entirely and it still reports **22800**. It was measuring the
-*need* for a mechanism, not the mechanism. In a report that reads as
-**"MAX–MIN bounds active"** about plain Ant System — which is exactly the claim
-§5.2 says the bounds exist to support.
-
-Fixed by measuring the clip's effect:
-
-```python
-before = self._tau.copy()
-np.clip(self._tau, tau_min, tau_max, out=self._tau, where=active)
-self._mech["clamped"] += float((active & (self._tau != before)).sum())
-```
-
-**This is segment 4's lesson in the instrument layer.** F1 was invisible in
-`events_at`'s argument and visible only in which index was read: *observe the
-effect, not the call.* I wrote a probe that observed the call.
-
-**The other direction is checked too** — every inert test asserts the remaining
-mechanisms still report non-zero, so a probe cannot pass by everything going
-quiet at once.
-
-## 6. Both mutations
-
-**A — specified: the probe reads the pre-update table.**
+**B — mine: flight counted per call rather than per displacement.**
 
 ```
-E  AssertionError: trails never moved in a working colony
-E  assert 0.0 > 0
+19 tests: 18 passed
 ```
 
-F1's shape in the instrument layer, caught.
+**Not caught.** Counting `_move` calls instead of the positions they changed
+passed everything. It matters precisely because of §3's finding: at t=59
+velocity is 5e-14, so the flight step runs 264 times and moves nothing
+measurable — and a per-call counter reports a swarm in vigorous motion on a
+swarm that has stopped.
 
-**B — mine: the per-call counters never reset.**
-
-```
-JS/Python suite:  8 passed
-```
-
-**Nothing caught it**, and what it reports is the problem:
+Now pinned, and shown red:
 
 ```
-  t= 0  evap   345.32  dep    434  clamp    1470
-  t=10  evap   401.84  dep   2255  clamp  154194
-  t=30  evap   473.00  dep   5555  clamp  603090
-  t=59  evap   580.28  dep  10662  clamp 1267734
+E  AssertionError: 263 flights counted with zero velocity
+E  assert 263.0 == 0
 ```
 
-Every number rises smoothly and every number is plausible. A reader concludes
-**"clamping intensifies sharply over the run"** — from an artefact of never
-zeroing a counter. My eight tests all asserted `> 0`, which a running total
-satisfies trivially.
+**Seven consecutive segments.** The commissioned mutation confirmed a
+prediction; the uncommissioned one found the gap.
 
-Now covered by a test that silences the mechanism for a *second* call and
-asserts exactly zero, so a cumulative counter still carrying the first call's
-total fails:
-
-```
-E  AssertionError: deposits carried over from the previous call: 376.0
-```
-
-**Six consecutive segments.** The commissioned mutation confirmed a prediction;
-the uncommissioned one found the defect.
-
-## 7. Acceptance
+## 8. Acceptance
 
 | Check | Result |
 |---|---|
-| Suite | **376 passed, 0 failed, 0 skipped** |
+| Suite | **386 passed, 0 failed, 0 skipped** |
 | Lint, three trees | `All checks passed!` |
-| `src/` | **2015 / 2100**, delta **+10**, margin 85 |
-| Dashboard budgets | 177/1000 · 734/900 · 667/900 |
+| `src/` | **2037 / 2100**, delta **+22**, margin 63 |
 | `outputs/` before / after | **26 / 26** |
-| New tests | `tests/test_probes.py`, **9 passed** |
+| `tests/test_probes.py` | **19 passed** |
 
-## 8. Would I believe a number ACO produced?
+## 9. Would I believe a number PSO or the Hybrid produced?
 
-**Yes — for the four things now instrumented, and no further, and the boundary
-matters more than the answer.**
+**The Hybrid's split: yes, without qualification.** It is measured from what
+was spent, it is exact, and it has been seen reporting a one-sided split as
+one-sided. That is the one this project most needed, because Claim 1 rests on
+it.
 
-What I would now defend: that pheromone moves, that evaporation removes mass,
-that the MAX–MIN bounds actually bind, that the best ant reinforces something.
-Each is a count, each is falsifiable, and each has been seen reporting zero
-against a broken mechanism. Before this segment none of that was checkable from
-a recorded run — `tau_ratio` would have looked perfectly healthy on a frozen
-table, because a frozen table still has spread.
+**PSO: less than for ACO, and the reason is worth stating.** I can now show
+that particles fly, that personal and global bests update, and that a frozen
+swarm reads as frozen. What the probes also show is that **by the end of a
+disrupted run the flight mechanism has almost nothing left to do** — and I
+cannot yet tell you whether that is convergence working or exploration
+failing. The probe made the question askable; it does not answer it.
 
-**What I would not yet defend, and nobody should quote:**
-
-- **That deposit lands on the *right* edges.** `tau_deposited` counts slots the
-  loop touched. It walks `best_path`, so the count is deposit-on-route by
-  construction — but if `find_slot` returned the wrong slot the count would be
-  identical. Catching that needs per-edge data, which is the payload we
-  deliberately did not send.
-- **That the *magnitudes* are right.** Every probe here answers *did it run*.
-  None answers *did it run correctly* — an evaporation rate ten times too high
-  reports a large `tau_evaporated` and looks healthy.
-- **Anything about PSO or the Hybrid.** Segment 15.
-
-**The honest summary: ACO is no longer a black box that produces plausible
-numbers. It is a box with four windows in it.** That is a real change from
-where this started, and it is less than "ACO is verified" — which is the
-distinction Phase 2's gate was written to force, and the reason it says
-*"reported inert"* rather than *"confirmed working"*.
+**What none of this covers**, same boundary as last segment: every probe
+answers *did it run*, not *did it run correctly*. A cognitive coefficient ten
+times too large would fly particles vigorously and report beautifully.

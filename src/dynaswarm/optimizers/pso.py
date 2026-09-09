@@ -93,6 +93,8 @@ class PSO:
         self._own_cost = np.full(size, np.inf)
         self._swarm_best: np.ndarray | None = None
         self._best: Solution | None = None
+        self._pos_before = self._position.copy()
+        self._mech = dict.fromkeys(("own_best", "swarm_best", "flown", "repaired"), 0.0)
         self._iterations = 0
 
         self._eta = np.zeros(view.topology.n_slots, dtype=np.float64)
@@ -132,6 +134,8 @@ class PSO:
 
     def spend(self, meter: EvaluationMeter) -> None:
         """Fly the swarm until ``meter`` is exhausted."""
+        self._pos_before = self._position.copy()
+        self._mech = dict.fromkeys(self._mech, 0.0)
         while not meter.exhausted:
             for i in range(self._position.shape[0]):
                 if meter.exhausted:
@@ -147,9 +151,11 @@ class PSO:
                 if cost < self._own_cost[i]:
                     self._own_cost[i] = cost
                     self._own_best[i] = self._position[i].copy()
+                    self._mech["own_best"] += 1.0
                 if self._best is None or cost < self._best.cost:
                     self._best = Solution(cost, tuple(path))
                     self._swarm_best = self._position[i].copy()
+                    self._mech["swarm_best"] += 1.0
             self._iterations += 1
 
     def best(self) -> Solution | None:
@@ -174,9 +180,17 @@ class PSO:
         branching factor: the mean spread of priorities across particles,
         which collapses toward zero as the swarm converges on one region.
         """
+        speed = np.abs(self._velocity)
         return {
             "diversity": float(np.mean(np.std(self._position, axis=0))),
             "iterations": float(self._iterations),
+            "particles_flown": self._mech["flown"],
+            "particles_repaired": self._mech["repaired"],
+            "particles": float(self._position.shape[0]),
+            "speed_mean": float(speed.mean()),
+            "speed_max": float(speed.max()),
+            "own_best_updates": self._mech["own_best"],
+            "swarm_best_updates": self._mech["swarm_best"],
         }
 
     def reset_learned_state(self, strength: float) -> None:
@@ -202,7 +216,16 @@ class PSO:
         if self._swarm_best is not None:
             social = self._p["social"] * r2 * (self._swarm_best - self._position[i])
         self._velocity[i] = self._p["inertia"] * self._velocity[i] + cognitive + social
+        # Counted here, inside the mechanism, rather than by diffing
+        # positions across the call. `_repair` also writes positions, so
+        # a position-diff answers "did anything move a particle" when the
+        # question is "is the swarm flying" — two mechanisms through one
+        # channel, which is the confusion segment 9 split the picture to
+        # avoid.
+        before = self._position[i].copy()
         np.clip(self._position[i] + self._velocity[i], 0.0, 1.0, out=self._position[i])
+        if not np.array_equal(self._position[i], before):
+            self._mech["flown"] += 1.0
 
     def _construct(
         self, priority: np.ndarray, meter: EvaluationMeter
@@ -249,6 +272,7 @@ class PSO:
             result = self._construct(candidate, meter)
             if result is not None:
                 self._position[i] = candidate
+                self._mech["repaired"] += 1.0
                 return result
         return None
 

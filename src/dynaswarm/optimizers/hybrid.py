@@ -86,6 +86,8 @@ class Hybrid:
         self._aco = ACO(view, source, target, stream(root, "hybrid", "aco"), self._sub("aco"))
         self._pso = PSO(view, source, target, stream(root, "hybrid", "pso"), self._sub("pso"))
         self._exchanges = 0
+        self._split = (0.0, 0.0)
+        self._exchanged = 0.0
 
     # -- protocol ---------------------------------------------------------
 
@@ -113,8 +115,15 @@ class Hybrid:
         pso_meter = EvaluationMeter(pso_share)
         self._pso.spend(pso_meter)
 
+        # Measured from the sub-meters' actual spend, not from the ratio
+        # that was requested. If the split does not really happen, Claim 1
+        # compares the hybrid to itself, and a probe reporting the
+        # intended fraction would say nothing about whether it did.
+        self._split = (float(aco_meter.spent), float(pso_meter.spent))
         meter.charge(aco_meter.spent + pso_meter.spent)
+        before = self._exchanges
         self._exchange()
+        self._exchanged = float(self._exchanges - before)
 
     def best(self) -> Solution | None:
         candidates = [s for s in (self._aco.best(), self._pso.best()) if s is not None]
@@ -134,6 +143,16 @@ class Hybrid:
         out.update({f"pso_{k}": v for k, v in self._pso.probe().items()})
         out["aco_fraction"] = self._p["aco_fraction"]
         out["exchanges"] = float(self._exchanges)
+        aco_spent, pso_spent = self._split
+        total = aco_spent + pso_spent
+        out["aco_spent"] = aco_spent
+        out["pso_spent"] = pso_spent
+        # The realised split, against `aco_fraction` above. With the
+        # uncontrolled hybrid the two sit together at 0.5 for every step
+        # — so the probe that shows this flat today is the one that shows
+        # the allocation moving when Phase 3's controller works.
+        out["aco_share_realised"] = aco_spent / total if total else 0.0
+        out["exchanged_this_step"] = self._exchanged
         return out
 
     def reset_learned_state(self, strength: float) -> None:

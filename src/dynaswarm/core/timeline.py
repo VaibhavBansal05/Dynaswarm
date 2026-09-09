@@ -259,6 +259,19 @@ class GraphTimeline:
         prev = self.state_at(t - 1)
         weight = np.array(prev.weight, dtype=np.float64)
         active = np.array(prev.active, dtype=bool)
+        # **This is the definitional site, and it does NOT delegate to
+        # events_at() — deliberately.** F10 collapsed `changed_edges`
+        # into `events_at` because that was the same arithmetic written
+        # twice; this is not a copy of the definition, it *is* the
+        # definition. Applying `schedule[t-1]` to state `t-1` is what
+        # "the state at t" means.
+        #
+        # And `events_at`'s out-of-range guard cuts the other way here.
+        # It returns `()` past the horizon, so delegating would turn this
+        # loop's IndexError into silently handing back the previous state
+        # under a later timestep's name — a quiet wrong answer in the one
+        # function every arm reads its world from. **The guard is the
+        # feature.** Pinned by `test_state_at_past_the_horizon_raises`.
         for event in self.schedule[t - 1]:
             apply_event(event, weight, active, prev.topology)
 

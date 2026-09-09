@@ -1254,3 +1254,100 @@ Final: **367 Python tests, 50 JavaScript tests, 0 skipped.** `dashboard/` Python
 That is not a habit to carry into Phase 2. It is the reason Phase 2 exists.
 
 **Next: Phase 2 — trust it.** Every mechanism proven live or reported inert.
+
+---
+
+## Entry 014 — Segment 14: Prove ACO Runs
+
+**Phase** 2 (Trust it) · **Segment** 1 of 3 · **Overall segment** 14
+**Verified** 9 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+### Architect verification
+
+| Claim | Verified |
+|---|---|
+| `changed_edges` delegates to `events_at()` | Yes — `timeline.py:269-284`, body is `return len(self.events_at(t))` |
+| The clamp probe measures the clip's **effect** | Yes — `aco.py:386`, `before = self._tau.copy()` then compared after `np.clip` |
+| Probe returns counts, not verdicts | Yes — `tau_evaporated`, `tau_deposited`, `tau_clamped`, plus `tau_min`/`tau_max` |
+| Docstring states the inert readings | Yes, per field |
+
+`src/` **2015 / 2100**, `+10`. Margin **85**.
+
+### The projection was done properly, and it changed the plan
+
+Asked to price all of Phase 2 before writing, vClaude's first pass came back at **~90 of 95** — *"a five-statement margin, which isn't a margin."* It then found the structural fact that fixes it:
+
+> **The Hybrid's probe is a prefix-wrapper over ACO's and PSO's.** Every field added to a component appears in the Hybrid at zero cost.
+
+Revised: ~55–60 for the phase, leaving 35–40. **And it stated explicitly that it is not counting on Phase 3's restructure to pay for today's spending** — which the spec asked for, because a projection that assumes a future refactor has already failed.
+
+This is the first segment in this project where a budget was checked *before* commitment rather than discovered at the wall. It cost one arithmetic pass and it changed the design.
+
+### F10 was hiding a real difference
+
+Not merely duplicated arithmetic. The two doors disagreed:
+
+```
+before:  changed_edges(61) -> IndexError
+after:   changed_edges(61) -> 0
+```
+
+`events_at` guards its upper bound **because F1's fix put the guard there.** `changed_edges` never got it. So the second copy had already drifted from the first, silently, in the direction nobody was watching — and nothing calls it past the horizon *yet*.
+
+180 comparisons across 3 seeds, zero mismatches in range. **Verified by capturing every value before and comparing after**, not by argument.
+
+### The bounds probe failed its own demonstration — the segment's finding
+
+It counted slots **outside** the bounds, then clipped. So **deleting `np.clip` entirely still reported 22,800 clamps.**
+
+It measured the *need* for a mechanism, not the mechanism. In a report that reads as **"MAX–MIN bounds active"** about plain Ant System — which is the difference between MAX–MIN Ant System and the thing your paper says you implemented.
+
+> **Segment 4's lesson, in the instrument layer: observe the effect, not the call.** vClaude's own line: *"I wrote a probe that observed the call."*
+
+Fixed by measuring the clip's effect. Verified on disk.
+
+### Mutation B — the counters never reset
+
+All 8 tests passed while the run reported evaporation rising 345 → 580 and clamps **1,470 → 1,267,734**. Every number plausible, every number a running total.
+
+A reader concludes *"clamping intensifies sharply over the run"* and writes that down. The tests asserted `> 0`, **which a cumulative counter satisfies trivially** — the same shape as Entry 012's ledger that reconciled against its own arithmetic.
+
+**Six consecutive segments:** the commissioned mutation confirms a prediction, the uncommissioned one finds the defect.
+
+### The probe table, and what it is worth
+
+```
+LIVE                        changed 1520/1520  evap 3.41  dep 165  clamp 22492
+1. PHEROMONE FROZEN         changed    0/1520  evap 0.00  dep 462  clamp 22800
+2. EVAPORATION OFF          changed  626/1520  evap 0.00  dep 410  clamp  1266
+3. MAX-MIN BOUNDS REMOVED   changed 1420/1520  evap 2.49  dep 165  clamp     0
+4. DEPOSITS NOTHING         changed 1520/1520  evap 0.43  dep   0  clamp 22800
+```
+
+Every probe seen reporting **zero against its broken mechanism** and non-zero against the working one. That is the gate met, for ACO.
+
+**And the honest limit, stated without being asked:**
+
+> *"Every probe answers **did it run**. None answers **did it run correctly**."*
+
+Deposit landing on the *wrong* edges would produce an identical count. Magnitudes are unverified. vClaude would defend that the mechanisms execute, and nothing more.
+
+> **"ACO is no longer a black box producing plausible numbers. It's a box with four windows in it. That's less than 'ACO is verified' — which is the distinction the gate's wording forces."**
+
+That sentence is the standard for Phase 2's remaining segments and for how the report describes them.
+
+### R1 — `state_at` is the third site, and it should stay as it is. Say so, so nobody "fixes" it.
+
+`timeline.py:262` — `state_at` still does `for event in self.schedule[t - 1]`. Not flagged.
+
+**Leaving it is correct**, but for a reason that must be written down or a future segment will delegate it in the name of F10 and make things worse:
+
+`state_at` **is** the definition — applying `schedule[t-1]` to state `t-1` is what "the state at `t`" *means*. And `events_at`'s out-of-range guard cuts the other way here: delegating would turn an `IndexError` past the horizon into **silently returning the previous state**, which is exactly the class of quiet-wrong-answer this project keeps finding.
+
+**Ruled — segment 15, small:** a comment at that line naming it as the definitional site and saying why it does *not* delegate, plus a test asserting `state_at` past the horizon still raises rather than silently answering. **The guard is the feature.**
+
+### Close
+
+**376 passed**, green. Lint clean. `src/` **2015 / 2100**. `outputs/` unchanged.
+
+One of three optimizers can now be shown to have actually run. Segment 15 does PSO and the Hybrid.
