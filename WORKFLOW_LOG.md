@@ -1499,3 +1499,111 @@ Three rules generalise out of this phase, all one idea:
 3. **A probe found insufficient is recorded, never quietly strengthened** — `speed_mean` cannot see a frozen swarm, and the test says so at the assertion
 
 **Next: Phase 3 — restructure.** It opens by diagnosing F13, because the inertia decision depends on it and because a hypothesis that is starting to look right is the one that most needs breaking.
+
+---
+
+## Entry 017 — Segment 17: Diagnose F13 — **the premise was wrong, and so was I**
+
+**Phase** 3 · **Segment** 1 · **Overall segment** 17
+**Verified** 10 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+### Verification
+
+`trial.py:175-176` — `for arm in arms: arm.optimizer.rebind(state)`, inside the per-timestep loop, **unconditional**. `pso.py:110-125` — `rebind` invalidates every personal-best cost. Both confirmed by reading. `src/` untouched, instrumentation in `scripts/`.
+
+**And an asymmetry vClaude did not name, which matters:** `aco.py:127-132` — ACO's `rebind` zeroes trails only on slots that have gone **inactive**. When nothing changed, nothing is newly inactive, so **ACO's rebind is naturally idempotent**. PSO's is not. The harness calling `rebind` every step is harmless for ACO and destructive for PSO.
+
+`hybrid.py:94-97` calls `self._pso.rebind(view)`. **So the Hybrid carries the defect too, in its PSO half.**
+
+### My hypothesis was wrong. Flatly.
+
+I said the two pull terms would go to zero while inertia coasted a shrinking number down. **All three terms decay together, at the same order of magnitude throughout**, and `own_best == position` sits at **7%, not 100%**. The pulls do not die and let inertia take over — **the distances they act over shrink**, so all three shrink together.
+
+I wrote that story into segment 17's spec and told vClaude to break it. It broke it. That is the mechanism working exactly as intended, and there is nothing to soften: the Architect's mechanism story was wrong in its central claim.
+
+### F13's premise was wrong too, and the reason is a lesson
+
+**F13 is logged as "PSO's velocity collapses under disruption." It has nothing to do with disruption.** It reproduces exactly on a static graph with zero events.
+
+```
+step      no rebind    rebind each step
+   0      2.002e-01           2.002e-01
+  30      1.945e-02           1.185e-02
+  59      1.424e-02           2.513e-08
+```
+
+**That `1.424e-02` is segment 15's "isolation" figure, reproduced exactly by declining to call `rebind`.**
+
+Here is why nobody caught it for two entries. Segment 15's isolation loop ran a **standalone PSO that never called `rebind`.** So the comparison labelled *disrupted versus quiet* was actually **harness versus standalone** — and the two conditions differed in *two* ways at once. The difference was real; the attribution was wrong.
+
+> **A contrast between two conditions that differ in more than one respect measures neither of them.** The number was correct, reproducible, and pointed at the wrong cause for two segments.
+
+This is the same family as everything else this project has caught, one level up: not a wrong measurement, a **wrongly attributed** one.
+
+### The mechanism, isolated to one line
+
+`self._own_cost[:] = np.inf`.
+
+Every personal-best cost becomes infinite, so the next evaluation always beats it, so `own_best[i] = position[i]`. **The swarm's memory is re-anchored to wherever it currently happens to be, every single step.** With nothing to be pulled back toward, positions drift together, the distances shrink, and all three velocity terms shrink with them.
+
+Isolated properly: `cost_only` reproduces the full collapse **bit for bit**; everything else in `rebind` reproduces the healthy baseline **bit for bit**. That is isolation, not correlation.
+
+**And the policy is right when the graph changed.** A cost measured against a graph that no longer exists is a stale number, and the docstring defends invalidating it well. **The defect is that it fires when nothing changed.**
+
+Six of six seeds, ratios `5.7e5` to `5.4e11`.
+
+### Mutation B — ninth consecutive segment
+
+**The entire diagnosis rested on seed 1000.** A seed-specific artefact would have passed all four tests while six paragraphs of mechanism explained something that did not generalise.
+
+Parametrised over six seeds — and **seed 1000 turned out to be the weakest of them**, so the single-seed diagnosis had *understated* the effect. Nine segments running: the commissioned mutation confirms a prediction, the uncommissioned one finds what the author could not have imagined.
+
+### R1 — F13 is restated. vClaude is right, and the wording was load-bearing.
+
+Logged as *"velocity collapses under disruption"*, a future segment could have fixed disruption handling and left the cause untouched — while the symptom moved and the ticket looked addressed.
+
+> **F13 (restated): `PSO.rebind` invalidates every personal-best cost unconditionally, and the harness calls `rebind` on every arm at every timestep whether or not the graph changed. The swarm's memory is therefore erased every step. Velocity collapse is a symptom.**
+
+**A defect's name is part of its fix.** A misnamed defect gets a fix aimed at the name.
+
+### R2 — Three options, and the third one has a fairness problem worth deciding deliberately
+
+**(a) Make the wipe conditional on the graph having changed.** ~2 statements. Smallest, most targeted, and it is what the docstring already claims the code does. **On a quiet step nothing is invalidated, which is correct.** But on a disrupted step it still erases every memory because one distant edge moved.
+
+**(b) Re-evaluate the bests on change rather than invalidating them.** Correct in principle — a stale cost should be *re-priced*, not *destroyed*. **But re-evaluating n particles' bests costs n path evaluations**, and §10.2 meters evaluations for fairness. Either those come out of the arm's budget — in which case PSO pays for disruption in a currency ACO does not — or they do not, in which case PSO gets free work and the comparison is unfair. **That choice is a research decision, not an implementation detail, and it must be made explicitly.**
+
+**(c) Change nothing and document it.** Defensible only if (a) is shown not to matter, which the measurement does not support.
+
+**Segment 18 decides**, with the fairness question in (b) settled explicitly either way.
+
+### R3 — §17.1's inertia question is now a different question
+
+The diagnosis **argues against adaptive inertia as the fix for this.** Re-energising a swarm whose memory is being erased treats a symptom while the cause continues.
+
+So §17.1's *implement or formally drop* is no longer a question about F13 at all. It is now a question about **whether adaptive inertia is worth having on its own merits**, answered on its own evidence. That is a cleaner question than the one Phase 2 left, and it should be answered after F13 is fixed, not before — otherwise inertia gets credited or blamed for F13's behaviour.
+
+### R4 — The Hybrid is affected, and Claim 1's shape may move
+
+`hybrid.rebind` calls `pso.rebind`. **The Hybrid's PSO half has had its memory erased every step for the entire life of this project.** ACO's half has not — its rebind is idempotent when nothing changed.
+
+So the Hybrid today is **a healthy ACO carrying a crippled PSO**, and its 2.2% excess is very largely ACO's work.
+
+**Consequence for Claim 1:** fixing this improves PSO standalone *and* the Hybrid, by different amounts, and **the relative gap between them is what Claim 1 rests on.** Nobody can say today whether *"the hybrid beats its components"* gets stronger or weaker. **It must be measured after the fix and before Phase 4's manifest**, and the report should say the comparison was made on repaired components.
+
+**No recorded evidence is contaminated** — every run on disk is `exploratory` and Phase 4 has not run. This was caught before it could reach a reported number, which is the entire point of Phase 2 existing.
+
+### R5 — A correctness segment is added to Phase 3
+
+Recorded here so it survives the conversation it was agreed in. **Phase 3 gains segment 19: check each optimizer against hand-computable ground truth on a tiny graph** — 8–10 nodes, few enough to enumerate every path by brute force and work the correct selection probabilities out by hand.
+
+Phase 2 established that the mechanisms **run**. Nothing yet establishes that they run **as specified**, and outcome-based evidence (ACO landing within 2–3% of optimal) is indirect. Comparing against arithmetic rather than against a plausible outcome is the strongest correctness evidence available short of proof.
+
+**It goes after segment 18**, so it verifies the repaired PSO rather than the one about to be replaced, and before the `allocation/` rebuild, so the new control layer is built on verified components.
+
+**Revised Phase 3:** 17 diagnose · 18 fix and decide inertia · 19 correctness · 20–21 `allocation/`.
+
+### Close
+
+**404 passed.** `src/` untouched. The measured cost on a static graph is **5.6 percentage points of excess, sd 4.8, n=5**, and vClaude explicitly declined to extrapolate it to the 27–41% seen under disruption, because on a static graph PSO sits at 0–13% even with the wipe. **The wipe is a real cost and probably not the whole story** — which is the right thing to say and the right place to stop.
+
+The most valuable single line in this segment is the one that says the Architect was wrong.
