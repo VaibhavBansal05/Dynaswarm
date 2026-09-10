@@ -1432,3 +1432,70 @@ It matters because of R1: at `t=59` the flight step runs **264 times and moves n
 **386 passed**, green. `src/` **2037 / 2100**, margin **63**. Phase 2 has spent 32 of the projected 55–60, with segment 16 at 10–15.
 
 All three optimizers can now be shown to have actually run — and one of them has a measurement against it that Phase 3 has to answer. **That is the phase working.** A verification layer that found nothing would have been the result worth distrusting.
+
+---
+
+## Entry 016 — Segment 16: The Trust Report — **PHASE 2 CLOSED**
+
+**Phase** 2 · **Segment** 3 of 3 · **Overall segment** 16
+**Verified** 9 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+### Verification
+
+`scripts/trust_report.py:253-256` — builds into a `TemporaryDirectory`, never `outputs/`. Segment 12's containment holds. Lives in `scripts/`, so `src/` is **2037 / 2100, `+0`**. Entry 015 intact.
+
+**Phase 2 spent 32 of the 95 available.** The projection that made the phase viable was ~55–60; it came in at roughly half, because the Hybrid's probe inherits from its components.
+
+### F13 got a second reading, unasked
+
+Velocity was one number that might have been an artefact. It is not one number:
+
+| | first | last |
+|---|---|---|
+| mean velocity | 0.1119 | 5.112e-14 |
+| diversity | 0.1274 | 2.927e-13 |
+| global-best updates | 7 | 0 |
+
+**Diversity collapsing is the finding.** Velocity dying could be many things; **diversity at 2.9e-13 means every particle is sitting in the same place.** And a swarm stacked on one point has nothing to pull toward — the cognitive and social terms both go to zero, leaving only the shrinking inertia term with nothing to feed it.
+
+That is textbook diversity loss in dynamic PSO, and it now has three independent measurements agreeing rather than one suspicious value. **The Architect's mechanism story from Entry 015 is substantially corroborated** — which raises rather than lowers the bar for segment 17, because a hypothesis that has started to look right is the one that stops being tested.
+
+### The report earns the word "evidence"
+
+Three columns — measured, live-or-inert, and **what the same field reads when the mechanism is deliberately broken.** Every inert reading in it was *produced by disabling the mechanism and running*, not predicted. That is the difference between a document that reports a state and one a reader can calibrate.
+
+The blind spots sit on the line below the probe they belong to, and the top of the document states plainly that **nothing in it establishes that anything ran correctly — only that it ran.** A trust report that lists only what it can prove is the over-claim this phase existed to prevent.
+
+### The coverage test paid on its first run
+
+Written against **the fields a run actually emits** rather than a maintained list — so adding a probe without adding it to the report fails the suite. On the first execution it found two real things: four fields that are scale rather than mechanism and were genuinely unclassified, and the Hybrid's inherited fields reading as missing when they are the same measurements reported under the arm that owns them. The document now says that on the page.
+
+**A test written against reality rather than against an inventory cannot drift from reality.** That is the general form of what has been going right in this phase.
+
+### Mutation C — incidental protection again
+
+Dropping a whole arm from the report **was** caught — but only by the F13 test and the blind-spot test, both of which happen to need PSO's fields. **Nothing named for arm coverage objected.**
+
+Entry 012's ledger, in a third costume: *caught by a neighbour, not by the owner.* A future segment rewriting either of those two tests for its own reasons deletes the arm-coverage protection without knowing it existed. Now explicit and failing by name.
+
+**Eight consecutive segments** — the uncommissioned mutation finds the defect; the commissioned one confirms a prediction.
+
+---
+
+## PHASE 2 CLOSED
+
+**Eleven mechanisms have a number, a verdict, and a demonstration of what broken looks like.** The gate was *every mechanism proven live or reported inert*, and the second half is now producible on demand rather than true-in-principle.
+
+**What Phase 2 can claim:** ACO's trails move, evaporate, clamp and receive deposits. PSO's particles fly and its bests update. The Hybrid splits its budget exactly and its components exchange. Each of those was demonstrated failing.
+
+**What it explicitly cannot:** that any of it runs *correctly*. Deposit on the wrong edges reads identically. Magnitudes are unverified. The report says so on its front page rather than in a footnote.
+
+**And one thing changed what the project can claim** — F13, PSO's collapse under disruption, **found by an instrument built to look for something else, on its first run.** A verification phase that had found nothing would have been the result worth distrusting.
+
+Three rules generalise out of this phase, all one idea:
+
+1. **Observe the effect, not the call** — the bounds probe reported "MAX–MIN active" with `np.clip` deleted
+2. **The formatter is part of the instrument** — `5e-14` under `:.4f` is `0.0000`, and that is the exact claim the phase exists to make honestly
+3. **A probe found insufficient is recorded, never quietly strengthened** — `speed_mean` cannot see a frozen swarm, and the test says so at the assertion
+
+**Next: Phase 3 — restructure.** It opens by diagnosing F13, because the inertia decision depends on it and because a hypothesis that is starting to look right is the one that most needs breaking.
