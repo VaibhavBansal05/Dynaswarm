@@ -172,6 +172,11 @@ def run_trial(
                 )
             )
 
+        # Unconditional, and it must stay that way. `rebind` is how an
+        # optimizer receives the current world; skipping it on quiet
+        # steps would leave every arm searching a stale graph. The guard
+        # that F13 needed belongs inside PSO, on the memory
+        # invalidation, and it is there — see PSO.rebind.
         for arm in arms:
             arm.optimizer.rebind(state)
             assert state.state_hash() == before_hash, (

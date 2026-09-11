@@ -91,6 +91,7 @@ class PSO:
         self._velocity = rng.random((size, n)) * 0.2 - 0.1
         self._own_best = self._position.copy()
         self._own_cost = np.full(size, np.inf)
+        self._last_state = view.state_hash()
         self._swarm_best: np.ndarray | None = None
         self._best: Solution | None = None
         self._pos_before = self._position.copy()
@@ -129,7 +130,34 @@ class PSO:
         # pull until some particle happened to succeed — measured, that
         # cost roughly ninety points of excess under disruption, because
         # the swarm was restarting from scratch every timestep.
-        self._own_cost[:] = np.inf
+        #
+        # **Only when the graph actually changed (F13).**  The harness
+        # calls `rebind` every timestep and must keep doing so — the
+        # assignment above is how the optimizer receives the current
+        # world, and making the *call* conditional would leave every arm
+        # searching a stale graph, which is far worse than the defect
+        # this guard repairs.  So the guard lives here, on the
+        # invalidation, and not at the call site.
+        #
+        # Without it, `inf` made the next evaluation of every particle
+        # beat its own record by construction, re-anchoring each memory
+        # to wherever the particle already was.  With nothing left to be
+        # pulled back toward, the swarm drifted together and velocity
+        # decayed to ~1e-14 over sixty steps **on a completely static
+        # graph** — the collapse logged as F13, which was never about
+        # disruption at all.
+        #
+        # **Conservative, not exact.**  Any change anywhere invalidates
+        # every remembered cost, including those of particles whose route
+        # is nowhere near it.  The exact form re-prices each best instead
+        # of discarding it, and that is deliberately not done here: it
+        # costs metered evaluations, and making PSO pay for disruption in
+        # a currency ACO does not pay is a fairness decision rather than
+        # an implementation detail (Entry 017 R2).  Blunt, not wrong.
+        digest = view.state_hash()
+        if digest != self._last_state:
+            self._own_cost[:] = np.inf
+            self._last_state = digest
         self._revalidate_best()
 
     def spend(self, meter: EvaluationMeter) -> None:

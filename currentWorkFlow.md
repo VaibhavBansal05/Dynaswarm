@@ -1,8 +1,8 @@
-# SEGMENT 17 — Diagnose F13
+# SEGMENT 18 — Fix F13, Measure It, Settle Inertia
 
-**Phase 3 · Restructure · Segment 1 of ~4**
+**Phase 3 · Restructure · Segment 2 of 5**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.3 (PSO), §7 (the control layer and why it is being rebuilt), §17.1 (PSO inertia)**. `WORKFLOW_LOG.md` **Entries 015 and 016** carry F13 and its second reading.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.3 (PSO), §6 (the Hybrid), §10.2 (the five fairness guarantees), §17.1 (PSO inertia)**. `WORKFLOW_LOG.md` **Entry 017** is the diagnosis this segment acts on — R1 restates F13, R2 sets the fix, R3 reframes inertia, R4 covers the Hybrid.
 > Append your findings to the **bottom** of this file.
 >
 > ## ⛔ YOU DO NOT COMMIT
@@ -13,114 +13,111 @@
 
 ## Goal
 
-**Find out why PSO's swarm stops moving under disruption. Do not fix it.**
+Three things, in this order and not another: **fix it · measure it · then decide inertia against the measurement.**
 
-Phase 3 rebuilds the control layer and settles the inertia question, and **both of those decisions depend on the answer to this one.** Building first and diagnosing after would mean choosing a lever without knowing what it has to move.
-
----
-
-## What is already measured, and what is still a story
-
-**Measured, from Phase 2:**
-
-| | first | last |
-|---|---|---|
-| mean velocity | 0.1119 | 5.112e-14 |
-| diversity | 0.1274 | 2.927e-13 |
-| global-best updates | 7 | 0 |
-
-And the contrast that makes it a finding rather than a curiosity: **in isolation, with no disruptions, velocity settles at ~1.4e-02 and stays there.** The collapse is specific to a disrupted run — which is backwards, since disruption ought to stir a swarm rather than flatten it.
-
-**Not measured — the Architect's hypothesis, and this segment's job is to try to break it:**
-
-> PSO's velocity has three parts: keep going (inertia × current velocity), pull toward the particle's own best, pull toward the swarm's best. **If the particles all converge onto the same point, both pull terms go to zero** — a particle sitting on its own best and on the swarm's best is being pulled nowhere. What remains is inertia multiplying a shrinking number by something less than one, with nothing feeding it. Velocity then decays geometrically to nothing and cannot recover, because recovery would require a pull, and there is nothing left to pull toward.
-
-Diversity at `2.9e-13` is consistent with this. **Consistency is not confirmation.**
-
-**Treat that paragraph as a claim to falsify, not a conclusion to illustrate.** It is the Architect's story, it has started to look right, and Entry 016 recorded exactly why that makes it dangerous: *a hypothesis that is starting to look right is the one that stops being tested.* Eight consecutive segments say the interesting finding is the one nobody asked for. **If the hypothesis is wrong, saying so is the most valuable outcome available here.**
+The ordering is the point. §17.1's inertia question has been open since Phase 0 and was always going to be settled by argument. It should not be. **Fix the defect first, measure what is left, and let the number decide** — otherwise inertia gets credited or blamed for F13's behaviour, which is what Entry 017 R3 ruled against.
 
 ---
 
 ## ⚠️ T0 — MEASURE
 
-`src/` **2037 / 2100**, margin **63**.
+`src/` **2037 / 2100**, margin **63**. The fix itself is a handful of statements; the measurement should cost `src/` nothing.
 
-**This is a diagnosis. It should cost `src/` almost nothing.** Temporary instrumentation, `scripts/`, or a test — not permanent telemetry. If you conclude a permanent probe is warranted by what you find, **propose it; do not add it.**
-
-Report projection and actual, and say where the instrumentation lives.
+Report projection and actual, and say what remains for segments 19–21.
 
 ---
 
-## T1 — Decompose the velocity update
+## T1 — Fix F13
 
-Log the **three terms separately**, per step, across a disrupted run: the inertia contribution, the cognitive pull, the social pull. Magnitudes, not verdicts.
+**The fix goes in PSO, not the harness.** `rebind` also assigns `self._view = view`, and the optimizer genuinely needs the current graph every step. **The harness must keep calling `rebind` unconditionally** — if you "fix" it there, view propagation breaks and every arm starts operating on a stale graph, which is a far worse defect than the one being repaired. Say in a comment why the call stays unconditional, so a later segment does not helpfully move it.
 
-The question is narrow and answerable: **at the moment velocity collapses, which terms are still contributing and which have gone to zero?**
+**The change:** invalidate the personal-best costs **only when the graph actually differs from the one PSO last saw.**
 
-- if the two pull terms vanish and inertia is simply doing its job → the hypothesis holds, and the mechanism is diversity loss
-- if a pull term is still large while velocity dies anyway → **the hypothesis is wrong**, something else is draining it, and that is the finding
-- if velocity dies *before* diversity collapses → the causality is the other way round, and that changes the fix entirely
+**Detecting that:** the view already carries `state_hash()` — the harness uses it to assert nobody mutates the shared world. Store the last one, compare, skip the invalidation when it matches. No API change, no new fairness surface, no cost to any other arm.
 
-**Report which of these the numbers say.** Say it plainly, including if it is the second or third.
+**One property of this fix to state plainly rather than let a reader assume otherwise:** it is **conservative, not exact.** When any edge anywhere changes, every remembered cost is invalidated — including those of particles whose remembered route is nowhere near the change. That is correct-but-blunt. The exact version re-prices each best instead of destroying it, and Entry 017 R2 records why that is not being done now: re-pricing costs metered evaluations, and making PSO pay for disruption in a currency ACO does not pay is a fairness decision, not an implementation detail. **Note the imprecision in the docstring so the next person does not mistake blunt for wrong.**
 
-## T2 — Locate it in time
+## T2 — Measure what the fix buys, and be careful what you compare
 
-**When does it happen — and is it tied to disruption at all?**
+**Before and after, same seeds, both conditions:**
 
-- does the collapse begin at a disruption step, or drift down independently of them?
-- is it one event, or accumulation across many?
-- the isolation run settles at `1.4e-02` and *stays*. **What is different about the disrupted path?**
+| | static graph | disrupted graph |
+|---|---|---|
+| PSO standalone | | |
+| Hybrid | | |
 
-That last question is the one that matters most. **Something about disruption is not merely failing to help the swarm — it is actively worse than leaving it alone.** Whatever that is, it is the defect.
+Report **excess over the optimum**, and the three collapse indicators — **velocity, diversity, global-best updates.**
 
-**One specific thing to check, and it is checkable rather than speculative:** what happens to the personal and global bests when the graph changes? A best evaluated against the old graph is a stale number. If bests are re-evaluated on the new graph and collapse onto current positions — or are reset — the pull terms die at exactly that moment. **Whether that is what happens is a fact about the code, not an opinion.**
+**Do not repeat segment 15's mistake.** That comparison differed in two ways at once and pointed at the wrong cause for two segments. **Every comparison here changes exactly one thing.** State, for each, what is held fixed.
 
-## T3 — Say what the fix would be, and do not do it
+Enough seeds that the answer is not one lucky run. Segment 17 needed six to find that seed 1000 was the weakest of them.
 
-Once you know the mechanism, state the options and what each would cost. Likely candidates, depending on what T1 and T2 say:
+## T3 — The question that decides segments 19–21
 
-- **adaptive inertia** — raise it when disruption lands, re-energise the swarm. **This is §17.1's promised-and-never-delivered parameter**, and if the diagnosis points here, the *implement or formally drop* question is answered by the diagnosis rather than by argument
-- **re-injection / hypermutation** — perturb some fraction of particles on disruption
-- **best re-evaluation policy** — if T2 finds the bests are the problem, the fix is there and inertia is a workaround for it
+**Does the fix restore the swarm's spread under disruption, or only on a static graph?**
 
-**Do not implement any of them.** Segment 18 decides, with this in hand.
+This is the whole reason the measurement is in this segment rather than waiting.
 
-**And say if the honest answer is "this is correct behaviour."** Premature convergence on a hard dynamic problem is a real phenomenon, not automatically a bug. If that is what the numbers say, the consequence is not a code change — it is that the report states PSO standalone is handicapped by design, and Claim 1 is stated accordingly. **That is a legitimate outcome of this segment.**
+- **If diversity holds up under disruption after the fix** → the defect was the whole story. Nothing further is needed, and re-scattering stays unbuilt
+- **If diversity still collapses under disruption** → the fix was necessary but not sufficient. Something about disruption genuinely does drain the swarm, and **re-initialisation (scattering a fraction of particles on a graph change) becomes a real candidate** — a standard technique for dynamic PSO, and one this project has deliberately held in reserve
 
-## T4 — What it means for Claim 1
+**Report which, with the numbers.** Do not implement re-initialisation either way; that is a decision for the next segment, made against this answer.
 
-PSO standalone runs **27–41% above the optimum.** Claim 1 is that the hybrid beats its components.
+## T4 — Claim 1, measured
 
-**Estimate, from what you now know, how much of that gap is attributable to the collapse.** A number with error bars, or an honest "cannot be estimated without running the fix" — both are answers. What is not an answer is leaving it unaddressed, because it is the first thing an examiner asks when one component does conspicuously badly.
+Entry 017 R4: the Hybrid contains a PSO and has carried this defect its whole life, while ACO's half was unaffected. Its 2.2% excess is largely ACO's work.
 
-## T5 — Tests
+**So measure what the fix does to the gap Claim 1 rests on:**
 
-Whatever you keep must be pinned. At minimum:
+- PSO standalone, before and after
+- Hybrid, before and after
+- **the gap between Hybrid and its better component**, before and after
+
+**Report the direction honestly, including if it narrows.** A hybrid that beats its components by less once those components work properly is still a true result, and a smaller true result is worth more than a larger one that rested on a crippled baseline. **This is the number that would have gone into the report unexamined**, and it is the reason Phase 2 existed.
+
+Do **not** run a full manifest here — that is Phase 4. Enough seeds for a direction and a rough size, clearly labelled as preliminary.
+
+## T5 — Settle §17.1: adaptive inertia, implement or formally drop
+
+**Now, and only now**, with T2 and T3 in hand.
+
+The state of it: `inertia` is applied at `pso.py:204` but is absent from `EXPLORE_SIGN`, so it is **implemented and un-adaptable**. The synopsis promised adaptive tuning of it. §17.1 says the report must state which way this went and why — *"either is defensible; silence is not."*
+
+Entry 017 R3 removed F13 as an argument for it. So decide it on its own merits, and **let T3's answer carry weight**: if the swarm still loses spread under disruption after the fix, adaptive inertia has an identified job. If it does not, dropping it is clean and says so.
+
+**Make the decision and write the justification**, in a form the report can use. If you implement it, `EXPLORE_SIGN` needs an entry and the sign needs arguing — higher inertia means more roaming, so exploring is `+1`. If you drop it, the reasoning must be the same shape as the one already documented for `n_ants` and `n_particles`.
+
+**State which you chose and why, in one paragraph.** That paragraph is going in the report.
+
+## T6 — Tests
 
 | Test | Catches |
 |---|---|
-| **The decomposition sums to the actual velocity update** | An instrument that measures three things which do not add up to the thing they explain is measuring something else |
-| **The isolation-versus-disruption contrast reproduces** | It is the entire basis of the finding. If it does not reproduce, say so immediately |
+| **A quiet step does not invalidate any personal-best cost** | The fix, directly |
+| **A changed graph still does** | The other direction — a fix that never invalidates is worse than the bug |
+| **Velocity does not collapse on a static 60-step run** | F13, pinned. **The regression test that would have caught this originally** |
+| **`rebind` still propagates the view every step** | The thing not to break |
+| **The Hybrid inherits the fix** | It passes `rebind` down; assert it, do not assume it |
 
-**Every invariant test shown failing against corrupted input.**
+**Every invariant test shown failing against corrupted input, and the corruption pasted.**
 
-## T6 — Mutations, two, one of them yours
+## T7 — Mutations, two, one of them yours
 
-**Specified:** make the decomposition report the terms *before* they are combined rather than as applied. Plausible magnitudes, wrong story — the same shape as segment 14's probe that observed the call instead of the effect.
+**Specified:** make the change-detection always report "unchanged." The fix then never invalidates anything, stale costs survive disruptions forever, and **the collapse tests all pass** because velocity is healthy. A fix that over-corrects looks exactly like a fix that works, from the direction you were watching.
 
-**Yours.** Eight consecutive segments.
+**Yours.** Nine consecutive segments; Entry 017's was the one that found the diagnosis rested on a single seed.
 
-## T7 — Show it
+## T8 — Show it
 
-1. T0, and where the instrumentation lives
-2. **The three terms across the run** — the artefact of this segment
-3. **When the collapse starts, relative to disruptions**
-4. **Your verdict on the hypothesis: holds, wrong, or something else** — and if wrong, what the numbers actually say
-5. What the bests do on a graph change
-6. The options and their costs, unimplemented
-7. **Your estimate of how much of PSO's gap this accounts for**
+1. T0
+2. **The before/after table** — both arms, both conditions, seeds stated
+3. **T3's answer: does spread survive disruption after the fix?**
+4. **Claim 1's gap, before and after**, labelled preliminary
+5. **The inertia decision and its one-paragraph justification**
+6. Both mutations
+7. **Your read: is PSO now a fair baseline for the Hybrid to be compared against?** That is the question the report will be judged on
 
-## T8 — Hand over, do **not** commit
+## T9 — Hand over, do **not** commit
 
 `git status --short`, the commit message as a copyable block, no `Co-Authored-By`, one line confirming complete and uncommitted.
 
@@ -130,12 +127,12 @@ Whatever you keep must be pinned. At minimum:
 
 | | |
 |---|---|
-| **Diagnose. Do not fix.** | Segment 18 decides with this in hand |
-| **The hypothesis is to be falsified, not illustrated** | Saying it is wrong is the best available outcome |
-| **`src/` should barely move** | Temporary instrumentation. Propose permanent probes; do not add them |
-| **Report magnitudes, not verdicts** | Except in T4 and T7, which explicitly ask for your reading — mark it as reading |
-| **No control-layer changes** | F4, F7, F8 and the `allocation/` package are later in Phase 3 |
-| **No inertia implementation** | §17.1 is decided in segment 18, against this |
+| **The fix goes in PSO, not the harness** | `rebind` must keep being called every step |
+| **Conservative fix only** | No re-pricing. Entry 017 R2 — the fairness question stays unopened |
+| **No re-initialisation** | Decide in the next segment, against T3 |
+| **Every comparison changes exactly one thing** | Segment 15's error does not recur |
+| **No manifest runs** | Phase 4. Preliminary numbers, labelled |
+| **No control-layer changes** | F4, F7, F8 and `allocation/` are segments 20–21 |
 | **No dashboard work** | |
 | **Do not commit, do not push** | |
 
@@ -152,15 +149,15 @@ ls outputs/
 git status --short                       # UNSTAGED, UNCOMMITTED
 ```
 
-**Paste verbatim:** T0 · the three-term decomposition across a disrupted run · when the collapse starts relative to disruptions · what the bests do on a graph change · **your verdict on the hypothesis** · the options, unimplemented · your estimate for Claim 1 · both mutations · every invariant test shown red.
+**Paste verbatim:** T0 · the before/after table with seeds · whether spread survives disruption · Claim 1's gap before and after · **the inertia decision and its justification paragraph** · both mutations · every invariant test shown red · your read on whether PSO is now a fair baseline.
 
 ---
 
 ## Definition of done
 
-Green suite, artefacts pasted, **a verdict on the hypothesis stated plainly**, uncommitted with the message pasted, FINDINGS appended.
+Green suite, artefacts pasted, **the inertia question closed with a written justification**, uncommitted with the message pasted, FINDINGS appended.
 
-**After this, Phase 3 knows what it is fixing before it starts fixing.** Segment 18 settles inertia and opens the `allocation/` package.
+**After this the components are repaired and honest.** Segment 19 checks they are also correct.
 
 ---
 ---
@@ -169,259 +166,226 @@ Green suite, artefacts pasted, **a verdict on the hypothesis stated plainly**, u
 
 ---
 
-# FINDINGS — Segment 17
+# FINDINGS — Segment 18
 
-## 0. The verdict, first: **the hypothesis is wrong, and so is F13's premise**
+## 1. T1 — the fix
 
-Two claims were on the table. Both fail.
+In `PSO.rebind`, guarded on `view.state_hash()`:
 
-| Claim | Verdict |
-|---|---|
-| *"The collapse is specific to a disrupted run"* — F13, Entry 015 | **False.** It reproduces exactly on a static graph with no events at all |
-| *"Particles converge, both pull terms go to zero, inertia coasts down"* | **False.** All three terms decay together, in lockstep, at the same order of magnitude throughout |
-
-**What the numbers actually say:** the collapse is caused by one line in
-`PSO.rebind` — `self._own_cost[:] = np.inf` — and the harness calls `rebind`
-on every arm at **every timestep, unconditionally**, whether or not the graph
-changed.
-
-Disruption is not the variable. It never was.
-
-## 1. T0 — cost
-
-**`src/` 2037 / 2100, delta +0, margin 63.** Untouched, as a diagnosis should
-be.
-
-Instrumentation lives in **`scripts/diagnose_f13.py`** — temporary,
-monkeypatching `PSO._move` to record the three terms — and the finding is
-pinned in **`tests/test_f13_diagnosis.py`**. No permanent telemetry was added;
-a proposal for one is in §6.
-
-## 2. T1 — the three terms, as applied
-
+```python
+digest = view.state_hash()
+if digest != self._last_state:
+    self._own_cost[:] = np.inf
+    self._last_state = digest
 ```
 
-DISRUPTED (moderate, 0.3 events/step)
---------------------------------------------------------------------------------------------
-    t      inertia   cognitive      social         |v|  own==pos  events
-    0      0.08656      0.0404     0.07115      0.1235      32%
-    2      0.01112     0.00816     0.01081     0.01554      10%  <- disruption
-    5     0.001081   9.292e-04    0.001061    0.001457       7%  <- disruption
-    6    8.209e-04   7.702e-04   8.196e-04    0.001158       7%
-    8    5.044e-04   4.656e-04   4.928e-04   7.049e-04       7%  <- disruption
-    9    3.176e-04   3.204e-04   3.436e-04   4.514e-04       7%  <- disruption
-   12    1.424e-04   1.230e-04   1.303e-04   1.900e-04       7%
-   18    1.133e-05   1.230e-05   1.257e-05   1.651e-05       7%
-   24    3.123e-06   3.030e-06   2.837e-06   4.197e-06       7%
-   30    2.077e-08   2.045e-08   2.094e-08   2.848e-08       7%
-   36    1.135e-08   1.206e-08   1.113e-08   1.587e-08       7%
-   42    8.931e-11   9.552e-11   8.876e-11   1.306e-10       7%
-   48    1.055e-11   6.197e-12   6.180e-12   1.292e-11       7%
-   54    2.649e-12   3.783e-12   2.749e-12   3.321e-12      11%  <- disruption
+**`src/` 2041 / 2100**, +4 from segment 17's 2037, margin 59. No API change,
+no new fairness surface, no cost to any other arm.
 
-  disruption steps: [2, 5, 8, 9, 14, 19, 21, 28, 35, 47, 54, 57]
+Both required comments are in place. In `pso.rebind`, why the guard lives here
+and not at the call site, and that it is **conservative rather than exact** —
+any change anywhere invalidates every remembered cost, and re-pricing instead
+would cost metered evaluations, which is a fairness decision rather than an
+implementation detail (Entry 017 R2). In `trial.py:175`, why the call stays
+unconditional: `rebind` is how an optimizer receives the current world, and
+making the *call* conditional would leave every arm searching a stale graph.
 
-ISOLATION (static, no disruptions)
---------------------------------------------------------------------------------------------
-    t      inertia   cognitive      social         |v|  own==pos  events
-    0      0.08656      0.0404     0.07115      0.1235      32%
-    6    8.725e-04   8.086e-04   8.469e-04    0.001232       7%
-   12    1.404e-04   1.221e-04   1.278e-04   1.851e-04       7%
-   18    1.067e-05   1.165e-05   1.191e-05   1.554e-05       7%
-   24    3.142e-06   3.042e-06   2.840e-06   4.232e-06       7%
-   30    2.041e-08   1.987e-08   2.050e-08   2.789e-08       7%
-   36    1.139e-08   1.212e-08   1.116e-08   1.593e-08       7%
-   42    8.892e-11   9.472e-11   8.754e-11   1.302e-10       7%
-   48    1.060e-11   6.192e-12   6.145e-12   1.297e-11       7%
-   54    2.684e-12   3.834e-12   2.787e-12   3.365e-12      18%
-```
+## 2. T2 — before and after, one variable per comparison
 
-**All three decay together.** At t=18 they are 1.13e-05, 1.23e-05, 1.26e-05 —
-indistinguishable. At t=42, 8.9e-11, 9.6e-11, 8.9e-11. There is no point in
-the run where the pulls have died and inertia is coasting: **the pulls are the
-same size as inertia the whole way down.**
-
-That is the third of the spec's three cases, not the first. The pulls are not
-vanishing *and then* velocity decaying — everything shrinks together, because
-what shrinks is the *distances* the pulls are computed from.
-
-**And `own_best == position` sits at 7%**, not 100%. If the hypothesis were
-right — particles sitting on their own bests, pulled nowhere — that figure
-would be high. It is not. The cognitive term is alive; it just has almost no
-distance left to act over.
-
-## 3. T2 — locating it, and the fact about the code
-
-### It is not tied to disruption
-
-The isolation run in the same output collapses to the same magnitude on the
-same schedule. `2.789e-08` at t=30 undisrupted against `2.848e-08` disrupted.
-
-**So why did segment 15 measure `~1.4e-02` stable in isolation?** Because that
-loop called `spend()` repeatedly on a standalone `PSO` object and **never
-called `rebind`**. The harness calls it every step. The contrast was never
-disrupted-versus-quiet; it was **harness-versus-standalone**, and nobody had
-noticed because no measurement had separated them.
-
-### The decisive experiment
-
-Same graph, same seed, nothing changing between steps:
+Every pair below holds seed, graph, scenario, budget and arm fixed and varies
+**only the guard** — simulated by clearing the remembered hash, so `rebind`
+itself is untouched. n = 8 seeds.
 
 ```
-  step     no rebind    rebind each step
-     0     2.002e-01           2.002e-01
-     5     3.947e-02           8.685e-02
-    15     2.350e-02           3.419e-02
-    30     1.945e-02           1.185e-02
-    45     1.931e-02           1.327e-04
-    59     1.424e-02           2.513e-08
+F13 FIX — BEFORE AND AFTER
+====================================================================
+  Each pair varies the guard and nothing else: same seeds, same graph,
+  same scenario, same budget, same arm.
+
+  STATIC     (pso, 0.0 events/step, n=8)
+                       before        after       change
+    excess             0.1115       0.1054      -0.6 pp
+    velocity        4.400e-08      0.02713    x6.17e+05
+    diversity       3.161e-07      0.04242    x1.34e+05
+    gbest               11.38        14.88        x1.31
+
+  DISRUPTED  (pso, 0.3 events/step, n=8)
+                       before        after       change
+    excess             0.2499       0.1831      -6.7 pp
+    velocity         0.005911       0.0173        x2.93
+    diversity         0.01044      0.02201        x2.11
+    gbest                16.5        23.88        x1.45
+
+  STATIC     (hybrid, 0.0 events/step, n=8)
+                       before        after       change
+    excess            0.06438      0.06032      -0.4 pp
+    velocity          0.02797      0.06995         x2.5
+    diversity         0.03189      0.07286        x2.29
+    gbest               14.25        14.62        x1.03
+
+  DISRUPTED  (hybrid, 0.3 events/step, n=8)
+                       before        after       change
+    excess            0.09572      0.08402      -1.2 pp
+    velocity          0.03045      0.02956       x0.971
+    diversity         0.03224      0.03798        x1.18
+    gbest               25.88        27.12        x1.05
+
+
+  CLAIM 1 — the hybrid against its better component
+  ------------------------------------------------------------------
+    before static     PSO   11.1%   Hybrid    6.4%   gap   +4.7%
+    before disrupted  PSO   25.0%   Hybrid    9.6%   gap  +15.4%
+    after  static     PSO   10.5%   Hybrid    6.0%   gap   +4.5%
+    after  disrupted  PSO   18.3%   Hybrid    8.4%   gap   +9.9%
 ```
 
-`1.424e-02` is segment 15's isolation figure, reproduced exactly by simply not
-calling `rebind`.
+### What the numbers say
 
-### Isolated to one line
+**On a static graph the collapse was catastrophic and cost almost nothing.**
+Velocity ×617,000, diversity ×134,000 — and excess improves by 0.6 points.
+The swarm was frozen and still found routes nearly as good, because with no
+disruption the first decent answer stays the right answer.
 
-```
-  none        final |v| 1.424e-02   diversity 1.903e-02
-  full        final |v| 2.513e-08   diversity 5.440e-07
-  cost_only   final |v| 2.513e-08   diversity 5.440e-07     <- the wipe alone
-  rest_only   final |v| 1.424e-02   diversity 1.903e-02     <- everything else
-```
+**Under disruption it was moderate and cost a great deal.** Velocity only
+×2.9 — and **excess improves 6.7 points, 25.0% → 18.3%.** That is where the
+defect was actually being paid for.
 
-`cost_only` reproduces `full` **bit for bit**. `rest_only` — refresh
-visibility, re-sync lists, re-price the global best — reproduces the healthy
-baseline **bit for bit**. The cause is `self._own_cost[:] = np.inf` and
-nothing else in the method.
+### An inversion worth stating
 
-### The mechanism, stated
+**Before the fix, disruption was the only thing keeping the swarm alive.**
+Static diversity was `3.16e-07`; disrupted was `1.04e-02` — *thirty thousand
+times healthier*. `reset_learned_state` scatters particles when the graph
+changes, and that scattering was partially rescuing a swarm the wipe was
+destroying.
 
-Setting every personal-best cost to infinity means the next evaluation of each
-particle **always** improves on it, so `own_best[i] = position[i]`. The
-particle's memory is re-anchored to wherever it currently is, every step. The
-swarm therefore has no persistent memory of anywhere better — and with nothing
-to be pulled back toward, positions drift together, the distances shrink, and
-all three terms shrink with them. Inertia then multiplies a shrinking number
-by 0.7.
+That is why F13 looked like a disruption problem and was the opposite of one.
+The quiet case was worse, and nobody had measured the quiet case.
 
-**The policy is correct when the graph changed.** A cost measured against a
-graph that no longer exists is a stale number, and `rebind`'s docstring
-defends discarding it well. The defect is that **it fires when nothing
-changed**, and the harness never checks (`trial.py:176`, unconditional inside
-`for arm in arms:`).
+## 3. T3 — does spread survive disruption after the fix?
 
-### Reproduces across seeds
+**No. The fix was necessary and is not sufficient.**
 
 ```
-    seed     no rebind        rebind       ratio
-    1000     1.424e-02     2.513e-08     5.7e+05
-    1001     3.627e-02     9.717e-14     3.7e+11
-    1002     2.188e-02     4.072e-14     5.4e+11
-       7     5.369e-02     4.139e-12     1.3e+10
-      42     3.159e-03     1.239e-12     2.5e+09
-    9999     9.360e-03     6.484e-13     1.4e+10
+  diversity, after the fix:    static 0.0424     disrupted 0.0220
 ```
 
-Six of six. **Seed 1000 is the weakest case**, so the original single-seed
-diagnosis understated it.
+The swarm holds **about half its static spread** under disruption. Before the
+fix that comparison was meaningless — the static case was the broken one.
 
-## 4. T4 — how much of PSO's gap this accounts for
+**So the answer that decides segments 19–21 is the second branch:** something
+about disruption genuinely does drain the swarm beyond what F13 explains, and
+**re-initialisation becomes a real candidate.** Not implemented, per the
+constraint.
 
-Measured on a **static** graph, 60 steps, wipe on versus wipe off:
+**One honest qualification.** Disrupted PSO is at 18.3% against static 10.5%,
+and I have *not* established that the 7.8-point difference is caused by the
+spread loss — a moving optimum is a harder problem regardless. What is
+established is that spread is materially lower and that the fix did not
+restore it.
 
-```
-    seed    wipe each step    wipe never       gap
-    1000             0.0%          1.0%      -1.0%
-    1001            10.2%          6.0%       4.2%
-    1002             5.5%          2.0%       3.5%
-       7            13.1%          0.0%      13.1%
-      42            12.7%          4.4%       8.3%
-
-  mean 5.6 percentage points   sd 4.8   n = 5
-```
-
-**My reading, marked as reading:** the wipe costs roughly **5.6 points of
-excess, ±4.8, on n=5** — and one seed went the other way, so the effect is
-real but noisy at this sample size.
-
-**I would not extrapolate that to the 27–41% seen under disruption**, and the
-honest answer to "how much of the gap is this" is *cannot be settled without
-running the fix*. The reason is in the table: on a static graph PSO sits at
-0–13% even with the wipe, nowhere near 27–41%. Whatever else makes disrupted
-PSO bad is not in this measurement. **The wipe is a real cost and it is
-probably not the whole story.**
-
-## 5. T3 — options, none implemented
-
-| Option | What it does | Cost | My read |
-|---|---|---|---|
-| **Make the wipe conditional** | invalidate costs only when the graph actually changed | ~2 statements in `trial.py` or a dirty flag on `rebind` | **Smallest, most targeted, addresses the measured cause.** The policy stays right where it is right |
-| **Re-evaluate bests instead of discarding** | re-price `own_best` against the new graph rather than setting `inf` | ~4 statements, plus one evaluation per particle per change | Keeps memory across genuine disruptions too. Costs budget, which is metered |
-| **Adaptive inertia (§17.1)** | raise inertia when disruption lands | the promised-and-never-delivered parameter | **The diagnosis argues against this as the primary fix.** It would re-energise a swarm whose memory is being erased — treating the symptom. §17.1's *implement or drop* is now a question about adaptation, not about F13 |
-| **Re-injection / hypermutation** | scatter some particles on disruption | moderate | `reset_learned_state` already does this and is not the problem |
-
-**Not implemented. Segment 18 decides.**
-
-**And the honest alternative is on the table:** this is *not* simply correct
-premature convergence. Premature convergence on a hard dynamic problem would
-not be switchable off by declining to erase memory on steps where nothing
-happened. The static-graph contrast rules that reading out.
-
-## 6. A permanent probe, proposed not added
-
-The Phase 2 probe reports `speed_mean`, which is what surfaced F13 — but it
-could not distinguish *why*. **Proposed: the three terms, per step, as
-applied.** ~4 statements in `pso.probe()` given the decomposition already
-exists in `_move`.
-
-**Not added**, per the constraint. It is worth having only if segment 18's fix
-needs to be shown working, which is segment 18's call.
-
-## 7. Both mutations
-
-**A — specified: the decomposition reports the terms before they are combined.**
+## 4. T4 — Claim 1, measured
 
 ```
-E  AssertionError: the decomposition does not reconstruct the velocity it
-   claims to explain
+  before  static     PSO  11.1%   Hybrid  6.4%   gap  +4.7%
+  before  disrupted  PSO  25.0%   Hybrid  9.6%   gap +15.4%
+  after   static     PSO  10.5%   Hybrid  6.0%   gap  +4.5%
+  after   disrupted  PSO  18.3%   Hybrid  8.4%   gap  +9.9%
 ```
 
-Caught. Reporting `velocity` instead of `inertia * velocity` gives plausible
-magnitudes and a wrong story — segment 14's bounds probe in a new place.
+**Under disruption the gap narrows from 15.4 points to 9.9 — it loses over a
+third of its size.** Claim 1 survives: the hybrid still beats its better
+component by ~10 points. But a third of the margin that would have been
+reported was PSO being crippled.
 
-**B — mine: the whole diagnosis rested on seed 1000.**
+Entry 017 R4 predicted this and the prediction holds: the Hybrid's own excess
+barely moves (9.6% → 8.4%), because its ACO half was never affected and was
+doing most of the work. **The gap narrowed almost entirely from the baseline
+improving, not from the hybrid getting worse.**
 
-Every test ran on one seed. A seed-specific artefact would have passed all
-four while the finding written beside them was wrong — and I would have had
-six paragraphs of mechanism explaining something that did not generalise.
+**This is the number that would have gone into the report unexamined**, and a
+smaller true result is worth more than a larger one resting on a crippled
+baseline.
+
+Preliminary: n = 8 seeds, one trial each, not a manifest. Phase 4 measures it
+properly.
+
+## 5. T5 — §17.1 settled: **adaptive inertia is formally dropped**
+
+> **`inertia` is dropped, and not for the reason `n_ants` is.** Its sign is
+> not ambiguous — higher inertia carries more of the previous velocity, so a
+> particle roams further and `+1.0` would be correct. It is excluded because
+> of **attribution**. PSO runs inside the hybrid, so an adaptive inertia would
+> give `hybrid_adaptive` two adapting mechanisms at once: the allocation split
+> and the swarm's own momentum. A win could then not be attributed to either.
+> That is precisely the objection this project already makes to pairing
+> `hybrid` against `hybrid_adaptive` — two arms differing in two ways answer
+> no question — and the thesis is that *recency-driven allocation* helps, a
+> claim which becomes unmeasurable if something else is adapting beside it.
+> The job adaptive inertia would have done is real: after F13's fix the swarm
+> still holds only about half its static spread under disruption. But that job
+> is better served by re-initialisation, which is internal to PSO, adds no
+> controlled parameter, and leaves the allocation claim clean.
+
+Documented in `controllers.py` beside the other exclusions, and pinned by
+`test_inertia_is_formally_dropped_not_overlooked` — because without a test the
+absence is indistinguishable from an oversight, which is the state §17.1
+objected to.
+
+## 6. Both mutations
+
+**A — specified: change-detection always reports "unchanged."**
 
 ```
-E  AssertionError: seed 1001: rebind did not collapse the swarm
-   (3.627e-02 against 3.627e-02)
+E  AssertionError: a real graph change did not invalidate the remembered costs
 ```
 
-Now parametrised over six seeds. **Nine consecutive segments.**
+Caught by the other-direction test. The collapse tests all passed, exactly as
+predicted — a fix that over-corrects looks like a fix that works from the
+direction you were watching.
 
-## 8. Acceptance
+**B — mine: compare object identity instead of state value.**
+
+```
+15 tests: all passed
+real harness, static run, final velocity: 5.171e-14
+```
+
+**Every test passed and the bug was completely unfixed.**
+
+All my unit tests reuse a single `GraphView` object across sixty rebinds, so
+`id(view)` never changes and the guard appears to work. The harness does not
+do that — `state_at(t)` caches a **distinct object per timestep**, identical
+in content on a quiet step but not the same object. The guard would have
+skipped nothing, in production, silently.
+
+The fixture was unrepresentative of the call pattern it was standing in for.
+Now covered by a test that runs the **real harness path** on a static
+scenario, and shown red:
+
+```
+E  seed 1000: velocity collapsed to 5.171e-14 on a static run through the
+   harness — the guard is comparing something other than state value
+```
+
+**Ten consecutive segments.**
+
+## 7. Acceptance
 
 | Check | Result |
 |---|---|
-| Suite | **404 passed, 0 failed, 0 skipped** |
+| Suite | **409 passed, 0 failed, 0 skipped** |
 | Lint, four trees | `All checks passed!` |
-| `src/` | **2037 / 2100**, delta **+0** |
+| `src/` | **2041 / 2100**, +4, margin 59 |
 | `outputs/` before / after | **26 / 26** |
-| New tests | `tests/test_f13_diagnosis.py`, **10 passed** |
+| `tests/test_f13_diagnosis.py` | **15 passed** |
 
-## 9. What this changes
+## 8. What segment 19 inherits
 
-**F13 should be restated.** It is currently logged as *"PSO's velocity
-collapses under disruption"*. It is not about disruption and it is not really
-about velocity — it is about the swarm's memory being erased on every
-timestep, of which the velocity collapse is a symptom. Under the current
-wording, a future segment could fix disruption handling and leave the cause
-untouched.
-
-**And §17.1's inertia question is now separable from F13.** The diagnosis
-argues adaptive inertia would be treating a symptom here. Whether adaptation
-is wanted for its own sake is still open — but it should no longer be decided
-*as the fix for this*.
+- **T3 says re-initialisation has an identified job**, with a number attached:
+  half the static spread, after the fix
+- **Adaptive inertia is closed**, so it is not competing for that job
+- **Claim 1's real size under disruption is ~10 points, not ~15**, and Phase 4
+  should be planned against the smaller figure
+- The exact re-pricing alternative to the conservative invalidation is still
+  open, and is a fairness question about metered evaluations rather than an
+  implementation one

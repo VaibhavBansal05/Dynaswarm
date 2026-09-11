@@ -67,6 +67,26 @@ EXPLORE_SIGN: Mapping[str, float] = {
     # trustworthy thing in the system, so "explore" here means giving
     # the memoryless component more of the budget.
     "aco_fraction": -1.0,
+    # **`inertia` is formally dropped, not overlooked** (§17.1, settled in
+    # segment 18). Unlike `n_ants` above, its sign is not ambiguous: higher
+    # inertia carries more of the previous velocity, so a particle roams
+    # further and `+1.0` would be correct. It is excluded for a different
+    # reason, and the reason is attribution.
+    #
+    # PSO runs *inside* the hybrid. An adaptive inertia there would give
+    # `hybrid_adaptive` two adapting mechanisms at once — the allocation
+    # split and the swarm's own momentum — and a win could then not be
+    # attributed to either. That is exactly the objection this project
+    # already makes to pairing `hybrid` against `hybrid_adaptive`: two
+    # arms differing in two ways answer no question. The thesis is that
+    # *recency-driven allocation* helps; anything else adapting at the
+    # same time makes that unmeasurable.
+    #
+    # The job adaptive inertia would have done is real — measured in
+    # segment 18, the swarm still holds only about half its static spread
+    # under disruption after F13's fix. But that job is better served by
+    # re-initialisation, which is internal to PSO and adds no controlled
+    # parameter, and it is segment 19's to decide.
 }
 
 
