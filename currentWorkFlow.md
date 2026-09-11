@@ -1,8 +1,8 @@
-# SEGMENT 18 — Fix F13, Measure It, Settle Inertia
+# SEGMENT 19 — Correct, Not Just Running
 
-**Phase 3 · Restructure · Segment 2 of 5**
+**Phase 3 · Restructure · Segment 3 of 5**
 
-> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.3 (PSO), §6 (the Hybrid), §10.2 (the five fairness guarantees), §17.1 (PSO inertia)**. `WORKFLOW_LOG.md` **Entry 017** is the diagnosis this segment acts on — R1 restates F13, R2 sets the fix, R3 reframes inertia, R4 covers the Hybrid.
+> Read `AGENT_PROTOCOL.md`, `ARCHITECTURE.md` **§5.1 (A\*), §5.2 (ACO), §5.3 (PSO), §6 (the Hybrid)**, §2.1. `WORKFLOW_LOG.md` **Entry 018** — R2 settles re-initialisation and is not to be reopened here.
 > Append your findings to the **bottom** of this file.
 >
 > ## ⛔ YOU DO NOT COMMIT
@@ -13,109 +13,112 @@
 
 ## Goal
 
-Three things, in this order and not another: **fix it · measure it · then decide inertia against the measurement.**
+Phase 2 proved the mechanisms **run**. It said so on its own front page and refused to claim more. **This segment asks whether they run as specified** — against arithmetic, on a graph small enough to work out by hand.
 
-The ordering is the point. §17.1's inertia question has been open since Phase 0 and was always going to be settled by argument. It should not be. **Fix the defect first, measure what is left, and let the number decide** — otherwise inertia gets credited or blamed for F13's behaviour, which is what Entry 017 R3 ruled against.
+Everything you have today is **outcome-based** evidence. ACO lands within 2–3% of a provably optimal answer, which is hard to achieve with a broken implementation — but "hard to achieve" is not proof, and it says nothing about PSO at 18%, where a correct hard algorithm and an incorrect one look the same from outside.
+
+---
+
+## The rule this segment lives or dies by
+
+> **Every expected value is computed independently of the implementation.**
+
+Worked out from the published definition, on paper or in a few lines written for the purpose. **Never by running the code and recording what it produced.**
+
+A test whose expectation came from the code is a change-detector, not a correctness test. It passes forever, including on the day the code was wrong from the start — and it is the same defect this project has caught in five other costumes: a threshold taken from the state being replaced, an invariant asserted only against correct data, a ledger reconciled against its own arithmetic, a guarantee tested by data in which nothing fails, a fixture that differed from production in the one dimension under test.
+
+**State, for each check, where the expected number came from.** If the answer is "from a formula in §5.2," name it. If it is "I worked it out", show the working.
 
 ---
 
 ## ⚠️ T0 — MEASURE
 
-`src/` **2037 / 2100**, margin **63**. The fix itself is a handful of statements; the measurement should cost `src/` nothing.
+`src/` **2041 / 2100**, margin **59**. **This segment should cost `src/` nothing** — it is tests and a small reference implementation, both outside the science surface. If a check needs something the core does not expose, **stop and report.**
 
-Report projection and actual, and say what remains for segments 19–21.
+Report projection and actual.
 
 ---
 
-## T1 — Fix F13
+## T1 — A\* first, and hold it to the highest standard
 
-**The fix goes in PSO, not the harness.** `rebind` also assigns `self._view = view`, and the optimizer genuinely needs the current graph every step. **The harness must keep calling `rebind` unconditionally** — if you "fix" it there, view propagation breaks and every arm starts operating on a stale graph, which is a far worse defect than the one being repaired. Say in a comment why the call stays unconditional, so a later segment does not helpfully move it.
+**Everything in this project is measured against A\*.** Excess is defined relative to it, Claim 1 is a comparison of excesses, and the dashboard draws its answer as the truth. **If A\* is wrong, every number in the report is wrong and nothing else in this segment matters.**
 
-**The change:** invalidate the personal-best costs **only when the graph actually differs from the one PSO last saw.**
+It has one existing check — segment 7 compared `heuristic=True` against `heuristic=False` and got the same cost. That is A\* agreeing with Dijkstra, which is real but is two implementations sharing one codebase and one set of assumptions.
 
-**Detecting that:** the view already carries `state_hash()` — the harness uses it to assert nobody mutates the shared world. Store the last one, compare, skip the invalidation when it matches. No API change, no new fairness surface, no cost to any other arm.
+**Build the independent check: brute-force enumeration.** On a graph of 8–10 nodes, enumerate every simple path from source to target, sum the weights, take the minimum. That is the definition of a shortest path, computed without reference to the code under test.
 
-**One property of this fix to state plainly rather than let a reader assume otherwise:** it is **conservative, not exact.** When any edge anywhere changes, every remembered cost is invalidated — including those of particles whose remembered route is nowhere near the change. That is correct-but-blunt. The exact version re-prices each best instead of destroying it, and Entry 017 R2 records why that is not being done now: re-pricing costs metered evaluations, and making PSO pay for disruption in a currency ACO does not pay is a fairness decision, not an implementation detail. **Note the imprecision in the docstring so the next person does not mistake blunt for wrong.**
+Then assert A\*'s cost equals it — **over many random small graphs, not one.** Include at least: a graph where the shortest path is not the fewest hops, a graph with a disconnected target, and a graph where two distinct paths tie.
 
-## T2 — Measure what the fix buys, and be careful what you compare
+**Do the same on a state partway through a timeline**, not only at `t=0`. The moving optimum is what excess is measured against, and it is computed at every step.
 
-**Before and after, same seeds, both conditions:**
+## T2 — ACO's choice rule against the formula
 
-| | static graph | disrupted graph |
-|---|---|---|
-| PSO standalone | | |
-| Hybrid | | |
+§5.2 defines how an ant picks its next edge: a probability proportional to pheromone raised to `alpha` times the heuristic raised to `beta`, normalised over the available edges.
 
-Report **excess over the optimum**, and the three collapse indicators — **velocity, diversity, global-best updates.**
+**Set up a state you control** — a handful of nodes, pheromone and weights set by hand — and **compute the expected probabilities from that formula yourself.** Then sample the implementation's choice many times and compare the empirical frequencies, with a tolerance you can justify from the sample size.
 
-**Do not repeat segment 15's mistake.** That comparison differed in two ways at once and pointed at the wrong cause for two segments. **Every comparison here changes exactly one thing.** State, for each, what is held fixed.
+**Also check the arithmetic that moves pheromone**, and here the expected values are exactly computable rather than statistical:
 
-Enough seeds that the answer is not one lucky run. Segment 17 needed six to find that seed 1000 was the weakest of them.
+- **evaporation** — after one step, is each trail exactly `tau * (1 - rho)`?
+- **deposit** — is the amount exactly what §5.2 specifies, and on exactly the edges of the best path?
+- **the MAX–MIN bounds** — are `tau_max` and `tau_min` the values the formula gives, and is every trail inside them afterwards?
 
-## T3 — The question that decides segments 19–21
+**That deposit check answers something Phase 2 explicitly could not.** The trust report says outright that `tau_deposited` *"cannot detect deposit on the WRONG edges; the count is identical either way."* **On a tiny graph you can check every edge.** Close it.
 
-**Does the fix restore the swarm's spread under disruption, or only on a static graph?**
+## T3 — PSO's decoding is deterministic, so check it exactly
 
-This is the whole reason the measurement is in this segment rather than waiting.
+A particle's position is a priority vector. The route is built by walking the graph and preferring the highest-priority available neighbour. **Given a specific priority vector on a specific small graph, the route is fully determined** — so work out by hand what route it must produce and assert the implementation produces it.
 
-- **If diversity holds up under disruption after the fix** → the defect was the whole story. Nothing further is needed, and re-scattering stays unbuilt
-- **If diversity still collapses under disruption** → the fix was necessary but not sufficient. Something about disruption genuinely does drain the swarm, and **re-initialisation (scattering a fraction of particles on a graph change) becomes a real candidate** — a standard technique for dynamic PSO, and one this project has deliberately held in reserve
+Cover the cases that separate a correct walk from a plausible one:
 
-**Report which, with the numbers.** Do not implement re-initialisation either way; that is a decision for the next segment, made against this answer.
+- a priority ordering that leads into a **dead end**, so the repair path is exercised
+- **ties** in priority — whatever the tie-break is, it must be deterministic and stated
+- a vector whose greedy walk is **not** the shortest path, so you are testing the decoding rather than accidentally testing the optimiser
 
-## T4 — Claim 1, measured
+**Then the velocity update**, which is three terms and a sum. Set position, velocity, personal best and global best to chosen values, compute the next velocity from §5.3's formula by hand, and compare. **This is the arithmetic segment 17 spent a whole segment reasoning about without ever checking directly.**
 
-Entry 017 R4: the Hybrid contains a PSO and has carried this defect its whole life, while ACO's half was unaffected. Its 2.2% excess is largely ACO's work.
+## T4 — The Hybrid's exchange
 
-**So measure what the fix does to the gap Claim 1 rests on:**
+§6.2 defines what the components pass between them. The split is already verified from realised spend (Entry 015).
 
-- PSO standalone, before and after
-- Hybrid, before and after
-- **the gap between Hybrid and its better component**, before and after
+**What is not verified is the exchange's content.** Does the thing handed over arrive intact, and does the receiving component actually use it? Construct a state where the answer is unambiguous — one component holds a known good solution the other could not have found — and check it crosses **and has an effect.**
 
-**Report the direction honestly, including if it narrows.** A hybrid that beats its components by less once those components work properly is still a true result, and a smaller true result is worth more than a larger one that rested on a crippled baseline. **This is the number that would have gone into the report unexamined**, and it is the reason Phase 2 existed.
+An exchange that fires and is ignored counts as `exchanges: 1` in the probe and does nothing. **Entry 015 counted that it fires. Nothing has checked that it matters.**
 
-Do **not** run a full manifest here — that is Phase 4. Enough seeds for a direction and a rough size, clearly labelled as preliminary.
+## T5 — Report what you could not check, and why
 
-## T5 — Settle §17.1: adaptive inertia, implement or formally drop
+**This matters as much as the checks.** Some things will not be verifiable this way — stochastic behaviour over long runs, emergent convergence, anything needing a large graph.
 
-**Now, and only now**, with T2 and T3 in hand.
-
-The state of it: `inertia` is applied at `pso.py:204` but is absent from `EXPLORE_SIGN`, so it is **implemented and un-adaptable**. The synopsis promised adaptive tuning of it. §17.1 says the report must state which way this went and why — *"either is defensible; silence is not."*
-
-Entry 017 R3 removed F13 as an argument for it. So decide it on its own merits, and **let T3's answer carry weight**: if the swarm still loses spread under disruption after the fix, adaptive inertia has an identified job. If it does not, dropping it is clean and says so.
-
-**Make the decision and write the justification**, in a form the report can use. If you implement it, `EXPLORE_SIGN` needs an entry and the sign needs arguing — higher inertia means more roaming, so exploring is `+1`. If you drop it, the reasoning must be the same shape as the one already documented for `n_ants` and `n_particles`.
-
-**State which you chose and why, in one paragraph.** That paragraph is going in the report.
+**Name them explicitly**, in a form the report can use. Phase 2's trust report set the standard by stating its own blind spots on the line below each probe; do the same. **A correctness section that lists only what it could prove is the over-claim this whole phase exists to prevent.**
 
 ## T6 — Tests
 
-| Test | Catches |
-|---|---|
-| **A quiet step does not invalidate any personal-best cost** | The fix, directly |
-| **A changed graph still does** | The other direction — a fix that never invalidates is worse than the bug |
-| **Velocity does not collapse on a static 60-step run** | F13, pinned. **The regression test that would have caught this originally** |
-| **`rebind` still propagates the view every step** | The thing not to break |
-| **The Hybrid inherits the fix** | It passes `rebind` down; assert it, do not assume it |
+Everything above is tests. Two further requirements:
 
-**Every invariant test shown failing against corrupted input, and the corruption pasted.**
+| | |
+|---|---|
+| **The small-graph fixtures are constructed, not sampled** | A random 10-node graph that happens to have the property you need is a fixture that will lose it |
+| **Each test names where its expected value came from** | In the docstring. This is the only defence against an expectation quietly drifting to match the code |
+
+**Every check shown failing against a deliberately wrong implementation**, and the corruption pasted. Entry 010's rule, and it is the whole segment here: a correctness test that has never been seen red is a correctness test whose expectation might have come from the code.
 
 ## T7 — Mutations, two, one of them yours
 
-**Specified:** make the change-detection always report "unchanged." The fix then never invalidates anything, stale costs survive disruptions forever, and **the collapse tests all pass** because velocity is healthy. A fix that over-corrects looks exactly like a fix that works, from the direction you were watching.
+**Specified:** change ACO's `alpha` exponent from `alpha` to `alpha + 1` in the choice rule. The ants still prefer strong trails, the algorithm still works, results still look reasonable — **and it is no longer the algorithm §5.2 describes.** That is the exact class of defect this segment exists to find: not broken, just not what the report says it is.
 
-**Yours.** Nine consecutive segments; Entry 017's was the one that found the diagnosis rested on a single seed.
+**Yours.** Ten consecutive segments. Entry 018's found that a fixture reusing one object hid a completely unfixed bug behind fifteen passing tests.
 
 ## T8 — Show it
 
 1. T0
-2. **The before/after table** — both arms, both conditions, seeds stated
-3. **T3's answer: does spread survive disruption after the fix?**
-4. **Claim 1's gap, before and after**, labelled preliminary
-5. **The inertia decision and its one-paragraph justification**
-6. Both mutations
-7. **Your read: is PSO now a fair baseline for the Hybrid to be compared against?** That is the question the report will be judged on
+2. **A\* against brute force** — how many graphs, which edge cases, the result
+3. **ACO's choice probabilities** — your hand-computed expectations beside the empirical frequencies
+4. **The deposit check** — does it land on exactly the best path's edges? The thing Phase 2 could not see
+5. **PSO's decoding and velocity arithmetic** — expected versus actual
+6. **The exchange: does it arrive and does it matter?**
+7. Both mutations, and every check shown red
+8. **What you could not check, and why**
+9. **Your read: would you now defend these implementations as being the algorithms they are named after?**
 
 ## T9 — Hand over, do **not** commit
 
@@ -127,12 +130,13 @@ Entry 017 R3 removed F13 as an argument for it. So decide it on its own merits, 
 
 | | |
 |---|---|
-| **The fix goes in PSO, not the harness** | `rebind` must keep being called every step |
-| **Conservative fix only** | No re-pricing. Entry 017 R2 — the fairness question stays unopened |
-| **No re-initialisation** | Decide in the next segment, against T3 |
-| **Every comparison changes exactly one thing** | Segment 15's error does not recur |
-| **No manifest runs** | Phase 4. Preliminary numbers, labelled |
-| **No control-layer changes** | F4, F7, F8 and `allocation/` are segments 20–21 |
+| **Expected values computed independently of the implementation** | The rule the segment lives by. Say where each came from |
+| **`src/` should not move** | Stop and report if a check needs core exposure |
+| **Constructed fixtures, not sampled** | |
+| **Every check shown red against a wrong implementation** | |
+| **No re-initialisation** | Entry 018 R2 settled it. Not reopened without new evidence |
+| **No control-layer changes** | `allocation/`, F4, F7, F8 are segments 20–21 |
+| **No performance work** | Fix defects, do not optimise |
 | **No dashboard work** | |
 | **Do not commit, do not push** | |
 
@@ -149,15 +153,15 @@ ls outputs/
 git status --short                       # UNSTAGED, UNCOMMITTED
 ```
 
-**Paste verbatim:** T0 · the before/after table with seeds · whether spread survives disruption · Claim 1's gap before and after · **the inertia decision and its justification paragraph** · both mutations · every invariant test shown red · your read on whether PSO is now a fair baseline.
+**Paste verbatim:** T0 · A\* against brute force · ACO's hand-computed probabilities beside the empirical ones · the deposit-on-the-right-edges result · PSO's decoding and velocity arithmetic · the exchange's effect · both mutations · every check shown red · **what you could not check** · your read on defending the implementations by name.
 
 ---
 
 ## Definition of done
 
-Green suite, artefacts pasted, **the inertia question closed with a written justification**, uncommitted with the message pasted, FINDINGS appended.
+Green suite, artefacts pasted, **every check demonstrated red against a wrong implementation**, uncommitted with the message pasted, FINDINGS appended.
 
-**After this the components are repaired and honest.** Segment 19 checks they are also correct.
+**After this the components are repaired, honest, and checked against their own definitions.** Segments 20–21 rebuild the control layer on top of them — and unlock the four arms the thesis actually lives in.
 
 ---
 ---
@@ -166,226 +170,184 @@ Green suite, artefacts pasted, **the inertia question closed with a written just
 
 ---
 
-# FINDINGS — Segment 18
+# FINDINGS — Segment 19
 
-## 1. T1 — the fix
+## 0. T0
 
-In `PSO.rebind`, guarded on `view.state_hash()`:
+**`src/` 2041 / 2100, delta +0.** Everything is in `tests/test_correctness.py`
+— 30 checks, no core change needed. Nothing the checks wanted was unexposed.
 
-```python
-digest = view.state_hash()
-if digest != self._last_state:
-    self._own_cost[:] = np.inf
-    self._last_state = digest
-```
+## 1. Where every expected value came from
 
-**`src/` 2041 / 2100**, +4 from segment 17's 2037, margin 59. No API change,
-no new fairness surface, no cost to any other arm.
+| Check | Expectation derived from |
+|---|---|
+| A\* cost | **Exhaustive enumeration of every simple path** — the definition, written for this file, no heap or relaxation |
+| A\* on a cheap long route | Hand arithmetic: 1 + 1 + 1 = 3 beats 10 |
+| A\* unreachable | Infinity, by construction — the target is isolated |
+| A\* ties | The tied cost 2.0, set by hand on two disjoint routes |
+| ACO choice frequencies | §5.2's `tau**alpha * eta**beta` normalised: trails 1, 2, 3 with beta=0 give exactly 1/6, 2/6, 3/6 |
+| Evaporation | §5.2: `tau * (1 - rho)`, computed here as a multiplication |
+| Deposit | §5.2: `1/cost` on each slot of the path and its reverse, **and zero everywhere else** |
+| MAX–MIN bounds | §5.2: `tau_max = 1/(rho*C_best)`, `tau_min = tau_max/(2n)`. rho=0.5, C=4 gives 0.5 exactly |
+| PSO decoding | An independent priority-greedy walk over the adjacency, written in the test |
+| PSO velocity | §5.3's three terms: 0.5·0.20 + 2.0·0.5·0.30 + 3.0·0.25·0.80 = 1.00 |
+| Exchange | §6.2: `_EXCHANGE_GAIN` on exactly the shared route's nodes; `1/cost` on exactly its slots |
 
-Both required comments are in place. In `pso.rebind`, why the guard lives here
-and not at the call site, and that it is **conservative rather than exact** —
-any change anywhere invalidates every remembered cost, and re-pricing instead
-would cost metered evaluations, which is a fairness decision rather than an
-implementation detail (Entry 017 R2). In `trial.py:175`, why the call stays
-unconditional: `rebind` is how an optimizer receives the current world, and
-making the *call* conditional would leave every arm searching a stale graph.
+**None was obtained by running the code and recording the output.**
 
-## 2. T2 — before and after, one variable per comparison
-
-Every pair below holds seed, graph, scenario, budget and arm fixed and varies
-**only the guard** — simulated by clearing the remembered hash, so `rebind`
-itself is untouched. n = 8 seeds.
+## 2. Every check shown red against a wrong implementation
 
 ```
-F13 FIX — BEFORE AND AFTER
-====================================================================
-  Each pair varies the guard and nothing else: same seeds, same graph,
-  same scenario, same budget, same arm.
+1. ACO exponent: alpha -> alpha + 1   (the specified mutation)
+   E  node 1: formula says 0.167, 5925 ants gave 0.079
 
-  STATIC     (pso, 0.0 events/step, n=8)
-                       before        after       change
-    excess             0.1115       0.1054      -0.6 pp
-    velocity        4.400e-08      0.02713    x6.17e+05
-    diversity       3.161e-07      0.04242    x1.34e+05
-    gbest               11.38        14.88        x1.31
+2. evaporation: tau*(1-rho) -> tau*(1-rho/2)
+   E  evaporation is not tau * (1 - rho)
 
-  DISRUPTED  (pso, 0.3 events/step, n=8)
-                       before        after       change
-    excess             0.2499       0.1831      -6.7 pp
-    velocity         0.005911       0.0173        x2.93
-    diversity         0.01044      0.02201        x2.11
-    gbest                16.5        23.88        x1.45
+3. deposit amount: 1/cost -> 1/(cost*cost)
+   E  deposit did not land on exactly the path's edges
+   E  the swarm's route did not deposit 1/cost on the colony's trail
 
-  STATIC     (hybrid, 0.0 events/step, n=8)
-                       before        after       change
-    excess            0.06438      0.06032      -0.4 pp
-    velocity          0.02797      0.06995         x2.5
-    diversity         0.03189      0.07286        x2.29
-    gbest               14.25        14.62        x1.03
+4. MAX-MIN: tau_min = tau_max/(2n) -> tau_max/n
+   E  trails below the floor were not clamped to exactly 0.0277777...
 
-  DISRUPTED  (hybrid, 0.3 events/step, n=8)
-                       before        after       change
-    excess            0.09572      0.08402      -1.2 pp
-    velocity          0.03045      0.02956       x0.971
-    diversity         0.03224      0.03798        x1.18
-    gbest               25.88        27.12        x1.05
+5. PSO velocity: inertia dropped from the sum
+   E  velocity is 0.9000000000000001, formula gives 1.0
 
+6. A*: heuristic scaled 2x, making it inadmissible
+   E  geometric seed 6: A* says 107.25267904660666,
+      enumeration says 105.87352038402327
 
-  CLAIM 1 — the hybrid against its better component
-  ------------------------------------------------------------------
-    before static     PSO   11.1%   Hybrid    6.4%   gap   +4.7%
-    before disrupted  PSO   25.0%   Hybrid    9.6%   gap  +15.4%
-    after  static     PSO   10.5%   Hybrid    6.0%   gap   +4.5%
-    after  disrupted  PSO   18.3%   Hybrid    8.4%   gap   +9.9%
+7. exchange: the gain applied to every node, not the shared route
+   E  the exchange altered priorities away from the shared route
 ```
 
-### What the numbers say
+**Three of these passed the first version of this file, including the
+specified one.** That is the substance of the segment and it is below.
 
-**On a static graph the collapse was catastrophic and cost almost nothing.**
-Velocity ×617,000, diversity ×134,000 — and excess improves by 0.6 points.
-The swarm was frozen and still found routes nearly as good, because with no
-disruption the first decent answer stays the right answer.
+## 3. The three gaps, and they are all the same gap
 
-**Under disruption it was moderate and cost a great deal.** Velocity only
-×2.9 — and **excess improves 6.7 points, 25.0% → 18.3%.** That is where the
-defect was actually being paid for.
+### 3a. The choice test never ran the code — including on the specified mutation
 
-### An inversion worth stating
+The first version computed the expected probabilities from §5.2 **and then
+sampled its own re-implementation of the selection loop**, copied into the
+test. It compared a formula against a copy of the code and never called
+`_construct` at all.
 
-**Before the fix, disruption was the only thing keeping the swarm alive.**
-Static diversity was `3.16e-07`; disrupted was `1.04e-02` — *thirty thousand
-times healthier*. `reset_learned_state` scatters particles when the graph
-changes, and that scattering was partially rescuing a swarm the wipe was
-destroying.
+Changing the real exponent from `alpha` to `alpha + 1` — the mutation the
+spec named, the one described as *"not broken, just not what the report says
+it is"* — left it green.
 
-That is why F13 looked like a disruption problem and was the opposite of one.
-The quiet case was worse, and nobody had measured the quiet case.
+**I committed the exact circularity this segment exists to prevent, while
+writing the segment about it.** Now the sampling runs `_construct`, with every
+other edge out of the source closed so the first hop is a clean three-way
+choice.
 
-## 3. T3 — does spread survive disruption after the fix?
+### 3b. The bounds test asserted a range, and a wrong bound fits inside a range
 
-**No. The fix was necessary and is not sufficient.**
+`assert live.min() >= tau_min` is satisfied by any floor **at or above**
+`tau_min` — so widening `tau_min` from `tau_max/(2n)` to `tau_max/n` passed.
+Two of its assertions were also behind `if active[...]` guards that never
+fired.
 
-```
-  diversity, after the fix:    static 0.0424     disrupted 0.0220
-```
+Now every live slot is pushed outside both bounds and each must land on an
+**exact** value.
 
-The swarm holds **about half its static spread** under disruption. Before the
-fix that comparison was meaningless — the static case was the broken one.
+### 3c. A\*'s heuristic was never exercised at all
 
-**So the answer that decides segments 19–21 is the second branch:** something
-about disruption genuinely does drain the swarm beyond what F13 explains, and
-**re-initialisation becomes a real candidate.** Not implemented, per the
-constraint.
+Every A\* check ran on `erdos_renyi` graphs, where `topology.pos is None` and
+`weight_scale == 0.0`. **The heuristic is identically zero there** — A\*
+degenerates to Dijkstra, and `heuristic=True` and `heuristic=False` are the
+same function.
 
-**One honest qualification.** Disrupted PSO is at 18.3% against static 10.5%,
-and I have *not* established that the 7.8-point difference is caused by the
-spread loss — a moving optimum is a harder problem regardless. What is
-established is that spread is materially lower and that the fix did not
-restore it.
+So doubling the heuristic, making it inadmissible, changed nothing. And
+inadmissibility is *the one way A\* can silently return a suboptimal answer* —
+the failure mode `oracle.py`'s own docstring warns about.
 
-## 4. T4 — Claim 1, measured
+Now parametrised over both models, and on `geometric` the mutation is caught
+with A\* returning **107.25 against the true 105.87**. That is the defect
+class this segment was written for: a wrong answer that looks entirely
+reasonable.
 
-```
-  before  static     PSO  11.1%   Hybrid  6.4%   gap  +4.7%
-  before  disrupted  PSO  25.0%   Hybrid  9.6%   gap +15.4%
-  after   static     PSO  10.5%   Hybrid  6.0%   gap  +4.5%
-  after   disrupted  PSO  18.3%   Hybrid  8.4%   gap  +9.9%
-```
+**All three are one failure: a test that cannot distinguish the thing it
+names from something else.** Circular sampling, a bound that admits its own
+violation, and a fixture where the feature under test is switched off.
 
-**Under disruption the gap narrows from 15.4 points to 9.9 — it loses over a
-third of its size.** Claim 1 survives: the hybrid still beats its better
-component by ~10 points. But a third of the margin that would have been
-reported was PSO being crippled.
+## 4. A fixture bug worth recording
 
-Entry 017 R4 predicted this and the prediction holds: the Hybrid's own excess
-barely moves (9.6% → 8.4%), because its ACO half was never affected and was
-doing most of the work. **The gap narrowed almost entirely from the baseline
-improving, not from the hybrid getting worse.**
+The first hand-built graph asserted `find_slot(u, v) >= 0` and set a weight —
+but `find_slot` returns a slot **whether or not it is active**. Edge 0–1 was
+inactive, so the cheap route did not exist, and A\* correctly returned 10.0
+while the test claimed 3.0.
 
-**This is the number that would have gone into the report unexamined**, and a
-smaller true result is worth more than a larger one resting on a crippled
-baseline.
+It read as *"A\* returns a suboptimal path"* for several minutes. A fixture
+that silently does not build what it describes produces a failure
+indistinguishable from a real defect, in the direction most likely to be
+believed. `with_edges()` now activates what it prices, and says why.
 
-Preliminary: n = 8 seeds, one trial each, not a manifest. Phase 4 measures it
-properly.
+## 5. T5 — what could not be checked this way
 
-## 5. T5 — §17.1 settled: **adaptive inertia is formally dropped**
+Stated here rather than left implied, to the standard Phase 2's trust report
+set:
 
-> **`inertia` is dropped, and not for the reason `n_ants` is.** Its sign is
-> not ambiguous — higher inertia carries more of the previous velocity, so a
-> particle roams further and `+1.0` would be correct. It is excluded because
-> of **attribution**. PSO runs inside the hybrid, so an adaptive inertia would
-> give `hybrid_adaptive` two adapting mechanisms at once: the allocation split
-> and the swarm's own momentum. A win could then not be attributed to either.
-> That is precisely the objection this project already makes to pairing
-> `hybrid` against `hybrid_adaptive` — two arms differing in two ways answer
-> no question — and the thesis is that *recency-driven allocation* helps, a
-> claim which becomes unmeasurable if something else is adapting beside it.
-> The job adaptive inertia would have done is real: after F13's fix the swarm
-> still holds only about half its static spread under disruption. But that job
-> is better served by re-initialisation, which is internal to PSO, adds no
-> controlled parameter, and leaves the allocation claim clean.
-
-Documented in `controllers.py` beside the other exclusions, and pinned by
-`test_inertia_is_formally_dropped_not_overlooked` — because without a test the
-absence is indistinguishable from an oversight, which is the state §17.1
-objected to.
+- **Convergence quality.** Every check here is one step of arithmetic or one
+  decoded route. Whether ACO converges *well*, whether the colony finds good
+  routes in reasonable time, whether MAX–MIN's bounds are well *chosen* — none
+  of it is reachable by checking a formula on nine nodes
+- **Emergent behaviour over long runs.** Correct arithmetic composed sixty
+  times can still produce a bad search. F13 was exactly that: every line
+  correct, the whole thing broken
+- **Anything needing a large graph.** Enumeration is factorial; nine nodes is
+  the ceiling. Behaviour that only appears at 200 nodes is out of reach here
+- **The statistical check is a check on frequencies, not on the sampler.** A
+  biased RNG producing the right marginal distribution would pass
+- **`eta`'s definition is assumed, not verified.** The choice test sets
+  `beta = 0` to isolate pheromone, so visibility's own formula is untested
+- **Parameter *values* remain unchecked.** Everything here verifies the
+  arithmetic is as published; whether `rho = 0.1` is a good choice is not a
+  correctness question
 
 ## 6. Both mutations
 
-**A — specified: change-detection always reports "unchanged."**
+**A — specified: ACO's `alpha` exponent becomes `alpha + 1`.** Not caught
+initially (§3a); now caught, with the sampled share for node 1 at 0.079
+against the formula's 0.167.
 
-```
-E  AssertionError: a real graph change did not invalidate the remembered costs
-```
+**B — mine: A\*'s heuristic scaled by 2, making it inadmissible.** Not caught
+initially (§3c), because the suite ran only where the heuristic is zero. Now
+caught on `geometric`, with A\* returning a genuinely suboptimal path.
 
-Caught by the other-direction test. The collapse tests all passed, exactly as
-predicted — a fix that over-corrects looks like a fix that works from the
-direction you were watching.
-
-**B — mine: compare object identity instead of state value.**
-
-```
-15 tests: all passed
-real harness, static run, final velocity: 5.171e-14
-```
-
-**Every test passed and the bug was completely unfixed.**
-
-All my unit tests reuse a single `GraphView` object across sixty rebinds, so
-`id(view)` never changes and the guard appears to work. The harness does not
-do that — `state_at(t)` caches a **distinct object per timestep**, identical
-in content on a quiet step but not the same object. The guard would have
-skipped nothing, in production, silently.
-
-The fixture was unrepresentative of the call pattern it was standing in for.
-Now covered by a test that runs the **real harness path** on a static
-scenario, and shown red:
-
-```
-E  seed 1000: velocity collapsed to 5.171e-14 on a static run through the
-   harness — the guard is comparing something other than state value
-```
-
-**Ten consecutive segments.**
+**Eleven consecutive segments**, and this one found three.
 
 ## 7. Acceptance
 
 | Check | Result |
 |---|---|
-| Suite | **409 passed, 0 failed, 0 skipped** |
+| Suite | **439 passed, 0 failed, 0 skipped** |
 | Lint, four trees | `All checks passed!` |
-| `src/` | **2041 / 2100**, +4, margin 59 |
-| `outputs/` before / after | **26 / 26** |
-| `tests/test_f13_diagnosis.py` | **15 passed** |
+| `src/` | **2041 / 2100**, delta **+0** |
+| `outputs/` | **26**, unchanged |
+| `tests/test_correctness.py` | **30 passed** |
 
-## 8. What segment 19 inherits
+## 8. What this licenses the report to say
 
-- **T3 says re-initialisation has an identified job**, with a number attached:
-  half the static spread, after the fix
-- **Adaptive inertia is closed**, so it is not competing for that job
-- **Claim 1's real size under disruption is ~10 points, not ~15**, and Phase 4
-  should be planned against the smaller figure
-- The exact re-pricing alternative to the conservative invalidation is still
-  open, and is a fairness question about metered evaluations rather than an
-  implementation one
+**A\* is exact**, checked against exhaustive enumeration over sixteen graphs
+across both models, at `t = 0` and partway through a timeline, including
+unreachable targets and ties — **and now with its heuristic actually live.**
+Everything in this project is measured against it, so this was the one that
+had to hold.
+
+**ACO's arithmetic is §5.2's arithmetic** — the choice rule sampled from the
+real constructor, evaporation, the deposit amount and its placement, both
+bounds. The deposit check closes the gap Phase 2's trust report explicitly
+admitted: it can now be said that the best ant deposits on **exactly** the
+edges of its route and nowhere else.
+
+**PSO's decoding and velocity update are §5.3's**, with the tie-break stated
+as lowest CSR slot index and pinned.
+
+**The Hybrid's exchange is §6.2's, and it has an effect** — Entry 015 counted
+that it fires; this checks that what crosses arrives and changes the receiver.
+
+What none of it licenses is any claim about whether these correct mechanisms
+search *well*. That is §5's separate question, and §5 is measured in Phase 4.

@@ -1607,3 +1607,98 @@ Phase 2 established that the mechanisms **run**. Nothing yet establishes that th
 **404 passed.** `src/` untouched. The measured cost on a static graph is **5.6 percentage points of excess, sd 4.8, n=5**, and vClaude explicitly declined to extrapolate it to the 27–41% seen under disruption, because on a static graph PSO sits at 0–13% even with the wipe. **The wipe is a real cost and probably not the whole story** — which is the right thing to say and the right place to stop.
 
 The most valuable single line in this segment is the one that says the Architect was wrong.
+
+---
+
+## Entry 018 — Segment 18: Fix F13, Measure It, Settle Inertia
+
+**Phase** 3 · **Segment** 2 of 5 · **Overall segment** 18
+**Verified** 11 Sept 2026 · **Status** COMPLETE — pushed
+
+### Verification
+
+`pso.py:157-161` — the guard compares `view.state_hash()`, **not object identity**, with both required comments above it. `controllers.py:70-85` — the inertia exclusion documented in place. `trial.py` — the call stays unconditional with its reason. `src/` **2041 / 2100**, `+4`. **409 passed.**
+
+### The finding: F13 was the exact opposite of what it looked like
+
+Before the fix:
+
+| | static | disrupted |
+|---|---|---|
+| diversity | **3.16e-07** | **1.04e-02** |
+
+**The swarm was thirty thousand times healthier when the world was falling apart than when it was calm.**
+
+`reset_learned_state` fires on disruption and was partially rescuing a swarm that the wipe was destroying. So disruption was the only thing keeping PSO alive — and that is precisely why F13 presented as a disruption problem for three entries.
+
+> **The symptom pointed at the one mechanism that was mitigating it.**
+
+That is worth keeping as a general shape. A defect that is being partly compensated for elsewhere does not merely hide — it **points at its own antidote** and makes that antidote look like the cause.
+
+### What the fix bought, and the shape of it is instructive
+
+```
+STATIC      excess 0.1115 -> 0.1054   (-0.6 pp)   velocity  x617,000
+DISRUPTED   excess 0.2499 -> 0.1831   (-6.7 pp)   velocity      x2.9
+```
+
+**The two conditions are mirror images.** On a static graph the collapse was catastrophic in magnitude and nearly free in cost. Under disruption it was mild in magnitude and expensive. A reader looking only at velocity would have concluded the static case was where the damage was; the excess says the opposite.
+
+**Neither number alone tells the story.** That is an argument for reporting both, and for the report to show this pair rather than summarise it.
+
+### Claim 1, and the uncomfortable part named plainly
+
+```
+before disrupted   PSO 25.0%   Hybrid 9.6%   gap +15.4
+after  disrupted   PSO 18.3%   Hybrid  8.4%   gap  +9.9
+```
+
+**Claim 1 survives at roughly ten points.** And **a third of the margin that would have been reported was PSO being crippled** — with the narrowing coming almost entirely from the baseline improving, exactly as Entry 017 R4 predicted.
+
+**The incentive here must be stated, because it will recur:** every repair to PSO shrinks Claim 1. A project that notices this and stops repairing has stopped doing science. **A hybrid that beats a broken component proves nothing**, and a smaller true margin is worth more than a larger one resting on a handicapped baseline. Phase 4 measures against the repaired components, and the report says so.
+
+Preliminary, 8 seeds, correctly labelled as such.
+
+### R1 — §17.1 settled: inertia formally dropped, on a better argument than the one available
+
+vClaude did not take the easy route. It could have written *"the exploration direction is ambiguous"*, matching `n_ants` and `n_particles`, and nobody would have questioned it. **It says outright that the sign is not ambiguous** — higher inertia means more roaming, `+1` would be correct — and then gives the real reason:
+
+> **PSO runs inside the Hybrid.** Adaptive inertia would give `hybrid_adaptive` **two** adapting mechanisms — the allocation split and the swarm's own momentum — and a win could not be attributed to either.
+
+That is the project's own objection to pairing `hybrid` against `hybrid_adaptive`, applied to itself. **The thesis is that recency-driven allocation helps, and that becomes unmeasurable the moment something else adapts beside it.**
+
+**Accepted, and it is the strongest paragraph §17.1 could have produced.** A principled exclusion beats a convenient one, and an examiner asking *"why didn't you adapt inertia?"* now gets an answer about experimental design rather than about difficulty.
+
+Pinned by a test, because **an untested absence is indistinguishable from an oversight** — which is exactly how `inertia` went missing from `EXPLORE_SIGN` in the first place.
+
+### R2 — Re-initialisation: **not adopted.** The reason is the same discipline, not a different one.
+
+T3's answer is no: after the fix the swarm holds roughly **half** its static spread under disruption (0.0424 → 0.0220). Re-initialisation has an identified job.
+
+**It is still not adopted, for two reasons that compound:**
+
+**First, its benefit is unmeasured.** vClaude was explicit and correct: *"I have not established the remaining 7.8-point excess gap is caused by the spread loss. A moving optimum is harder regardless."* **Adopting a remedy for an effect whose cost nobody has measured is the thing this project keeps catching in other forms.**
+
+**Second, and decisively: the memory wipe was a defect; this would be an enhancement.** The wipe made the code do something other than what its own docstring claimed — repairing that restores the stated algorithm. Re-initialisation *changes what the baseline is.* You would no longer be comparing the Hybrid against PSO; you would be comparing it against PSO-plus-a-dynamic-optimisation-technique, and every parameter of that technique — what fraction to scatter, how far — needs its own justification and its own evidence.
+
+> **Fix defects. Do not optimise the baseline.** The stopping rule has to exist somewhere, and "the code now does what it says it does" is the only place it can defensibly sit.
+
+**The report states the spread loss as a measured characteristic of the baseline**, names re-initialisation as the standard remedy, and says it was not adopted because its benefit here was not established. **That is a stronger position than silence and a stronger one than an unjustified adoption.**
+
+Recorded so segment 20 does not reopen it without new evidence.
+
+### Mutation B — tenth consecutive segment, and this one is about fixtures
+
+Comparing **object identity** instead of state value: **all 15 tests passed and the bug was entirely unfixed** — `5.17e-14` in the real harness.
+
+The unit tests reuse one `GraphView` across sixty rebinds, so `id()` never changes and the broken guard looked perfect. **The harness caches a distinct object per timestep.** The fixture was unrepresentative of the call pattern it stood in for.
+
+> **A fixture that differs from production in the one dimension the code under test inspects is not a simplification. It is a different program.**
+
+Third instance of this family — segment 4's fixture, segment 5's demo, and now this — and the first where the difference was invisible rather than merely convenient. Now covered by a test running the real harness path.
+
+### Close
+
+**409 passed.** `src/` **2041 / 2100**, margin **59**. The components are repaired and the baseline is honest.
+
+**Revised remainder:** 19 correctness · 20–21 `allocation/` · Phase 4 · Phase 5.
