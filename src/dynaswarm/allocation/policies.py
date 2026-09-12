@@ -73,6 +73,44 @@ class IncrementalAllocation:
     because a threshold placed outside a signal's attainable range
     silently freezes the policy.
 
+    **It reads three of the observation's eleven fields.**  Stated here
+    because the gap is the first thing worth asking about, and the
+    answer should not have to be reconstructed from the body:
+
+    ==========================  ==========================================
+    ``recency``                 the pressure signal; the whole rule
+    ``current_fraction``        the point the step is taken from
+    ``t``                       gates ``adapt_every``
+    --------------------------  ------------------------------------------
+    ``own_cost``                ignored — reacting to own cost would make
+    ``own_cost_delta``          the split a function of how well this arm
+                                happens to be doing, which is a different
+                                claim from recency-driven allocation
+    ``aco_lambda_branch``       ignored — component-health probes belong
+    ``pso_diversity``           to Claim 2's parameter adaptation
+    ``events_this_step``        ignored — ``recency`` is already the
+    ``steps_since_disruption``  decayed form of both
+    ``path_invalidated``        ignored — see below
+    ``budget``                  constant within a run; carried for the
+                                record, not for the rule
+    ==========================  ==========================================
+
+    The eight it ignores are **not dead weight and must not be trimmed
+    to the three**.  They are the record of what the arm could see at
+    the moment it decided, which is what makes a decision auditable
+    after the fact rather than merely reproducible; and they are the
+    input surface ``LearnedAllocation`` is specified against (D7, O2).
+    An observation trimmed to what today's rule consumes would have to
+    be widened again by the segment that most needs it to have been
+    stable.
+
+    One of the eight is a live caveat rather than a design choice:
+    ``path_invalidated`` was measured constant-``False`` across a
+    60-step moderate run (segment 21, T4).  The field is wired
+    correctly — it is that this arm did not lose a path in that run.
+    It carries no information *yet*, and a policy written to depend on
+    it would need a scenario that actually invalidates paths first.
+
     Attributes:
         sigma: Step size per adaptation cycle.
         deadband: Pressure magnitude below which nothing moves.

@@ -17,16 +17,18 @@
 import {
   FADE_CUTOFF, fadeOpacity,
   buildStateFrames, baselineFrom, stateStyle, projector,
-  TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent, ARM_COLORS, excessPath,
+  TIER_PRESETS, SCENARIO_PRESETS, ledgerAt, seekEvent, excessPath,
   pickNode, pickEdge, edgeHistory, edgeKey,
 } from "./model.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-// §9 display names. Code ids are frozen data (D23a); this map is one-way.
-const ARM_NAMES = {
-  astar: "A*", aco: "ACO standalone",
-  pso: "PSO standalone", hybrid: "Hybrid (baseline)",
-};
+// §9's display names are NOT duplicated here. This page used to keep its
+// own copy of the map, which meant adding an arm server-side left it
+// invisible in the picker with nothing failing anywhere — the same
+// two-spellings-of-one-name defect that cost segment 20. Fetched from
+// /api/arms instead, so the server's RACEABLE is the only list.
+let ARM_NAMES = {};
+let ARM_COLORS = {};
 const VIEW = { w: 900, h: 620, pad: 24 };
 const FRAME_MS = 320;
 
@@ -127,6 +129,7 @@ function draw() {
   drawLedger(run.steps, t);
   if (state.race) drawPanes(t);
   drawArmPanel(t);
+  drawAllocationNow(t);
 
   const sel = state.selection;
   if (sel && sel.kind === "node") {
@@ -432,6 +435,180 @@ function drawArmPanel(t) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The allocation view (§15.6) — the project's novelty, made watchable.
+// ---------------------------------------------------------------------------
+//
+// This replaces a placeholder that said the bar could not honestly be drawn
+// while F7 left the controller varying nothing. F7 is closed, so it is drawn.
+//
+// Three things the chart must not imply:
+//   * that an arm without a governor chose to sit at 0.5 — those arms are
+//     absent from this chart entirely, not flat lines on it;
+//   * that proposed and applied are two independent readings — where they
+//     coincide the note says so in words, because two perfectly overlapping
+//     lines look like one line that failed to render;
+//   * that the split shown at step t is what step t searched with. It is
+//     not. It is the decision taken at the end of t, and `searched` is the
+//     separate series the server sends for exactly that reason.
+
+const ALLOC_BOUND_LOW = 0.05, ALLOC_BOUND_HIGH = 0.95;
+
+function allocArms() {
+  return state.race ? state.race.arms.filter((a) => a.allocation) : [];
+}
+
+function drawAllocation() {
+  const wrap = document.getElementById("alloc-wrap");
+  const arms = allocArms();
+  wrap.hidden = arms.length === 0;
+  if (!arms.length) return;
+
+  const svg = document.getElementById("allocation");
+  const run = state.race, steps = state.run.steps;
+  svg.replaceChildren();
+  svg.setAttribute("viewBox", `0 0 ${CHART.w} ${CHART.h}`);
+
+  // Fixed 0..1 axis, never fitted to the data. An auto-scaled axis would
+  // magnify a 0.06 wander into a dramatic sweep across the panel, which is
+  // the chart telling a better story than the numbers support.
+  const x = (t) => CHART.left + (t / (run.horizon - 1)) * (CHART.w - CHART.left - CHART.right);
+  const y = (v) => CHART.h - CHART.bottom - v * (CHART.h - CHART.top - CHART.bottom);
+
+  const bands = el("g", { class: "alloc-band" });
+  bands.append(el("rect", {
+    x: CHART.left, y: y(1), width: CHART.w - CHART.left - CHART.right,
+    height: y(ALLOC_BOUND_HIGH) - y(1),
+  }));
+  bands.append(el("rect", {
+    x: CHART.left, y: y(ALLOC_BOUND_LOW), width: CHART.w - CHART.left - CHART.right,
+    height: y(0) - y(ALLOC_BOUND_LOW),
+  }));
+
+  const marks = el("g", { class: "marker" });
+  steps.forEach((step) => {
+    if (step.events.length) {
+      marks.append(el("line", { x1: x(step.t), y1: CHART.top, x2: x(step.t), y2: CHART.h - CHART.bottom }));
+    }
+  });
+
+  const axis = el("g", { class: "axis" });
+  axis.append(el("line", { x1: CHART.left, y1: CHART.h - CHART.bottom, x2: CHART.w - CHART.right, y2: CHART.h - CHART.bottom }));
+  for (const [v, text] of [[0, "all PSO"], [0.5, "even"], [1, "all ACO"]]) {
+    const label = el("text", { x: CHART.left - 6, y: y(v) + 3, "text-anchor": "end" });
+    label.textContent = text;
+    axis.append(label, el("line", { x1: CHART.left - 3, y1: y(v), x2: CHART.left, y2: y(v) }));
+  }
+
+  const series = el("g", { class: "series" });
+  const pinned = el("g", { class: "alloc-pinned" });
+  let anyHeld = false;
+  for (const arm of arms) {
+    const applied = arm.allocation.applied;
+    const colour = ARM_COLORS[arm.id] ?? "#888";
+    series.append(el("path", { d: excessPath(applied, x, y), stroke: colour }));
+
+    // Proposed is drawn ONLY where the governor actually held it back.
+    // Everywhere else it is the same number, and a second line there would
+    // be decoration claiming to be evidence.
+    arm.allocation.held_back.forEach((held, t) => {
+      if (held !== null && Math.abs(held) > 1e-12) {
+        anyHeld = true;
+        pinned.append(el("circle", { cx: x(t), cy: y(arm.allocation.proposed[t]), r: 2.5, fill: colour }));
+      }
+    });
+    arm.allocation.at_bound.forEach((at, t) => {
+      if (at) pinned.append(el("circle", { cx: x(t), cy: y(applied[t]), r: 3.5, class: "at-bound" }));
+    });
+  }
+  svg.append(bands, marks, axis, series, pinned);
+
+  const key = document.getElementById("alloc-key");
+  key.replaceChildren();
+  for (const arm of arms) {
+    const item = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.borderTopColor = ARM_COLORS[arm.id] ?? "#888";
+    swatch.style.borderTopStyle = "solid";
+    const moved = new Set(arm.allocation.applied.filter((v) => v !== null)).size;
+    item.append(swatch, document.createTextNode(
+      `${arm.name} · ${moved} distinct split${moved === 1 ? "" : "s"}`));
+    key.append(item);
+  }
+
+  // Said in words, because the absence of a second line is not self-explanatory.
+  const note = document.getElementById("alloc-note");
+  note.textContent = anyHeld
+    ? "Dots mark steps where the governor held a proposal back; ringed dots mark a split sitting at a bound."
+    : "The governor never had to hold a proposal back in this run, so proposed and applied are the same number at every step and only one line is drawn. Not a rendering fault \u2014 the step size is smaller than the per-step limit, so the limit never bound.";
+}
+
+// The same decision, at the cursor, as a bar you can watch move.
+//
+// One bar per governed arm, not just the first one. Written for `arms[0]`
+// first, which quietly picked the Fixed hybrid — the arm whose whole job is
+// to never move — and so demonstrated the mechanism by showing it not
+// happening. The comparison IS the evidence here: the three bars differ at
+// the same timestep or the allocation layer is doing nothing.
+function drawAllocationNow(t) {
+  const host = document.getElementById("alloc-body");
+  const bar = document.getElementById("alloc-bar");
+  host.replaceChildren();
+  bar.replaceChildren();
+  bar.hidden = true;
+  const arms = allocArms();
+  if (!arms.length) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = state.race
+      // Worded around the literal "schedule": the repo-wide guard that
+      // forbids this file from touching the event schedule greps the code
+      // with strings included, and it cannot tell a hint from an index.
+      // Rewording costs nothing; loosening that guard would cost F1 again.
+      ? "no arm in this race allocates its budget \u2014 race an adaptive or open-loop hybrid"
+      : "race the algorithms to watch the split move";
+    host.append(hint);
+    return;
+  }
+
+  for (const arm of arms) {
+    // `searched` \u2014 what this step ran with \u2014 not `applied`, which is the
+    // decision made at the END of this step and takes effect at the next one.
+    const share = arm.allocation.searched[t];
+    if (share === null || share === undefined) continue;
+
+    const label = document.createElement("div");
+    label.className = "alloc-arm";
+    const dot = document.createElement("i");
+    dot.style.background = ARM_COLORS[arm.id] ?? "#888";
+    label.append(dot, document.createTextNode(arm.name));
+
+    const row = document.createElement("div");
+    row.className = "alloc-bar";
+    const aco = document.createElement("span");
+    aco.className = "alloc-seg aco";
+    aco.style.width = `${share * 100}%`;
+    aco.textContent = `ACO ${(share * 100).toFixed(0)}%`;
+    const pso = document.createElement("span");
+    pso.className = "alloc-seg pso";
+    pso.style.width = `${(1 - share) * 100}%`;
+    pso.textContent = `PSO ${((1 - share) * 100).toFixed(0)}%`;
+    row.append(aco, pso);
+
+    const held = arm.allocation.held_back[t];
+    const note = document.createElement("p");
+    note.className = "alloc-detail";
+    note.textContent =
+      `asked ${arm.allocation.proposed[t]?.toFixed(4) ?? "\u2014"} \u00b7 `
+      + `allowed ${arm.allocation.applied[t]?.toFixed(4) ?? "\u2014"} \u00b7 `
+      + `held back ${held === null || held === undefined ? "\u2014"
+        : Math.abs(held) < 1e-12 ? "nothing" : held.toFixed(4)}`
+      + (arm.allocation.at_bound[t] ? " \u00b7 AT A BOUND" : "");
+
+    host.append(label, row, note);
+  }
+}
+
 // §4.3.1's identity, on screen. It is not a statistic — it is an
 // invariant an examiner can watch hold for sixty steps, and a divergence
 // would be visible the moment it happened.
@@ -623,19 +800,23 @@ async function runRace() {
   $("race-id").textContent = `${started.run_id} · ${started.run_class}`;
   $("grid-wrap").hidden = false;
   drawExcess();
+  drawAllocation();
   show(state.t);
 }
 
-function buildArmPicks() {
+async function buildArmPicks() {
   const host = $("arm-picks");
+  const { arms } = await fetch("/api/arms").then((r) => r.json());
+  ARM_NAMES = Object.fromEntries(arms.map((a) => [a.id, a.name]));
+  ARM_COLORS = Object.fromEntries(arms.map((a) => [a.id, a.colour]));
   host.replaceChildren();
-  for (const [id, name] of Object.entries(ARM_NAMES)) {
+  for (const arm of arms) {
     const label = document.createElement("label");
     const box = document.createElement("input");
     box.type = "checkbox";
-    box.value = id;
-    box.checked = true;
-    label.append(box, document.createTextNode(name));
+    box.value = arm.id;
+    box.checked = arm.default;
+    label.append(box, document.createTextNode(arm.name));
     host.append(label);
   }
 }
@@ -677,7 +858,7 @@ function applyTierPreset() {
 
 fetch("/static/palette.json")
   .then((r) => r.json())
-  .then((palette) => {
+  .then(async (palette) => {
     state.palette = palette.kinds;
     buildLegend(palette.kinds);
     wire();
@@ -704,9 +885,24 @@ fetch("/static/palette.json")
       pending(e.submitter ?? $("race").querySelector("button[type=submit]"),
         "racing…", $("race"), runRace).catch(() => {});
     });
-    buildArmPicks();
+    await buildArmPicks();
     $("demo").addEventListener("click", (e) =>
       pending(e.currentTarget, "running the demo…", null, demo).catch(() => {}));
+
+    // `?demo=1` runs it on load, and `?arms=a,b` picks the arms first.
+    // This exists so the rendered page can be captured and looked at —
+    // the allocation view is a chart about a mechanism, and segment 21's
+    // whole lesson is that a mechanism nobody watched is a mechanism
+    // nobody checked. `?demo=1&arms=hybrid_adaptive,hybrid_scheduled`
+    // is the one that shows the split moving.
+    const params = new URLSearchParams(location.search);
+    if (params.has("arms")) {
+      const want = new Set(params.get("arms").split(","));
+      for (const box of $("arm-picks").querySelectorAll("input")) {
+        box.checked = want.has(box.value);
+      }
+    }
+    if (params.has("demo")) demo(0).catch(() => {});
     // No auto-generate. The page opens empty and asks: arriving with a
     // world already built reads as "here is a thing" rather than "build a
     // thing", and silently spends a decision the controls exist to give.

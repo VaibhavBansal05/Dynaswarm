@@ -206,6 +206,12 @@ class ControlCfg:
     adapt_every: int = 1
     fixed_params: dict[str, float] = field(default_factory=dict)
 
+    #: Allocation (§7.2). Separate from the parameter-adaptation settings
+    #: above because they serve different claims: those are Claim 2's
+    #: evidence set, these are Claim 3.
+    sigma_max: float = 0.05
+    initial_fraction: float = 0.5
+
 
 @dataclass
 class TuningCfg:

@@ -464,25 +464,31 @@ def test_the_probe_keys_the_observation_reads_are_keys_the_hybrid_emits():
     hybrid.spend(EvaluationMeter(300))
     emitted = hybrid.probe()
 
+    from dynaswarm.allocation.observation import (
+        PROBE_ACO_STAGNATION,
+        PROBE_PSO_CONVERGENCE,
+    )
+
+    # The required keys are indexed now, not `.get`, so a mismatch raises
+    # rather than defaulting (Entry 021 R1). This stays as the second
+    # line of defence: the KeyError is the primary one, and it fires at
+    # the first step of the first run rather than waiting for a test.
+    asked = {PROBE_ACO_STAGNATION, PROBE_PSO_CONVERGENCE}
+    missing = asked - set(emitted)
+    assert not missing, (
+        f"observe() requires probe keys the Hybrid never emits: {sorted(missing)}"
+    )
+
+    # And the structural guarantee itself: no default may creep back onto
+    # a required field.
     import inspect
 
     from dynaswarm.allocation import observation as module
 
     source_text = inspect.getsource(module.observe)
-    read = {
-        name for name in emitted
-        if f'probe.get("{name}"' in source_text
-    }
-    assert read, "observe() reads no probe key at all; the wiring is gone"
-
-    # Every key observe() asks for must be one the Hybrid actually emits.
-    import re
-
-    asked = set(re.findall(r'probe\.get\("([^"]+)"', source_text))
-    missing = asked - set(emitted)
-    assert not missing, (
-        f"observe() reads probe keys the Hybrid never emits: {sorted(missing)} — "
-        f"each silently becomes 0.0 for every policy, forever"
+    assert "probe.get(" not in source_text, (
+        "a required probe field is read with a default again — that is a "
+        "silent-zero generator, and it is F8 for the third time"
     )
 
     # And the values must not be the silent default when real telemetry exists.
@@ -493,3 +499,175 @@ def test_the_probe_keys_the_observation_reads_are_keys_the_hybrid_emits():
     )
     assert obs.aco_lambda_branch != 0.0, "colony stagnation read as the default"
     assert obs.pso_diversity != 0.0, "swarm convergence read as the default"
+
+
+# ---------------------------------------------------------------------------
+# §10.2 fairness, for the arms that carry a governor
+# ---------------------------------------------------------------------------
+#
+# Adding a governor must not change what an arm sees or what it is charged.
+# The spec calls a controlled arm quietly receiving more evaluations "the
+# most expensive possible failure available", and it is right: it would
+# show the thesis winning, in the correct direction, for a reason that has
+# nothing to do with allocation. Nothing about the result would look wrong.
+
+
+HYBRIDS = ["hybrid_fixed", "hybrid_adaptive", "hybrid_scheduled"]
+
+
+def _hybrid_trial(arms, seed=1000, steps=25):
+    from dynaswarm.config import (
+        BudgetCfg,
+        Config,
+        ExperimentCfg,
+        GraphCfg,
+        ScenarioCfg,
+    )
+    from dynaswarm.harness.trial import run_trial
+
+    cfg = Config(
+        graph=GraphCfg(model="geometric", n_nodes=150, density=0.04),
+        scenario=ScenarioCfg(name="fair", events_per_step=0.3, timesteps=steps),
+        experiment=ExperimentCfg(arms=arms, n_trials=1, eval_seeds=[seed]),
+        budget=BudgetCfg(evaluations=250),
+    )
+    return run_trial(cfg, 0, arms).steps
+
+
+def test_a_governed_arm_is_charged_exactly_what_an_ungoverned_one_is():
+    """§10.2, guarantee 2: equal budget must mean equal work.
+
+    The frozen hybrid has no governor, the other two do. If holding a
+    governor bought an arm even one extra path construction, the thesis
+    would be measuring budget rather than allocation.
+    """
+    rows = _hybrid_trial(HYBRIDS)
+    spend = {arm: [] for arm in HYBRIDS}
+    for row in rows:
+        spend[row.arm].append(row.evaluations_spent)
+
+    reference = spend["hybrid_fixed"]
+    for arm in HYBRIDS[1:]:
+        assert spend[arm] == reference, (
+            f"{arm} was charged {sum(spend[arm])} evaluations against "
+            f"{sum(reference)} for the ungoverned hybrid — a governed arm "
+            f"is buying itself search time"
+        )
+    assert sum(reference) > 0, "no arm spent anything; the meter is not wired"
+
+
+def test_every_hybrid_sees_the_identical_world_governor_or_not():
+    """§10.2, guarantee 1, across the arms added this segment.
+
+    The schedule is frozen before any optimizer exists, so this should
+    hold structurally. Asserted anyway because `hybrid_scheduled` is the
+    first arm whose behaviour is a function of `t` alone, and an arm that
+    reads the clock is one step from reading the calendar.
+    """
+    rows = _hybrid_trial(HYBRIDS)
+    by_step: dict[int, dict[str, int]] = {}
+    for row in rows:
+        by_step.setdefault(row.timestep, {})[row.arm] = row.num_events
+
+    for t, seen in by_step.items():
+        assert len(set(seen.values())) == 1, (
+            f"at t={t} the arms disagree about how many events occurred: {seen}"
+        )
+    assert sum(v for s in by_step.values() for v in s.values()) > 0, (
+        "no events in the whole run — this asserts nothing"
+    )
+
+
+def test_the_observation_carries_nothing_derived_from_the_oracle():
+    """I1, at the allocation layer specifically.
+
+    `own_cost` is permitted — a deployed system knows what its own route
+    costs. `excess` is `cost / optimum - 1` and is therefore forbidden
+    however convenient, because it is the oracle's answer wearing a ratio.
+    This walks the field names rather than the values, so it fails when
+    someone adds the field, not when a run happens to expose it.
+    """
+    import dataclasses
+
+    fields = {f.name for f in dataclasses.fields(AllocationObservation)}
+    banned = {"optimum", "excess", "optimal_cost", "regret", "gap", "ratio"}
+    leaked = fields & banned
+    assert not leaked, f"oracle-derived field(s) reached the observation: {leaked}"
+
+    # Walked as an AST, not grepped. Written as a grep first, and it
+    # failed on observation.py's own docstring — the paragraph that
+    # explains why `excess` is forbidden contains the word `excess`.
+    # A string check cannot tell a prohibition from a violation.
+    import ast
+
+    tree = ast.parse(
+        (ROOT / "src" / "dynaswarm" / "allocation" / "observation.py").read_text()
+    )
+    identifiers = {
+        node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+    } | {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+    leaked = identifiers & banned
+    assert not leaked, (
+        f"observation.py reads {leaked} — I1 forbids the oracle reaching a "
+        f"policy even indirectly"
+    )
+
+
+def test_the_recorded_split_is_what_the_step_searched_with_not_the_next_one():
+    """F1's off-by-one, in the telemetry layer. Mutation B, segment 21.
+
+    `aco_fraction` in a step's probe must be the split that step actually
+    ran its search with. The governor decides the NEXT split at the end of
+    the step, and writing that decision back into the same row is a one
+    line change that survives the entire suite: every number stays real,
+    the arm still adapts, the chart still moves, and the allocation
+    appears to respond to a disruption one step before it happens.
+
+    That is precisely F1 — which voided every recency-driven result in the
+    project's history and was invisible in the value, visible only in
+    *which index it came from*. It is asserted as a relationship between
+    consecutive rows because no single row can be wrong on its own.
+    """
+    from dynaswarm.config import (
+        BudgetCfg,
+        Config,
+        ExperimentCfg,
+        GraphCfg,
+        ScenarioCfg,
+    )
+    from dynaswarm.harness.trial import run_trial
+
+    cfg = Config(
+        graph=GraphCfg(model="geometric", n_nodes=150, density=0.04),
+        scenario=ScenarioCfg(name="lag", events_per_step=0.3, timesteps=30),
+        experiment=ExperimentCfg(
+            arms=["hybrid_scheduled"], n_trials=1, eval_seeds=[1000]
+        ),
+        budget=BudgetCfg(evaluations=250),
+    )
+    rows = list(run_trial(cfg, 0, ["hybrid_scheduled"]).steps)
+    searched = [dict(r.probe)["aco_fraction"] for r in rows]
+    applied = [dict(r.probe)["alloc_applied"] for r in rows]
+
+    assert len(set(applied)) > 1, (
+        "the split never moved, so this test cannot tell the two series "
+        "apart — it needs an arm that actually varies"
+    )
+
+    # The step searched with the PREVIOUS step's decision.
+    for t in range(1, len(rows)):
+        assert searched[t] == pytest.approx(applied[t - 1]), (
+            f"at t={t} the row records a search at {searched[t]:.6f} but the "
+            f"governor's decision entering that step was {applied[t - 1]:.6f}"
+        )
+
+    # And the decision taken at the end of a step is NOT what it searched
+    # with, or the two series are the same column written twice and the
+    # check above would hold no matter which one was recorded.
+    assert any(
+        searched[t] != pytest.approx(applied[t]) for t in range(len(rows))
+    ), (
+        "`aco_fraction` equals `alloc_applied` in every row — the recorded "
+        "split is the decision made at the END of the step, so the response "
+        "to a disruption is drawn one step early. This is F1."
+    )

@@ -1127,28 +1127,80 @@ def test_every_arm_sees_the_identical_timeline(tmp_path):
         assert world == reference, f"{arm} saw a different world"
 
 
-def test_no_controlled_arm_is_reachable_from_the_dashboard():
-    """F7's blast radius, closed by test rather than by intention.
+def test_every_raceable_controlled_arm_demonstrably_does_what_it_claims():
+    """Replaces the blanket ban that stood here while F7 was open.
 
-    `harness/arm.py:228` builds the prescheduled controller with no
-    arguments, so `start == end == 1.0` and it varies nothing while
-    logging itself active. A controlled arm on screen today would show a
-    controller known not to control, and it would look like a result.
+    The old test asserted that no controlled arm was reachable at all,
+    because `PrescheduledController` was built with no arguments and so
+    varied nothing while logging itself active. Segment 20 deleted that
+    class and segment 21 replaced it with the allocation layer, so the
+    ban's premise is gone.
+
+    **The ban is not simply lifted, it is replaced by the condition that
+    justified it.** What made a controlled arm dangerous on screen was
+    never that it was controlled; it was that nobody could tell whether
+    the control did anything, and a flat line presented as the project's
+    novelty looks exactly like a working one. So the bar for being
+    raceable is now: run the arm and watch the split. Frozen must not
+    move, adaptive must, scheduled must move without being disrupted.
     """
+    server = pytest.importorskip("dashboard.server")
     from dynaswarm.harness.arm import ARM_BUILDERS
 
-    server = pytest.importorskip("dashboard.server")
-    controlled = {k for k in ARM_BUILDERS if k.endswith(("_fixed", "_adaptive"))}
+    controlled = {k for k in ARM_BUILDERS if k.endswith(("_fixed", "_adaptive", "_scheduled"))}
     assert controlled, "no controlled arms found; this test is checking nothing"
-    assert not (set(server.RACEABLE) & controlled)
 
-    for arm in sorted(controlled):
+    unknown = set(server.RACEABLE) - set(ARM_BUILDERS)
+    assert not unknown, f"the dashboard offers arms the harness cannot build: {unknown}"
+
+    for arm in sorted(set(server.RACEABLE) & controlled):
         with pytest.raises(ValueError, match="not raceable"):
-            server.race_config(server.RaceSpec(arms=[arm]))
+            server.race_config(server.RaceSpec(arms=[f"{arm}_nonexistent"]))
 
     markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
-    for arm in sorted(controlled):
-        assert arm not in markup, f"{arm} is offered in the UI"
+    for arm in sorted(ARM_BUILDERS):
+        assert arm not in markup, (
+            f"{arm} is hard-coded in the markup — the arm list is served "
+            f"from /api/arms so there is one copy of it, and a literal here "
+            f"is the second copy coming back"
+        )
+
+
+@pytest.mark.parametrize(
+    ("arm", "must_move"),
+    [("hybrid_fixed", False), ("hybrid_adaptive", True), ("hybrid_scheduled", True)],
+)
+def test_a_raceable_controlled_arm_moves_its_split_or_provably_does_not(
+    arm, must_move, tmp_path
+):
+    """The condition above, measured per arm through the real endpoint.
+
+    `hybrid_fixed` is the ablation twin: it must be pinned. The other two
+    must vary, or they are the ablation twin wearing a different name —
+    which is precisely the result that would look strongest and mean
+    least.
+    """
+    server = pytest.importorskip("dashboard.server")
+    started = server.race(
+        server.RaceSpec(arms=[arm], evaluations=120, timesteps=25), root=tmp_path
+    )
+    frame = load_steps(started["path"], run_class=None)
+    fractions = {
+        value for probe in frame["probe"] if probe is not None
+        for key, value in probe if key == "aco_fraction"
+    }
+    assert fractions, f"{arm} did not record aco_fraction at all"
+    if must_move:
+        assert len(fractions) > 1, (
+            f"{arm} is offered as a controlled arm but held its split at "
+            f"{fractions} for the whole run — it is the frozen arm under "
+            f"another name, and the dashboard would present it as the thesis"
+        )
+    else:
+        assert len(fractions) == 1, (
+            f"{arm} is the ablation twin and must not move; it took "
+            f"{sorted(fractions)}"
+        )
 
 
 def test_a_run_id_names_a_directory_and_survives_a_restart(tmp_path):
@@ -1240,5 +1292,71 @@ def test_the_allocation_view_is_a_labelled_gap_not_a_drawing(tmp_path):
         "can be built, and this test is the reminder to build it"
     )
 
+    # This test used to end by asserting the slot still said "Phase 3",
+    # and described itself as "the reminder to build it". It has been
+    # built, so the reminder becomes a check that what replaced it is
+    # wired to real data rather than drawn.
     markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
-    assert "Phase 3" in markup, "the reserved slot no longer names when it arrives"
+    assert "alloc-body" in markup, "the allocation view is gone from the markup"
+    app = (ROOT / "dashboard" / "static" / "app.js").read_text()
+    assert "arm.allocation.searched[t]" in app, (
+        "the per-step bar no longer reads the recorded `searched` series — "
+        "if it has gone back to `applied`, it is drawing the decision taken "
+        "at the END of this step as though the step had searched with it, "
+        "which is F1's off-by-one in the view layer"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The arm palette (segment 21)
+# ---------------------------------------------------------------------------
+#
+# `model.js` used to hold these colours and to claim, in a comment, that
+# their spread was "checked in tests/js/model.test.mjs, not assumed". No
+# such test existed — `luminance` was exported and never called by one, and
+# the sentence described an intention. It cost nothing until this segment
+# made three more arms raceable with no colours at all, which put three
+# identical grey lines on the excess chart. That chart is Claim 1's
+# evidence, and nothing anywhere failed to say it had stopped being legible.
+
+
+def test_every_raceable_arm_has_its_own_colour():
+    """A missing entry is invisible: it falls through to a grey default.
+
+    Reads RACEABLE rather than a list retyped here, because a second copy
+    of the arm list is the defect this whole area keeps producing.
+    """
+    from dashboard.server import ARM_COLORS, RACEABLE
+
+    missing = [a for a in RACEABLE if a not in ARM_COLORS]
+    assert not missing, (
+        f"raceable arms with no colour: {missing} — they draw in the #888 "
+        f"fallback, indistinguishable from each other and from any other "
+        f"arm that is also missing one"
+    )
+    assert len(set(ARM_COLORS.values())) == len(ARM_COLORS), "two arms share a colour"
+
+
+def test_arm_colours_stay_distinguishable_in_greyscale():
+    """Hue is not available in a printed report; luminance is.
+
+    The floor is a measured property of the current palette, not a wish:
+    four arms left about 0.2 between neighbours and seven leave 0.07, and
+    that is the honest cost of the arms this segment added.
+    """
+    from dashboard.server import ARM_COLORS, MIN_ARM_LUMINANCE_GAP, arm_luminance
+
+    ranked = sorted(
+        ((arm_luminance(c), a) for a, c in ARM_COLORS.items()), reverse=True
+    )
+    for (bright, upper), (dim, lower) in zip(ranked, ranked[1:], strict=False):
+        assert bright - dim >= MIN_ARM_LUMINANCE_GAP, (
+            f"{upper} ({bright:.3f}) and {lower} ({dim:.3f}) are "
+            f"{bright - dim:.4f} apart, under the {MIN_ARM_LUMINANCE_GAP} "
+            f"floor — one line, the moment the chart is printed in black "
+            f"and white"
+        )
+    assert ranked[0][0] - ranked[-1][0] > 0.5, (
+        "every arm is about as bright as every other; the spread is what "
+        "makes the greyscale guarantee mean anything"
+    )

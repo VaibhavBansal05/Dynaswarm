@@ -443,20 +443,52 @@ def test_a_known_target_still_adapts_normally():
     assert current["rho"] != 0.1, "a declared target must still move"
 
 
-def test_a_hybrid_on_the_default_target_now_fails_loudly():
-    """The exact configuration that was silently inert (F2).
+def test_a_hybrid_never_reports_a_controller_it_does_not_have():
+    """F2's danger, re-guarded after the arm changed mechanism.
 
-    A hybrid's parameters are ``aco_``/``pso_``-prefixed, so the default
-    ``targets=["rho"]`` matches nothing it declares.  Before the fix this
-    arm ran a full trial adapting **nothing** while recording
-    ``controller_kind=incremental`` beside a moving signal value — a
-    mechanism reporting itself alive while doing no work, which is the
-    failure this project has already been bitten by once.
+    This test used to assert that ``hybrid_adaptive`` raised ``KeyError``
+    on the default ``targets=["rho"]``, because a hybrid's parameters are
+    ``aco_``/``pso_``-prefixed and matched nothing it declared. Segment 21
+    moved the controlled hybrids from a parameter controller to an
+    allocation governor, so there is no controller left to raise and that
+    assertion can no longer fire.
+
+    **The danger it guarded is not the KeyError, it is the reporting.**
+    F2's real cost was an arm running a full trial adapting nothing while
+    recording ``controller_kind=incremental`` beside a moving signal — a
+    mechanism claiming to be alive while doing no work. That is what is
+    asserted here, directly, and it is a stronger check than the old one:
+    the old test proved a bad configuration was rejected, this one proves
+    the arm's own record of itself is true.
+
+    ``control.targets`` is still accepted and still ignored by a governed
+    arm, and that is reported as a finding rather than silently accepted
+    — but it is no longer the F2 failure, because nothing now claims the
+    targets were applied.
     """
-    cfg = make_cfg(events_per_step=0.8, signal="recency", timesteps=10)
+    cfg = make_cfg(events_per_step=0.8, signal="recency", timesteps=12)
     assert cfg.control.targets == ["rho"], "fixture must use the default target"
-    with pytest.raises(KeyError, match=r"\['rho'\]"):
-        run_trial(cfg, 0, ["hybrid_adaptive"])
+    rows = [r for r in run_trial(cfg, 0, ["hybrid_adaptive"]).steps]
+
+    kinds = {r.controller_kind for r in rows}
+    assert kinds == {""}, (
+        f"hybrid_adaptive records controller_kind={kinds} while carrying no "
+        f"controller — a mechanism reporting itself alive while doing no "
+        f"work, which is exactly F2"
+    )
+
+    fractions = {dict(r.probe)["aco_fraction"] for r in rows}
+    assert len(fractions) > 1, (
+        f"the arm does no allocation work either — it held {fractions} for "
+        f"the whole run, so it reports nothing and does nothing"
+    )
+
+    # And no declared target silently moved: a governed hybrid must not
+    # look as though `targets` was honoured.
+    assert all("rho" not in dict(r.params) for r in rows), (
+        "a bare `rho` appears in a hybrid's parameters; the prefixing that "
+        "made the default target inapplicable has changed"
+    )
 
 
 def test_explore_signs_are_declared_for_adapted_parameters():

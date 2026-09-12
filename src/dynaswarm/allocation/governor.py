@@ -31,6 +31,32 @@ FRACTION_HIGH = 0.95
 
 #: A reported allocation run may spend at most this fraction of its steps
 #: sitting at a bound (§7.2).
+#:
+#: **Measured in segment 21 (T6), and the measurement says something the
+#: number alone does not.**  Across 16 runs — four scenarios x four seeds
+#: — the observed time-at-bound was 0.0% in every single one.  Not close
+#: to 20%: zero.
+#:
+#: That is not the check passing comfortably, it is the check being
+#: unable to fail.  ``IncrementalAllocation`` steps by ``sigma = 0.001``
+#: from a start of 0.5, so reaching 0.05 needs 450 consecutive steps in
+#: one direction and scenarios run 60.  For this policy, at this step
+#: size, the clause is arithmetically unreachable.
+#:
+#: It is kept rather than tuned to fit, because the two facts point the
+#: same way: 20% is the right *kind* of limit and nothing currently
+#: exercises it.  It binds on ``ScheduledAllocation``, whose timetable is
+#: free to end anywhere its endpoints are set to, and it is the guard
+#: that matters most for ``LearnedAllocation``, which has no built-in
+#: reason to stay near the middle.  Lowering it to fit today's runs would
+#: be fitting a threshold to the one policy that cannot trip it.
+#:
+#: **What must not be claimed: that a run passed this check is evidence
+#: the split stayed healthy.**  For the incremental arm it is evidence of
+#: nothing at all.  The live half of ``reportable()`` is the ``distinct``
+#: clause, which does fail — every static-scenario run fails it, because
+#: with no disruptions recency never moves and the policy correctly
+#: never adapts.
 MAX_AT_BOUND = 0.20
 
 

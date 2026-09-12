@@ -32,7 +32,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-__all__ = ["AllocationObservation", "observe"]
+__all__ = [
+    "AllocationObservation",
+    "PROBE_ACO_STAGNATION",
+    "PROBE_PSO_CONVERGENCE",
+    "observe",
+]
+
+#: The probe keys this observation requires, named once so the contract
+#: between the optimizers' telemetry and the allocation layer has a
+#: single spelling rather than two that can drift apart.
+PROBE_ACO_STAGNATION = "aco_lambda_branch"
+PROBE_PSO_CONVERGENCE = "pso_diversity"
 
 
 @dataclass(frozen=True)
@@ -95,7 +106,9 @@ def observe(
         events_this_step: Disruptions that produced state ``t``.
         current_fraction: Split in force.
         budget: Evaluations for the step.
-        probe: The arm's own telemetry.
+        probe: The arm's own telemetry. Must carry
+            :data:`PROBE_ACO_STAGNATION` and
+            :data:`PROBE_PSO_CONVERGENCE`.
         own_cost: This arm's incumbent cost, or ``None`` if it has none.
         previous_cost: The same figure at ``t-1``.
         path_invalidated: Whether the incumbent broke.
@@ -104,6 +117,10 @@ def observe(
 
     Returns:
         The frozen observation.
+
+    Raises:
+        KeyError: If the probe lacks a required field. Loudly, and at the
+            first step rather than never.
     """
     delta = None
     if own_cost is not None and previous_cost is not None:
@@ -115,8 +132,21 @@ def observe(
         events_this_step=events_this_step,
         current_fraction=current_fraction,
         budget=budget,
-        aco_lambda_branch=float(probe.get("aco_lambda_branch", 0.0)),
-        pso_diversity=float(probe.get("pso_diversity", 0.0)),
+        # **Indexed, never `.get` with a default** (Entry 021 R1). These
+        # are required fields, and a default on a required field is a
+        # silent-zero generator: it turns a loud immediate failure into a
+        # quiet permanent wrong answer, and the quieter the failure the
+        # further it travels. Written as `.get(key, 0.0)` first, and a
+        # mutation renaming the key passed the entire suite while every
+        # policy read 0.0 for colony stagnation and swarm convergence
+        # forever.
+        #
+        # This is F8 reborn — Entry 005 logged the same pattern in
+        # `control/` and deferred it to this restructure precisely so it
+        # would not be written twice. It was written twice. A test can
+        # drift; a KeyError cannot.
+        aco_lambda_branch=float(probe[PROBE_ACO_STAGNATION]),
+        pso_diversity=float(probe[PROBE_PSO_CONVERGENCE]),
         own_cost=own_cost,
         own_cost_delta=delta,
         path_invalidated=path_invalidated,

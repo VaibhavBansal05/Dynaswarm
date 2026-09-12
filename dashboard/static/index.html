@@ -144,6 +144,14 @@
       <h3 class="section-label">How far above the true optimum, over the run</h3>
       <svg id="excess" class="excess" role="img" aria-label="excess over time"></svg>
       <p id="chart-key" class="chart-key"></p>
+
+      <div id="alloc-wrap" hidden>
+        <h3 class="section-label">Where the search budget went, over the run</h3>
+        <svg id="allocation" class="excess" role="img"
+             aria-label="share of budget given to ACO over time"></svg>
+        <p id="alloc-key" class="chart-key"></p>
+        <p id="alloc-note" class="chart-note"></p>
+      </div>
     </div>
 
     <div id="inspect" class="inspect">
@@ -155,17 +163,13 @@
       <div class="ins-panel">
         <h3>Per-arm, this step</h3>
         <div id="ins-arms"></div>
-        <div class="reserved">
-          <b>Allocation view — Phase 3</b>
-          The bar showing <code>aco_fraction</code> sliding toward PSO as a
-          disruption lands needs a working controller. F7 leaves the
-          prescheduled controller built with no arguments, so it varies
-          nothing while logging itself active — measured: this run holds
-          <code>aco_fraction</code> at 0.5 for all 60 steps. A bar drawn now
-          would animate a mechanism known not to work, and would look
-          exactly like one that does. It arrives with the rebuilt control
-          layer.
+        <div id="alloc-now" class="alloc-now">
+          <b>Budget split, this step</b>
+          <div id="alloc-bar" hidden></div>
+          <div id="alloc-body" role="img"
+               aria-label="share of the search budget given to each component"></div>
         </div>
+      </div>
       </div>
     </div>
 

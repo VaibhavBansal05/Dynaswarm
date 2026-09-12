@@ -26,6 +26,8 @@ from typing import Any
 
 import numpy as np
 
+from dynaswarm.allocation.governor import FRACTION_HIGH, FRACTION_LOW
+from dynaswarm.allocation.observation import observe
 from dynaswarm.config import Config
 from dynaswarm.control.signals import StepObservation
 from dynaswarm.core.generate import build
@@ -144,6 +146,8 @@ def run_trial(
 
     outcome = TrialOutcome()
     previous_path: dict[str, tuple[int, ...]] = {}
+    previous_cost: dict[str, float | None] = {}
+    quiet_steps: dict[str, int] = {}
 
     for t in range(timeline.timesteps):
         state = timeline.state_at(t)
@@ -217,6 +221,48 @@ def run_trial(
                     arm.optimizer.apply(
                         arm.controller.propose(arm.signal, arm.optimizer.params(), t)
                     )
+                if arm.governor is not None:
+                    # The observation is the ONLY channel by which a
+                    # policy learns anything (§7.2). Every field here is
+                    # from t or earlier, and none of them is `optimum` or
+                    # anything derived from it — `cost` is this arm's own
+                    # incumbent, not its distance from optimal.
+                    previous = previous_cost.get(arm.name)
+                    observation = observe(
+                        t=t,
+                        events_this_step=len(timeline.events_at(t)),
+                        current_fraction=arm.governor.fraction,
+                        budget=cfg.budget.evaluations,
+                        probe=probe,
+                        own_cost=cost,
+                        previous_cost=previous,
+                        path_invalidated=solution is None,
+                        recency=signal_value,
+                        steps_since_disruption=quiet_steps.get(arm.name, 0),
+                    )
+                    applied = arm.governor.step(observation)
+                    arm.optimizer.apply({"aco_fraction": applied})
+
+                    # §15.6 wants proposed-vs-applied and saturation
+                    # *watchable*, and a number that is never recorded
+                    # cannot be drawn. Note what each one means: the
+                    # `aco_fraction` already in `probe` is the split this
+                    # step actually searched with; these are the decision
+                    # taken at the end of it, which the next step will
+                    # use. Drawing them on one axis without that
+                    # distinction would put the response a step early —
+                    # which is F1's shape, in the view layer.
+                    wanted = arm.governor.proposed[-1]
+                    probe["alloc_proposed"] = wanted
+                    probe["alloc_applied"] = applied
+                    probe["alloc_held_back"] = wanted - applied
+                    probe["alloc_at_bound"] = float(
+                        applied <= FRACTION_LOW or applied >= FRACTION_HIGH
+                    )
+                previous_cost[arm.name] = cost
+                quiet_steps[arm.name] = (
+                    0 if timeline.events_at(t) else quiet_steps.get(arm.name, 0) + 1
+                )
 
             path = solution.path if solution is not None else ()
             outcome.steps.append(

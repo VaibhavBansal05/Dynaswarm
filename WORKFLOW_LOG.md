@@ -1844,3 +1844,64 @@ The field list stands. If it is ever revisited it is an architecture decision, t
 ### Resume
 
 Segment 20's spec is unchanged. T0's answer is now **2200**, and the segment proceeds from T1.
+
+---
+
+## Entry 021 — Segment 20 built: `allocation/` exists
+
+**Phase** 3 · **Segment** 4 of 5 · **Overall segment** 20
+**Verified** 12 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+*(The commit message says "entry 020"; that number is the T0 ruling. This is 021. Not worth amending.)*
+
+**467 passed.** `src/` **2135 / 2200** — 14 under projection, with segment 21's `+25` still to come. The `control/` release landed at **exactly 20**, the number Entry 020 recorded as the one most likely to be wrong by assumption. Measured, not guessed, and it held.
+
+The `+11` over projection is `__all__` lists and **a fourth saturation statistic — `clipped`** — the figure the applied series alone cannot carry. That is the right kind of overrun.
+
+### Both invariants proved rather than asserted
+
+**I1:** the oracle made genuinely unimportable in a subprocess, an observation built anyway — **and the blocker verified to bite first**, so the test cannot pass because the block silently failed. That last clause is the difference between a proof and a hopeful arrangement, and it is the third time this project has needed it.
+
+**I2:** `observe()` fetches nothing. Its source is scanned for `state_at`, `events_at`, `shortest_path`, `schedule[` and `timeline`, all required absent. **A field from `t+1` would have to be handed in deliberately.** That is structural — F1 became possible because a component could reach for time on its own.
+
+### F7 is dead, and the way it died is the lesson
+
+`PrescheduledController` **removed, not deprecated.** `ScheduledAllocation`'s defaults sweep 0.8 → 0.2, and the test holds the **defaults** rather than the capability.
+
+> Its predecessor's tests passed **because they always constructed it with arguments.** The class could vary; as built by the harness it never did.
+
+That is the whole of F7 in one sentence, and it is why Entry 005's bar was "asserts it actually varies something" rather than "can vary." **A test that supplies the arguments the caller does not supply is testing a different program.**
+
+The four old tests were not deleted; their behaviour moved. The two covering the F2/F6 silent-drop guard **have no counterpart by design** — a policy returns a fraction, so there is no name to mismatch — and that absence is pinned, so a name-based interface fails there first. **An absence that is documented and tested is a design; an absence that is merely true is an oversight waiting to be discovered.**
+
+### Mutation C — **F8 was reborn in the new package**
+
+The observation reads `probe.get("aco_lambda_branch", 0.0)`. Rename the key to one the Hybrid does not emit:
+
+```
+test_allocation.py  24 passed
+test_probes.py         passed
+test_control.py        passed
+```
+
+**Nothing caught it.** The default takes over, **two of §7.2's eleven fields read `0.0` for every policy, forever**, and the thesis runs on them. A rename inside ACO would have done it, with no error anywhere.
+
+**This is F8.** Entry 005 logged the old `current.get(name, 0.0)` fallback as *"misleading — it encodes `0.0` as an initial value"* and deferred it to this restructure so it would not be touched twice. It died in `control/` and **was re-created in `allocation/` on the same day**, by the same reasoning that produced it the first time: a defensive default on a lookup that cannot legitimately fail.
+
+> **A `.get(key, default)` on a required field is a silent-zero generator.** It converts a loud, immediate failure into a quiet, permanent wrong answer — and the quieter the failure, the further it travels.
+
+**R1 — Ruled: required probe fields are indexed, not defaulted.** `probe[key]`, raising `KeyError`. The contract test vClaude added stays as a second line of defence, but the primary fix is structural: a test can drift, a `KeyError` cannot. This is segment 5's ruling applied again — *assert the property that makes the bug impossible, not the symptom of its absence.* Segment 21, first task, ~0 statements.
+
+**Twelve consecutive segments.**
+
+### The three gaps named for segment 21 — all accepted
+
+1. **No policy has ever seen a real observation.** Everything goes through `observe()`, but nothing has built one from a live trial — **and mutation C shows that wiring is exactly where a silent zero lives.**
+2. **`IncrementalAllocation` reads only `recency`** — eight of eleven fields available and unused. Correct for continuity, and worth stating in the report so nobody assumes the rule is richer than it is.
+3. **The 20%-at-bound threshold is untested against a real run.** vClaude's own comparison: *"same shape as the caps we've twice had to re-derive."* A reasonable-sounding number that no measurement has justified. **Measure what saturation actually looks like, then justify 20% or change it.**
+
+All three become tasks in segment 21.
+
+### Close
+
+The machine exists and has been proved in isolation. **Nothing has yet connected it to a trial**, which is both the honest statement of where this stands and segment 21's entire job.

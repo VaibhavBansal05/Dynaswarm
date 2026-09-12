@@ -458,15 +458,35 @@ ARM_DISPLAY = {
     "aco": "ACO standalone",
     "pso": "PSO standalone",
     "hybrid": "Hybrid (baseline)",
+    # §9's table, verbatim. The "New" in the adaptive arm's name is part
+    # of the display string there and is not trimmed here, because the
+    # map is supposed to have one spelling and this file is not the place
+    # to decide it reads better without.
+    "hybrid_fixed": "Fixed / Static Hybrid",
+    "hybrid_adaptive": "New Recency-Based Adaptive Hybrid",
+    # NOT in §9's table — `hybrid_scheduled` was added in segment 21 as
+    # §7.2's open-loop control and the table predates it. Named here so
+    # the dashboard does not fall back to the raw code id, and reported
+    # to the Architect, who owns that table. Do not treat this line as
+    # the canonical name; it is a placeholder awaiting a §9 row.
+    "hybrid_scheduled": "Scheduled Hybrid (open-loop control)",
 }
 
-#: Every arm the dashboard may race. Deliberately only the uncontrolled
-#: four: F7 leaves `harness/arm.py:228` building the prescheduled
-#: controller with no arguments, so `start == end == 1.0` and it varies
-#: nothing while logging itself active. Racing a controlled arm today
-#: would put a controller that is known not to control on screen, and it
-#: would look exactly like a result — F5's failure mode, staged in front
-#: of an examiner. Phase 3 fixes F7; until then this list is the guard.
+#: Every arm the dashboard may race.
+#:
+#: This list was held to the uncontrolled four for the whole of Phase 1
+#: and 2, because F7 built the prescheduled controller with no arguments
+#: — `start == end == 1.0` — so it varied nothing while logging itself
+#: active, and racing it would have put a controller known not to control
+#: on screen looking exactly like a result.
+#:
+#: **Segment 20 removed that controller and segment 21 replaced it with
+#: the allocation layer, so the guard is lifted and the three controlled
+#: hybrids are raceable.** The condition for lifting it was never "F7 is
+#: closed" on its own: it is that each arm is now shown to do what its
+#: name says, arm by arm, against a printed series
+#: (`scripts/verify_arms.py`). An arm that cannot be demonstrated that
+#: way does not belong on this list however fixed its defects are.
 RACEABLE = tuple(ARM_DISPLAY)
 
 
@@ -546,6 +566,40 @@ def race(spec: RaceSpec, root: Path | None = None) -> dict:
     }
 
 
+
+#: The probe keys the allocation view needs, named here so a rename in
+#: `trial.py` breaks the import rather than silently emptying the chart
+#: — Entry 021 R1's rule, one layer out.
+_ALLOC_KEYS = ("alloc_proposed", "alloc_applied", "alloc_held_back", "alloc_at_bound")
+
+
+def _allocation_series(rows):
+    """Per-step allocation telemetry, or ``None`` if this arm has none.
+
+    Reads the probe map the harness recorded. Returning ``None`` rather
+    than an empty list matters: the pane distinguishes "this arm has no
+    allocation policy" from "this arm has one that did nothing", and
+    those are different claims about the same flat line.
+    """
+    probes = [dict(p) if p is not None else {} for p in rows["probe"]]
+    if not any("alloc_applied" in p for p in probes):
+        return None
+    series = {k.removeprefix("alloc_"): [] for k in _ALLOC_KEYS}
+    for probe in probes:
+        for key in _ALLOC_KEYS:
+            value = probe.get(key)
+            series[key.removeprefix("alloc_")].append(
+                None if value is None else float(value)
+            )
+    # `searched` is the split the step actually ran with, which is the
+    # PREVIOUS step's applied value. Carried explicitly so the pane never
+    # has to shift an index by hand — F1 was an off-by-one nobody could
+    # see, and a chart is where one would hide best.
+    series["searched"] = [
+        None if (v := p.get("aco_fraction")) is None else float(v) for p in probes
+    ]
+    return series
+
 def read_run(run_id: str, root: Path | None = None) -> dict:
     """Read a finished run back off disk.
 
@@ -596,6 +650,10 @@ def read_run(run_id: str, root: Path | None = None) -> dict:
             "hops": [int(h) for h in rows["path_len"]],
             # From the analysis layer, not from the series above.
             "mean_excess": float(summary["mean_excess"].iloc[0]) if len(summary) else None,
+            # §15.6's allocation bar. `None` — not a zero-filled series —
+            # for an arm with no governor: a flat line at 0.5 drawn for
+            # A* would read as "it considered moving and chose not to".
+            "allocation": _allocation_series(rows),
         })
 
     # Derived from the graph config the RUN recorded, not from whatever
@@ -688,6 +746,70 @@ def api_race(spec: RaceSpec) -> dict:
 def api_read_run(run_id: str) -> dict:
     """Read a finished run back. Survives a restart; it is a file."""
     return read_run(run_id)
+
+
+#: Categorical colours, one per arm. Hue is spent ONLY here (Entry 009 R1).
+#:
+#: **Moved out of `model.js` in segment 21.** Two reasons, and the second
+#: is the one that forced it. First, the display names had already moved
+#: here to stop two copies of one list drifting, and leaving the colours
+#: behind kept half the problem. Second, `model.js` keyed this map by arm
+#: id, and `hybrid_scheduled` contains the literal "schedule" — which the
+#: repo-wide guard forbidding the dashboard from indexing the event
+#: schedule greps for, correctly and bluntly, across all JavaScript. The
+#: arm id is frozen data (D23a) and that guard protects F1. Neither could
+#: give way, so the map moved to the language with an AST.
+#:
+#: The luminances are spread so the arms survive greyscale, and the gap
+#: is asserted in `test_dashboard.py`, not merely intended here.
+ARM_COLORS = {
+    "astar": "#eceef1",            # 0.932
+    "hybrid_scheduled": "#d7e39a",  # 0.843  open-loop control
+    "aco": "#8fc0ff",              # 0.724
+    "hybrid_adaptive": "#b98cff",  # 0.653  the thesis
+    "pso": "#c9762b",              # 0.527
+    "hybrid_fixed": "#c04a6e",     # 0.445  the ablation twin
+    "hybrid": "#22683d",           # 0.307
+}
+
+#: The closest luminance pair the palette achieves. Four arms left ~0.2
+#: between neighbours; seven leaves this. Asserted, not aspirational.
+MIN_ARM_LUMINANCE_GAP = 0.07
+
+
+def arm_luminance(hex_colour: str) -> float:
+    """Perceived luminance, the standard weighting."""
+    n = int(hex_colour.lstrip("#"), 16)
+    return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+
+
+#: Raced by default when the page opens: the four that answer Claim 1.
+#: The controlled hybrids are offered but unticked — racing seven arms by
+#: default triples the wait for a first result, and the three extra ones
+#: answer a different claim than the page's opening question.
+DEFAULT_ARMS = ("astar", "aco", "pso", "hybrid")
+
+
+@app.get("/api/arms")
+def api_arms() -> dict:
+    """The arm list and its display names, served rather than duplicated.
+
+    The page used to carry its own copy of §9's map. Two spellings of one
+    name is the shape of the defect that cost segment 20 (a probe key
+    renamed on one side only), so there is now one copy and the client
+    asks for it.
+    """
+    return {
+        "arms": [
+            {
+                "id": a,
+                "name": ARM_DISPLAY[a],
+                "colour": ARM_COLORS[a],
+                "default": a in DEFAULT_ARMS,
+            }
+            for a in RACEABLE
+        ]
+    }
 
 
 @app.get("/api/runs")

@@ -430,11 +430,33 @@ button:disabled { opacity: 0.55; cursor: default; }
            padding: 9px 2px; border-bottom: 1px solid var(--line-soft);
            font: 400 13.5px/1 var(--mono); font-variant-numeric: tabular-nums; }
 .ins-arm b { font-family: var(--ui); font-weight: 500; }
-.reserved { margin-top: 16px; padding: 13px 15px; border-radius: 6px;
-            border: 1px dashed var(--line); color: var(--ink-faint);
-            font-size: 13px; line-height: 1.5; }
-.reserved b { display: block; color: var(--ink-dim); margin-bottom: 5px; }
-.reserved code { font: 400 12.5px var(--mono); color: var(--ink-dim); }
+/* The allocation view (§15.6). The bound bands are deliberately dim: they
+   mark a region the split must not enter, and a bright warning stripe
+   across a chart that never approaches it would be alarming about nothing. */
+.alloc-now { margin-top: 16px; padding: 13px 15px; border-radius: 6px;
+             border: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
+.alloc-now b { display: block; color: var(--ink-dim); margin-bottom: 8px; }
+.alloc-arm { display: flex; align-items: center; gap: 7px; margin: 13px 0 5px;
+             color: var(--ink-dim); font-size: 12.5px; }
+.alloc-arm:first-child { margin-top: 0; }
+.alloc-arm i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.alloc-detail { margin: 4px 0 0; font: 400 11.5px var(--mono);
+                color: var(--ink-faint); }
+.alloc-now .hint { margin: 0; color: var(--ink-faint); }
+
+.alloc-bar { display: flex; height: 26px; border-radius: 4px; overflow: hidden;
+             border: 1px solid var(--line); }
+.alloc-seg { display: flex; align-items: center; justify-content: center;
+             font: 600 11px var(--ui); letter-spacing: 0.02em;
+             white-space: nowrap; overflow: hidden; transition: width 120ms linear; }
+.alloc-seg.aco { background: #2c4a7a; color: #cfe0ff; }
+.alloc-seg.pso { background: #6a4a1f; color: #ffe6c2; }
+
+.alloc-band rect { fill: var(--bad); fill-opacity: 0.07; }
+.alloc-pinned circle { fill-opacity: 0.9; }
+.alloc-pinned circle.at-bound { fill: none; stroke: var(--bad); stroke-width: 1.5; }
+.chart-note { margin: 6px 0 0; color: var(--ink-faint); font-size: 12.5px;
+              line-height: 1.5; max-width: 96ch; }
 .sel-node { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 .sel-edge line { stroke: var(--accent); stroke-width: 4; stroke-opacity: 0.55; }
 @media (max-width: 900px) { .inspect { grid-template-columns: 1fr; } }

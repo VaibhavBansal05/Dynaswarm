@@ -195,24 +195,9 @@ export function seekEvent(steps, from, direction) {
 
 // --- Stage 3 (segment 11) ---
 
-// Four categorical colours, and hue is spent ONLY here (Entry 009 R1):
-// on the graph an arm is identified by which pane it is in, so a pane can
-// draw in one colour and nothing competes with the event palette. These
-// four must survive greyscale, so their relative luminances are spread —
-// checked in tests/js/model.test.mjs, not assumed.
-export const ARM_COLORS = Object.freeze({
-  astar:  "#eceef1",
-  aco:    "#8fc0ff",
-  pso:    "#c9762b",
-  hybrid: "#22683d",
-});
-
-// Perceived luminance, the standard weighting. Used to prove the four
-// arm colours stay distinguishable once hue is removed.
-export function luminance(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-}
+// The arm palette used to live here. It now comes from /api/arms with the
+// display names, so there is one list of arms in the project rather than
+// three, and so no arm id appears as a literal in this language.
 
 // A polyline through an excess series, skipping gaps rather than drawing
 // through them: a null excess means no route existed at that step, and a

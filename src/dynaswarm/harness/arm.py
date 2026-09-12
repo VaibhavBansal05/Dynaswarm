@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from dynaswarm.allocation.governor import AllocationGovernor
+from dynaswarm.allocation.policies import make_policy
 from dynaswarm.config import ControlCfg
 from dynaswarm.control.controllers import (
     Controller,
@@ -50,7 +52,12 @@ class Arm:
             since they can neither use a larger allowance nor return a
             usable partial answer under a smaller one.
         signal: What this arm senses.
-        controller: How it responds to what it senses.
+        controller: How it responds to what it senses — parameter
+            adaptation, for Claim 2's evidence set (§8).
+        governor: How it responds by *allocating* — the budget split
+            between colony and swarm, for Claim 3 (§7.2).  An arm carries
+            one or the other, never both: they are different claims and
+            an arm doing both would make neither attributable.
     """
 
     name: str
@@ -59,6 +66,7 @@ class Arm:
     metered: bool = True
     signal: Signal | None = None
     controller: Controller | None = None
+    governor: AllocationGovernor | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,8 @@ class ArmSpec:
         signal: Name of the signal to sense, or ``None`` for arms that
             do not adapt.
         controller: Name of the controller, or ``None``.
+        policy: Name of the allocation policy, or ``None``.  Mutually
+            exclusive with ``controller``.
     """
 
     family: str
@@ -81,6 +91,7 @@ class ArmSpec:
     metered: bool = True
     signal: str | None = None
     controller: str | None = None
+    policy: str | None = None
 
 
 #: Registry of arm specifications, keyed by the name used in config.
@@ -126,13 +137,23 @@ ARM_BUILDERS: dict[str, ArmSpec] = {
         family="hybrid_controlled",
         build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
         signal="recency",
-        controller="none",
+        policy="frozen",
     ),
     "hybrid_adaptive": ArmSpec(
         family="hybrid_controlled",
         build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
         signal="recency",
-        controller="incremental",
+        policy="incremental",
+    ),
+    # The honest control for feedback itself (§7.2): an open-loop
+    # timetable that ignores the world entirely.  If it matches the
+    # adaptive arm, what helped was *varying* the split, not sensing —
+    # and it cannot play that role from outside the registry.
+    "hybrid_scheduled": ArmSpec(
+        family="hybrid_controlled",
+        build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
+        signal="recency",
+        policy="scheduled",
     ),
 }
 
@@ -193,6 +214,7 @@ def build_arms(
                 metered=spec.metered,
                 signal=_make_signal(spec, control),
                 controller=_make_controller(spec, control),
+                governor=_make_governor(spec, control),
             )
         )
     return arms
@@ -204,6 +226,23 @@ def _make_signal(spec: ArmSpec, control: ControlCfg) -> Signal | None:
         return None
     kind = control.signal or spec.signal
     return make_signal(kind, window=control.window)
+
+
+def _make_governor(spec: ArmSpec, control: ControlCfg) -> AllocationGovernor | None:
+    """Build the arm's allocation governor, if it allocates.
+
+    The policy is named by the arm, not by the config — that is what
+    distinguishes the two halves of the ablation. A config-level policy
+    would collapse both arms onto the same behaviour and destroy the
+    comparison.
+    """
+    if spec.policy is None:
+        return None
+    return AllocationGovernor(
+        policy=make_policy(spec.policy),
+        sigma_max=control.sigma_max,
+        fraction=control.initial_fraction,
+    )
 
 
 def _make_controller(spec: ArmSpec, control: ControlCfg) -> Controller | None:
