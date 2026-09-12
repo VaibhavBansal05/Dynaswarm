@@ -1702,3 +1702,72 @@ Third instance of this family — segment 4's fixture, segment 5's demo, and now
 **409 passed.** `src/` **2041 / 2100**, margin **59**. The components are repaired and the baseline is honest.
 
 **Revised remainder:** 19 correctness · 20–21 `allocation/` · Phase 4 · Phase 5.
+
+---
+
+## Entry 019 — Segment 19: Correct, Not Just Running
+
+**Phase** 3 · **Segment** 3 of 5 · **Overall segment** 19
+**Verified** 11 Sept 2026 · **Status** COMPLETE — uncommitted at hand-over
+
+**439 passed.** `src/` **2041 / 2100**, `+0`. Thirty checks, seven wrong implementations each shown red.
+
+### Three checks passed the first version — including the one I specified
+
+**The choice test never called the code.** It computed expectations from §5.2 and then sampled **a re-implementation of the selection loop copied into the test**. It compared a formula against a copy of the code and never touched `_construct`. Changing `alpha` → `alpha + 1` left it green.
+
+vClaude's own line: *"I committed the exact circularity this segment exists to prevent, while writing the segment about it."*
+
+**The bounds test asserted a range.** `min >= tau_min` is satisfied by any floor at or above `tau_min`, so a wider floor passed. Two further assertions sat behind `if active[...]` guards that never fired.
+
+**And A\*'s heuristic was never exercised at all.** Every check ran on `erdos_renyi`, where `pos is None` and `weight_scale == 0.0` — so the heuristic is identically zero and A\* degenerates to Dijkstra. **Doubling it changed nothing**, because there was nothing to double.
+
+**All three are one failure.** vClaude named it: *a test that cannot distinguish the thing it names from something else.*
+
+Two rules out of it, because they are different failures wearing one description:
+
+> **A correctness test must call the production entry point.** A test that re-implements what it checks is comparing a formula to a copy, and both can be wrong together. This is the purest form of the circularity this project keeps finding, and it appeared in the segment written to prevent it.
+
+> **A test of a feature must run on data where the feature is active.** The heuristic cannot be tested on graphs that have no heuristic. Same family as Entry 012 — *a guarantee about failure cannot be tested by data in which nothing fails* — with "failure" replaced by "the feature."
+
+### The catch that justifies the whole segment
+
+Once the A\* checks ran on **geometric** graphs, mutation 6 — doubling the heuristic, making it inadmissible:
+
+```
+A* says 107.25    enumeration says 105.87
+```
+
+**A\* silently returning a wrong answer, and a reasonable-looking one.** No crash, no warning, a valid path of a plausible cost.
+
+Everything in this project is measured against A\*. Excess is defined relative to it, Claim 1 is a comparison of excesses, the dashboard draws it as the truth. **A silently inadmissible heuristic would have made every number in the report wrong in a way nothing else would have caught** — and `oracle.py`'s own docstring warns about exactly this.
+
+The check is exhaustive enumeration of every simple path: the **definition** of a shortest path, not a second algorithm. Sixteen graphs, both models, at `t=0` and mid-timeline, including a cheapest route that is not the shortest, an unreachable target, and a tie.
+
+### The deposit gap is closed
+
+Phase 2's trust report stated plainly that `tau_deposited` *"cannot detect deposit on the WRONG edges; the count is identical either way."*
+
+On nine nodes every edge is checkable. **Deposit lands on exactly the best path's slots and their reverses, zero everywhere else.** A blind spot the project declared rather than hid is now a blind spot that is gone — which is the argument for declaring them.
+
+### R1 — `find_slot` answers questions about edges that are not there
+
+vClaude's first hand-built fixture priced an **inactive** edge, so the cheap route it described did not exist. A\* correctly returned `10.0` while the test claimed `3.0`, and **it read as a real A\* defect for several minutes.**
+
+> *"A fixture that silently doesn't build what it describes fails in the direction most likely to be believed."*
+
+The underlying API does what its name says and nothing more — but it will happily return a slot for an edge that is switched off, and the caller gets a usable-looking answer about something that is not in the graph. Same family as the caption that rendered a missing value as the word `undefined`.
+
+**Not a defect and not being changed.** Recorded as **F14**, low priority, with the guidance that any new fixture pricing an edge asserts it is active first. If a production call site is ever found relying on `find_slot` without an active check, that promotes it.
+
+### What could not be checked, listed rather than implied
+
+Convergence quality, emergent behaviour over long runs, anything needing a large graph, the sampler behind the frequencies, `eta`'s own definition, and **whether the parameter values are good choices.**
+
+That last one deserves emphasis for the report: this segment establishes the implementations **are the algorithms they are named after.** It says nothing about whether they are well-tuned — that is Phase 4's job, and the two claims must not be conflated when written up.
+
+### Close
+
+The components are now **repaired, honest, and checked against their own definitions.** Segments 20–21 rebuild the control layer on top of them.
+
+**Eleven consecutive segments** in which the uncommissioned mutation found something the commissioned one could not.
