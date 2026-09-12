@@ -34,7 +34,28 @@ PYGAME_ALLOWED_UNDER = "viz"
 #: growing it.  Statements measure the thing actually worth bounding —
 #: how much behaviour there is to understand and test.  Set comfortably
 #: above the planned scope so a breach signals drift, not normal growth.
-MAX_SRC_STATEMENTS = 2100
+#:
+#: **Raised to 2200 in segment 20, derived rather than picked** (Entry
+#: 020).  The arithmetic, from a measured sketch rather than an estimate:
+#:
+#:     2041  before allocation/
+#:     +103  allocation/, sketched in full to §7.2 and counted
+#:      +25  segment 21's arm wiring
+#:      -20  control/ releases PrescheduledController, and only that —
+#:           the ACO pair still needs parameter adaptation for Claim 2
+#:     -----
+#:     2149  projected close of Phase 3
+#:      +51  defect repair
+#:     -----
+#:     2200
+#:
+#: **The raise carries a clause: after segment 21 the science surface is
+#: CLOSED.**  Phases 4 and 5 add measurement and reporting, not science,
+#: so growth past that point is drift and the 51 is for defect repair
+#: only.  ``LearnedAllocation`` is explicitly outside this number and is
+#: not pre-approved; it comes with its own budget conversation after
+#: mentor sign-off (D7, O2).
+MAX_SRC_STATEMENTS = 2200
 
 #: Names under ``np.random`` that merely *refer to* a type rather than
 #: producing randomness.  Annotating a parameter as

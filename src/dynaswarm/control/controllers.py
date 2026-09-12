@@ -40,7 +40,6 @@ __all__ = [
     "Controller",
     "NullController",
     "IncrementalController",
-    "PrescheduledController",
     "make_controller",
     "CONTROLLERS",
     "EXPLORE_SIGN",
@@ -186,64 +185,17 @@ class IncrementalController:
         return proposed
 
 
-@dataclass
-class PrescheduledController:
-    """Varies parameters on a fixed timetable, ignoring the signal.
-
-    Included because it is the honest control for feedback itself.  If an
-    open-loop schedule matches a signal-driven controller, then what
-    helped was varying the parameter at all, not sensing anything — and
-    that is a conclusion worth being able to reach.
-
-    Attributes:
-        targets: Parameters to sweep.
-        start: Multiple of the parameter's initial value at ``t = 0``.
-        end: Multiple at the final timestep.
-        horizon: Timesteps over which the sweep completes.
-    """
-
-    targets: tuple[str, ...] = ("rho",)
-    start: float = 1.0
-    end: float = 1.0
-    horizon: int = 60
-    name: str = "prescheduled"
-    _initial: dict[str, float] = field(default_factory=dict, init=False, repr=False)
-
-    def propose(
-        self, signal: Signal, current: Mapping[str, float], t: int
-    ) -> dict[str, float]:
-        # The same configuration error as F2, and worse in this class.  A
-        # prescheduled controller that drops its targets varies *nothing*,
-        # so it returns results identical to the frozen arm while logging
-        # itself as an active schedule.  This is the open-loop control for
-        # feedback itself: if it silently adapts nothing, the reading is
-        # "an open-loop schedule does not help either" — a false null on
-        # the one arm whose job is to falsify the control story.
-        unknown = set(self.targets) - set(current)
-        if unknown:
-            raise KeyError(
-                f"controller target(s) {sorted(unknown)} are not parameters of this "
-                f"optimizer; it declares {sorted(current)}"
-            )
-
-        for name in self.targets:
-            self._initial.setdefault(name, float(current.get(name, 0.0)))
-
-        fraction = min(max(t / max(self.horizon - 1, 1), 0.0), 1.0)
-        multiplier = self.start + (self.end - self.start) * fraction
-
-        proposed = dict(current)
-        for name in self.targets:
-            if name in proposed:
-                proposed[name] = self._initial[name] * multiplier
-        return proposed
-
-
 #: Controller constructors, keyed by the name used in config.
+#:
+#: ``PrescheduledController`` is gone (F7, closed in segment 20). It was
+#: built with no arguments, so ``start == end == 1.0`` and it varied
+#: nothing while logging itself active — a false null on the one arm
+#: whose job is to falsify the control story. Its role now belongs to
+#: ``allocation.ScheduledAllocation``, whose defaults are held to
+#: Entry 005's bar by a test asserting they actually sweep.
 CONTROLLERS = {
     "none": NullController,
     "incremental": IncrementalController,
-    "prescheduled": PrescheduledController,
 }
 
 

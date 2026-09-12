@@ -1771,3 +1771,76 @@ That last one deserves emphasis for the report: this segment establishes the imp
 The components are now **repaired, honest, and checked against their own definitions.** Segments 20–21 rebuild the control layer on top of them.
 
 **Eleven consecutive segments** in which the uncommissioned mutation found something the commissioned one could not.
+
+---
+
+## Entry 020 — Segment 20: stopped at T0. **The science cap is raised to 2200.**
+
+**Phase** 3 · **Segment** 4 · **Overall segment** 20
+**Ruled** 12 Sept 2026 · **Status** BLOCKED at T0, ruling issued, nothing built, `src/` untouched at 2041
+
+### The gate worked
+
+`allocation/` was sketched **in full** to §7.2 and counted with the suite's own counter: **~108 net against 59 available.** vClaude built nothing and reported.
+
+This is the first time in the project a budget was resolved before a line was written. Segment 12 hit `702/700` mid-flight and the lesson recorded then was *find out before you are committed*. Segment 14 applied it and the projection changed the design. **Here it stopped the segment**, which is the gate doing its whole job.
+
+### The number I would have got wrong by assuming
+
+> **`control/` cannot be retired.**
+
+I framed segment 20 as a restructure, which carries the implication of net-neutrality. Measured, it releases **20 of 67**.
+
+Four arms carry controllers and they split across two claims: the hybrid pair moves to `allocation/`, but **`aco_fixed` and `aco_adaptive` stay** — they are §8's evidence set for Claim 2 and still need parameter adaptation. Only `PrescheduledController` has no remaining user.
+
+**A restructure that "moves the control layer" sounds net-neutral. It moves a third of one.** Worth recording because the same assumption will recur at `evidence/` demotion.
+
+### R1 — Raised to **2200**, derived
+
+```
+current                                    2041
+allocation/            (measured, §7.2)    +103
+control/ releases PrescheduledController    -20
+segment 21 wiring         (estimated)      +25
+---------------------------------------------------
+projected at close of Phase 3              2149
+headroom for defect repair                  +51
+---------------------------------------------------
+cap                                        2200
+```
+
+**Why the raise is right rather than accommodating.** The cap exists so *"a codebase cannot grow large enough that nobody notices its central mechanism is not running."* `allocation/` **is** the central mechanism. Everything built so far — dashboard, probes, correctness — is apparatus around a thesis that has never executed. **A cap that blocks the project's contribution from being built is measuring the wrong thing.**
+
+And there is no honest route to 59. Cutting to fit means dropping the governor's dual recording or its saturation statistics — and §7.2 added both **because a manual `RUNBOOK` check is one that eventually is not run.** This project has learned that in five separate costumes. Trimming the two features that make the control layer trustworthy, in order to satisfy a proxy for trustworthiness, would be an exact inversion.
+
+**Entry 012's rule applied to myself:** the number is derived from what the thing has to become, not lifted from where it happens to be. The last raise (700→900) was checked afterwards and came back 3× out. This one names its components so the same check is possible.
+
+### R2 — The cap gains a second, sharper clause: **`src/` closes after segment 21**
+
+A bigger number is a weaker instrument. So the raise comes with a rule that makes it stronger:
+
+> **After segment 21, the science surface is closed.** Phase 4 runs experiments and Phase 5 writes them up; neither adds science. **Any growth in `src/` after segment 21 is drift by definition**, and the 51 statements of headroom are for defect repair, not features.
+
+That converts the cap from *how much code* to *the science is finished*, which is the thing actually worth bounding. Every future segment reports `src/` against 2200 **and** against the closure rule.
+
+### R3 — `LearnedAllocation` is explicitly outside this number
+
+§7.2 registers it; D7 and O2 make it conditional on mentor sign-off. vClaude prices it at **60–80 statements** — a tabular Q-learner with discretisation and an update rule — and correctly declined to choose.
+
+**Not included, and not being pre-approved by a budget.** If the mentor sanctions it, it arrives with its own budget conversation, its own verification, and its own entry — which is proportionate for a learning algorithm whose output would be reported as a result.
+
+**This gives the 18 September mentor conversation a third item with a number attached:** web dashboard sign-off (O1), the learned allocation policy (O2) — **now quantified at 60–80 statements plus its own verification segment** — and walking her through why `change_rate` was abandoned and Expected Outcome #3 was disproved by the project's own measurements (O3).
+
+### R4 — Do not split the segment. vClaude's argument is accepted.
+
+Observation plus policies alone is ~68 and nearly fits. **The governor is what makes a proposal safe.** Shipping policies with no clamp, no rate limit and no saturation record is a half-built mechanism of exactly the kind this project keeps finding — and it would leave F7 open another segment, in the arm whose entire job is to falsify the control story.
+
+### R5 — §7.2's field list is not trimmed
+
+`AllocationObservation` is 12 statements because §7.2 names eleven fields. **`own_cost`, `own_cost_delta` and `path_invalidated` exist specifically to replace the oracle-derived `excess_last_step` that violated I1** — trimming them to fit a budget would reintroduce, for arithmetic reasons, the exact violation §7.2 removed for principled ones.
+
+The field list stands. If it is ever revisited it is an architecture decision, taken on its own terms.
+
+### Resume
+
+Segment 20's spec is unchanged. T0's answer is now **2200**, and the segment proceeds from T1.

@@ -19,7 +19,6 @@ from dynaswarm.control.controllers import (
     EXPLORE_SIGN,
     IncrementalController,
     NullController,
-    PrescheduledController,
     make_controller,
 )
 from dynaswarm.control.signals import (
@@ -464,56 +463,6 @@ def test_explore_signs_are_declared_for_adapted_parameters():
     assert EXPLORE_SIGN["rho"] > 0, "faster evaporation forgets sooner"
     assert EXPLORE_SIGN["alpha"] < 0, "trusting the trail more is exploitation"
     assert "n_ants" not in EXPLORE_SIGN, "colony size has no unambiguous direction"
-
-
-def test_prescheduled_ignores_the_signal():
-    controller = PrescheduledController(targets=("rho",), start=1.0, end=2.0, horizon=10)
-    calm, chaotic = make_signal("volatility"), make_signal("volatility")
-    for t in range(10):
-        calm.observe(StepObservation(t=t, n_events=0, n_edges=100, best_cost=1.0))
-        chaotic.observe(StepObservation(t=t, n_events=9, n_edges=100, best_cost=1.0))
-
-    assert controller.propose(calm, {"rho": 0.1}, 5) == PrescheduledController(
-        targets=("rho",), start=1.0, end=2.0, horizon=10
-    ).propose(chaotic, {"rho": 0.1}, 5)
-
-
-def test_prescheduled_sweeps_across_the_horizon():
-    controller = PrescheduledController(targets=("rho",), start=1.0, end=3.0, horizon=11)
-    signal = make_signal("volatility")
-    assert controller.propose(signal, {"rho": 0.1}, 0)["rho"] == pytest.approx(0.1)
-    assert controller.propose(signal, {"rho": 0.1}, 10)["rho"] == pytest.approx(0.3)
-
-
-def test_prescheduled_raises_on_a_target_the_optimizer_does_not_declare():
-    """F6 — the identical silent drop, in the arm that can least afford it.
-
-    ``PrescheduledController`` becomes ``ScheduledAllocation`` in Phase 3,
-    where it is the honest control for feedback itself: if an open-loop
-    schedule matches a signal-driven policy, what helped was *varying*,
-    not *sensing*.  A silent drop there varies nothing, so it reproduces
-    the frozen arm exactly while logging itself as an active schedule —
-    and the conclusion drawn is "an open-loop schedule does not help
-    either."  That is a false null on the one arm whose entire job is to
-    falsify the control story, and it is indistinguishable from a real
-    result.
-    """
-    controller = PrescheduledController(
-        targets=("aco_fraction",), start=1.0, end=2.0, horizon=10
-    )
-    signal = make_signal("volatility")
-    with pytest.raises(KeyError, match=r"\['aco_fraction'\]"):
-        controller.propose(signal, {"rho": 0.1}, 0)
-
-
-def test_prescheduled_still_sweeps_a_declared_target():
-    """The guard must reject the unknown without freezing the known."""
-    controller = PrescheduledController(
-        targets=("aco_fraction",), start=1.0, end=2.0, horizon=11
-    )
-    signal = make_signal("volatility")
-    current = {"aco_fraction": 0.5, "rho": 0.1}
-    assert controller.propose(signal, current, 10)["aco_fraction"] == pytest.approx(1.0)
 
 
 def test_null_controller_is_exempt_from_the_target_guard_by_construction():

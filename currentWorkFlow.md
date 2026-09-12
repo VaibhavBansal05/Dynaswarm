@@ -175,3 +175,336 @@ Green suite, artefacts pasted, **F7 and F8 closed**, uncommitted with the messag
 ---
 
 <!-- vClaude: append your FINDINGS block below this line, using the template in AGENT_PROTOCOL.md §6 -->
+
+---
+
+# FINDINGS — Segment 20
+
+## ⛔ T0 — STOPPED AT THE GATE. `allocation/` does not fit in 59.
+
+**Projection: ~108 statements against 59 available. Over by ~49.**
+
+Nothing was built. `src/` is untouched at **2041 / 2100**.
+
+| | statements | how it was obtained |
+|---|---|---|
+| `allocation/` | **+103** | **Measured, not estimated** — the package was sketched in full to §7.2's specification and counted with the suite's own `_statement_count` |
+| `control/` releases | **−20** | **Measured** — `PrescheduledController`, the only part nothing else needs |
+| segment 21's wiring | **+25** | Estimated — arm construction plus the per-step observation plumbing |
+| **net** | **+108** | against a margin of **59** |
+| projected `src/` | **2149 / 2100** | |
+
+### The sketch, block by block — this is a floor, not padding
+
+```
+observation.py   AllocationObservation   12     policies.py   AllocationPolicy         6
+                 observe                  5                   FrozenAllocation         6
+                                                              IncrementalAllocation   20
+governor.py      AllocationGovernor      29                   ScheduledAllocation     10
+                                                              make_policy              4
+```
+
+- **`AllocationObservation` is 12 and cannot be less.** §7.2 specifies eleven
+  fields by name; eleven annotations plus the class is twelve.
+- **`IncrementalAllocation` is 20 against the 27 of the `IncrementalController`
+  it replaces** — already a trim, and §7.2 requires the ±σ rule *"preserved
+  exactly"* for continuity with prior results.
+- **`AllocationGovernor` is 29**, and every part of it is named in §7.2: clamp
+  to `[0.05, 0.95]`, rate-limit to `sigma_max`, record proposed and applied
+  separately, accumulate saturation statistics, and the reportability check.
+
+I can find no honest way to reach 59. Cutting to fit would mean dropping the
+governor's dual recording or the saturation statistics, and those are the two
+things §7.2 added *because* checking saturation by hand in the RUNBOOK is a
+check that eventually is not run.
+
+### What `control/` actually releases — measured, and it is less than it looks
+
+**The control layer cannot be retired.** Four arms carry controllers, and they
+split across two claims:
+
+| arms | controller | fate |
+|---|---|---|
+| `hybrid_fixed`, `hybrid_adaptive` | allocation of `aco_fraction` | **move to `allocation/`** |
+| `aco_fixed`, `aco_adaptive` | parameter adaptation of `rho` | **stay** — these are §8's evidence set for Claim 2 |
+
+So `IncrementalController` (27), `NullController` (4), the `Controller`
+protocol (4) and `make_controller` (4) all survive, because Claim 2's arms
+still need parameter adaptation. Only `PrescheduledController` (20) has no
+remaining user once `ScheduledAllocation` exists.
+
+**This is the number I would most have got wrong by assuming.** A restructure
+that "moves the control layer" sounds net-neutral; measured, it releases 20 of
+67 and the rest stays.
+
+## A derived cap, not a picked one
+
+Entry 012 records what happens when a cap is lifted from the state being left
+behind. So this is built forward from what is known:
+
+```
+  current                                        2041
+  allocation/, measured from the full sketch      +103
+  control/ releases PrescheduledController         -20
+  segment 21's arm wiring and observation plumbing +25
+  ----------------------------------------------------
+  projected at the close of Phase 3               2149
+```
+
+**And one thing that is in §7.2 but not in that projection.**
+`LearnedAllocation` — a contextual bandit or tabular Q-learner over
+discretised observations — is a registered policy in §7.2's table, deferred to
+Phase 4 under D7/O2 with mentor sign-off. **It is not in the 2149.** A tabular
+Q-learner with discretisation, an update rule and persistence is not small;
+**60–80 statements** is a fair range for one written to this codebase's
+standards.
+
+```
+  2149 + 80 (LearnedAllocation, if sanctioned)   = 2229
+```
+
+**Proposed cap: 2250.** That is 2229 plus 21, which is not a round-number
+flourish — it is the only slack in the figure, and I would rather state it as
+thin than pad it into something comfortable.
+
+**If `LearnedAllocation` is dropped** — a legitimate outcome, since D7 already
+makes it conditional — then **2200** covers Phase 3 with the same thin margin
+and the arithmetic is `2149 + 51`.
+
+I am not choosing between those. Both are derived; which applies depends on a
+decision about `LearnedAllocation` that is not mine.
+
+## What I did not do
+
+No package, no policies, no governor, no tests, no arm wiring. **`src/` diff
+is empty.** The sketch used for the projection lives in the scratchpad and is
+not in the repository.
+
+F7 is still open. `ScheduledAllocation` is where it dies, and that is on the
+other side of this gate.
+
+## Why I stopped rather than started
+
+The gate said to, and the reasoning in it is right. Segment 12 discovered a
+breach at `702/700` **after** the work was done, and the choice then was
+between deleting something that mattered and asking for a raise under
+pressure. Entry 012's lesson was recorded as *find out before you are
+committed* — and 49 statements over is not a number that gets absorbed by
+being careful.
+
+The measurement cost one sketch. Discovering it at 2098 would have cost a
+segment.
+
+## Two things the Architect may want to weigh
+
+1. **Splitting the segment is possible but I would argue against it.** The
+   observation and policies alone are ~68, which nearly fits — but the
+   governor is what makes proposals *safe*, and shipping policies that can
+   propose anything, with no clamp and no saturation record, is precisely the
+   half-built mechanism this project keeps finding. A half-landed
+   `allocation/` would also leave F7 open for another segment.
+2. **`AllocationObservation` is the only part with no flexibility at all.**
+   If the cap cannot move, the conversation has to be about §7.2's field list
+   — and I would want that decision made explicitly rather than by my trimming
+   fields to fit, since two of them (`own_cost`, `path_invalidated`) exist
+   specifically to replace the oracle-derived `excess_last_step` that violated
+   I1.
+
+---
+
+# FINDINGS — Segment 20, second block (built, after the ruling)
+
+## 1. T0's projection against the actual
+
+| | projected | actual |
+|---|---|---|
+| `allocation/` | +103 | **+114** (+11 over) |
+| `control/` release | −20 | **−20** (exact) |
+| `src/` at this point | 2144 | **2135** |
+
+**`src/` 2135 / 2200.** Against the 2149 projection for the close of Phase 3
+it is **14 under**, because segment 21's +25 wiring is not built yet. The
+defect-repair reserve is intact.
+
+**The +11 overshoot on `allocation/` is docstring-adjacent structure, not scope
+creep:** `__all__` lists in three modules, and the governor's `saturation()`
+gained a fourth statistic — `clipped`, the fraction of steps where the proposal
+was not adopted as asked. That one earns its place: it is the figure the
+applied series alone cannot carry, and §7.2's reason for recording both.
+
+**The `control/` release came in exactly at 20**, which is the number I said
+I would most have got wrong by assuming. Measured, `controllers.py` went 67 →
+47.
+
+**Reporting against both figures from here**, per the ruling's second clause:
+`src/ 2135 / 2200`, of which 2149 is the projected Phase 3 close and 51 is
+defect-repair reserve, and the science surface closes after segment 21.
+
+## 2. I1 — proved, not asserted
+
+The oracle is made genuinely unimportable in a subprocess, and an observation
+is built anyway:
+
+```
+observation built with the oracle unreachable
+```
+
+The blocker is verified to bite before anything relies on it — the test fails
+if `dynaswarm.core.oracle` turns out to be importable, so it cannot pass by the
+block silently not working. Same shape as segment 6's FastAPI boundary, for the
+same reason: *asserting "we did not call it" is not the same as proving it
+cannot be called.*
+
+A second test pins the field list against reintroduction — nothing named
+`excess`, `optimum`, `gap` or `ratio_to_optimal` may appear, and
+`own_cost` / `own_cost_delta` / `path_invalidated` must all be present, since
+they exist precisely because `excess_last_step` had to go.
+
+## 3. I2 — the observation cannot reach forward because it cannot reach
+
+`observe()` fetches nothing. The test greps its source for `state_at`,
+`events_at`, `shortest_path`, `schedule[` and `timeline` and requires all of
+them absent, then asserts that `recency`, `steps_since_disruption` and
+`events_this_step` arrive as **parameters**.
+
+Every value is handed in by a caller that already holds it about `t` or
+earlier, so a field from `t+1` would have to be passed deliberately rather than
+leak in. F1 was this defect one layer down.
+
+## 4. F7 is dead
+
+`PrescheduledController` is **removed**, not deprecated. Nothing in production
+referenced it; `ScheduledAllocation` takes its role.
+
+**Entry 005's bar is the test**, and it targets the defaults rather than the
+capability:
+
+```python
+policy = make_policy("scheduled")            # no arguments, deliberately
+values = [policy.propose(an_observation(t=t)) for t in range(60)]
+assert len(set(values)) > 1, "the default schedule varies nothing — F7 again"
+assert abs(values[-1] - values[0]) > 0.25
+```
+
+Defaults sweep **0.8 → 0.2**. The old class defaulted to `start == end == 1.0`,
+so it varied nothing while logging itself active — and its tests all passed,
+because they constructed it with arguments. *A control that does not vary is
+not a control*, and the test now says so at default construction.
+
+**Its four tests were not deleted.** Their behaviour is asserted against
+`ScheduledAllocation`: ignores everything but `t`, sweeps across its horizon,
+and holds past it. The two that tested the F2/F6 silent-drop guard on `targets`
+have **no counterpart by design** — a policy returns a fraction rather than
+naming parameters, so there is no name to mismatch. That is pinned rather than
+assumed, so reintroducing a name-based interface fails there first.
+
+## 5. The governor
+
+Clamps to `[0.05, 0.95]`, rate-limits to `sigma_max`, records **proposed and
+applied separately**, and reports saturation with a fourth field, `clipped`.
+
+```
+policy asks:  0.9, 0.9, 0.9      sigma_max 0.05, from 0.5
+proposed   :  0.9, 0.9, 0.9
+applied    : 0.55, 0.60, 0.65
+clipped    : 1.0
+```
+
+**The automated reportability check**, §7.2's rule made code rather than a
+RUNBOOK instruction:
+
+| run | moved | at_bound | reportable |
+|---|---|---|---|
+| frozen policy, 30 steps | no | 0.00 | **no** — measured nothing about allocation |
+| policy pinned to a bound | yes | 0.70 | **no** — measured the bound, not the policy |
+| default schedule, 60 steps | yes | 0.00 | **yes** |
+
+The third row matters as much as the first two: a check that never passes is
+not a check.
+
+And a test asserts the policies module mentions neither bound nor
+`sigma_max` — a policy that clamped internally would hide its own saturation,
+and the record would show a well-behaved policy that was in fact pinned.
+
+## 6. Three mutations
+
+**A — specified: the proposed value recorded in the applied column.** Caught by
+three tests. Every run would show a policy never clipped, saturation reading
+zero, and the automated check passing.
+
+**B — mine: `ScheduledAllocation`'s defaults reverted to `start == end`.**
+Caught, and by name:
+
+```
+E  AssertionError: the default schedule varies nothing — F7 again
+```
+
+Honest note: this one only re-proved a test I had just written. It confirmed a
+guard rather than finding a gap.
+
+**C — mine, and this is the one.** The observation reads
+`probe.get("aco_lambda_branch", 0.0)`. I renamed the key to one the Hybrid does
+not emit:
+
+```
+tests/test_allocation.py   24 passed
+tests/test_probes.py       passed
+tests/test_control.py      passed
+```
+
+**Nothing caught it.** The `.get` default takes over, and **every policy sees
+0.0 for colony stagnation and swarm convergence, forever, silently.** Two of
+§7.2's eleven fields become constants, and the thesis runs on them — a rename
+inside ACO would have done it, with no error anywhere.
+
+Now covered by a contract test that asks a **real Hybrid for its real probe**
+and requires every key `observe()` reads to be one that is actually emitted,
+plus that neither value reads as the default when genuine telemetry is present:
+
+```
+E  AssertionError: observe() reads probe keys the Hybrid never emits:
+   ['aco_branching'] — each silently becomes 0.0 for every policy, forever
+```
+
+**Twelve consecutive segments.**
+
+## 7. Acceptance
+
+| Check | Result |
+|---|---|
+| Suite | **467 passed, 0 failed, 0 skipped** |
+| Lint, four trees | `All checks passed!` |
+| `src/` | **2135 / 2200** — 14 under the Phase 3 projection, reserve intact |
+| `allocation/` | 114 |
+| `control/controllers.py` | 47, was 67 |
+| `outputs/` | **26**, unchanged |
+| `tests/test_allocation.py` | **24 passed** |
+| Arms wired | **none**, as specified |
+
+## 8. Is this machine ready to carry the thesis?
+
+**Structurally yes; evidentially not yet, and the gap is precise.**
+
+What it can carry: a policy can now express a non-monotonic, state-dependent
+response, which the ±σ rule structurally could not — so a null result from this
+machine would be a statement about allocation rather than about the rule. The
+observation cannot see the future or the oracle, and both are proved rather
+than promised. Enforcement is in one auditable place, clipping is visible in
+the data, and a run that measured nothing is rejected by code rather than by
+someone remembering to look.
+
+**What it cannot yet carry, and segment 21 must close:**
+
+- **No policy has ever seen a real observation.** Every test here constructs
+  one through `observe()`, which is the production constructor — but nothing
+  has yet built one from a live trial. Mutation C is the warning: the wiring
+  between the optimizers' telemetry and this package is exactly where a silent
+  zero can live, and one of the two links was unchecked until an hour ago
+- **`IncrementalAllocation` reads only `recency`.** It is carried over
+  unchanged for continuity, so eight of the eleven fields are available to it
+  and unused. That is correct for continuity and worth stating plainly, because
+  a reader seeing a structured observation may assume the incumbent policy uses
+  it
+- **The saturation thresholds are §7.2's, and untested against a real run.**
+  20% at a bound is a reasonable-sounding number that no measurement has yet
+  justified — the same shape as the caps this project has twice had to re-derive
