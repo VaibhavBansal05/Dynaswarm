@@ -23,6 +23,7 @@ DISPLAY = {
     "hybrid_fixed": "Fixed / Static Hybrid",
     "hybrid_adaptive": "New Recency-Based Adaptive Hybrid",
     "hybrid_scheduled": "Scheduled Hybrid (open-loop control)",
+    "hybrid_direct": "Direct Recency Hybrid",
     "aco_fixed": "ACO, frozen \u03c1",
     "aco_adaptive": "ACO, adaptive \u03c1",
 }
@@ -111,5 +112,99 @@ def main() -> None:
           f"distinct rho: frozen {len(set(frozen))}, adaptive {len(set(adapt))}")
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# Segment Y — the direct arm
+# ---------------------------------------------------------------------------
+
+
+def _series(arm, seed=1000, events=0.3, steps=60, sigma_max=None):
+    from dynaswarm.config import ControlCfg
+
+    cfg = Config(
+        graph=GRAPH,
+        scenario=ScenarioCfg(name="v", events_per_step=events, timesteps=steps),
+        experiment=ExperimentCfg(arms=[arm], n_trials=1, eval_seeds=[seed]),
+        budget=BudgetCfg(evaluations=300),
+    )
+    if sigma_max is not None:
+        cfg.control = ControlCfg(sigma_max=sigma_max)
+    rows = [r for r in run_trial(cfg, 0, [arm]).steps if r.arm == arm]
+    return rows
+
+
+def _cancellation(values):
+    """Net displacement over total variation. 1.0 = no cancellation."""
+    tv = sum(abs(b - a) for a, b in zip(values, values[1:], strict=False))
+    net = abs(values[-1] - values[0])
+    return net / tv if tv else 0.0
+
+
+def verify_direct() -> None:
+    import statistics as st
+
+    print("\n" + "=" * 78)
+    print(f"5. {DISPLAY['hybrid_direct']}  — segment Y")
+    print("=" * 78)
+
+    rows = _series("hybrid_direct")
+    ev = [r.num_events for r in rows]
+    prop = [dict(r.probe)["alloc_proposed"] for r in rows]
+    appl = [dict(r.probe)["alloc_applied"] for r in rows]
+
+    print("\n  (a) DOES IT RESPOND ON THE STEP THE BREAK LANDS?")
+    hits = [i for i, e in enumerate(ev) if e > 0][:4]
+    print(f"      {'t':>4}{'events':>8}{'recency':>10}{'proposed':>11}{'applied':>10}")
+    for i in hits:
+        for t in (i - 1, i, i + 1):
+            if 0 <= t < len(rows):
+                mark = "  <- break" if t == i else ""
+                print(f"      {t:>4}{ev[t]:>8}{(rows[t].signal_value or 0):>10.3f}"
+                      f"{prop[t]:>11.4f}{appl[t]:>10.4f}{mark}")
+        print()
+
+    print("  (b) DOES THE RESPONSE SCALE WITH SEVERITY?")
+    sizes, moves = [], []
+    for i, e in enumerate(ev):
+        if e > 0:
+            sizes.append(e)
+            moves.append(abs(prop[i] - 0.5))
+    print(f"      distinct disruption sizes in this run: {sorted(set(sizes))}")
+    print(f"      proposed displacement at each: {sorted({round(m, 4) for m in moves})}")
+    if len(set(sizes)) > 1 and len(set(round(m, 9) for m in moves)) == 1:
+        print("      >>> NO. Every disruption produces the SAME displacement.")
+        print("      >>> `recency` reads 1.0 for any n_events > 0, so severity")
+        print("      >>> never reaches the policy. The direct SHAPE cannot fix")
+        print("      >>> a signal that has already discarded the magnitude.")
+
+    print("\n  (c) CANCELLATION — net displacement over total variation")
+    for arm in ("hybrid_adaptive", "hybrid_direct"):
+        r = _series(arm)
+        f = [dict(x.probe)["aco_fraction"] for x in r]
+        pr = [dict(x.probe)["alloc_proposed"] for x in r]
+        print(f"      {DISPLAY[arm]:<34} applied {_cancellation(f):>6.3f}"
+              f"   proposed {_cancellation(pr):>6.3f}")
+    print("      (the incremental arm cancels 84%, i.e. an applied ratio of ~0.16)")
+
+    print("\n  (d) THE GOVERNOR'S CLAMP")
+    gaps = [abs(a - b) for a, b in zip(prop, appl, strict=False)]
+    clamped = sum(1 for g in gaps if g > 1e-12)
+    print(f"      clamped on {clamped}/{len(rows)} steps ({clamped / len(rows):.1%})")
+    print(f"      mean |proposed - applied| = {st.mean(gaps):.4f}, max = {max(gaps):.4f}")
+
+    free = _series("hybrid_direct", sigma_max=1.0)
+    ff = [dict(x.probe)["aco_fraction"] for x in free]
+    fp = [dict(x.probe)["alloc_proposed"] for x in free]
+    print("\n      With the rate limit lifted (sigma_max=1.0), the SAME rule gives:")
+    print(f"      applied range [{min(ff):.3f}, {max(ff):.3f}]  "
+          f"cancellation {_cancellation(ff):.3f}  distinct {len(set(ff))}")
+    print(f"      against the shipped default's [{min(appl):.3f}, {max(appl):.3f}]")
+    print("      The rule is identical in both; only the governor differs.")
+    _ = fp
+
+
 if __name__ == "__main__":
     main()
+    verify_direct()

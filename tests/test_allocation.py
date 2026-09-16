@@ -998,3 +998,163 @@ def test_the_arm_the_harness_builds_carries_the_derived_step_size():
     assert governor_sigma(bumped) != governor_sigma(default), (
         "two different configs produced the same step size"
     )
+
+
+# ---------------------------------------------------------------------------
+# DirectAllocation (segment Y)
+# ---------------------------------------------------------------------------
+
+
+def test_the_direct_split_is_a_pure_function_of_the_observation():
+    """The defining property of the redesign, as one assertion.
+
+    ``IncrementalAllocation`` carries a baseline and a current fraction,
+    so where it goes next depends on where it has been. This one must
+    not: the same observation must produce the same split no matter what
+    the policy has seen before it. That is what makes it unable to drift,
+    unable to thrash, and unable to sit somewhere the current state does
+    not justify.
+    """
+    from dynaswarm.allocation.policies import DirectAllocation
+
+    fresh = DirectAllocation()
+    used = DirectAllocation()
+    # Walk `used` through a history designed to move an integrator a long
+    # way: a burst of damage, then a long calm.
+    for r in [1.0] * 10 + [0.0] * 10:
+        used.propose(an_observation(recency=r, current_fraction=0.2))
+
+    for recency in (0.0, 0.24, 0.5, 0.7, 1.0):
+        # `current_fraction` differs between the two calls as well, to
+        # catch a rule that reads it — reading it is exactly how a direct
+        # policy quietly becomes an incremental one.
+        a = fresh.propose(an_observation(recency=recency, current_fraction=0.5))
+        b = used.propose(an_observation(recency=recency, current_fraction=0.05))
+        assert a == pytest.approx(b), (
+            f"at recency={recency} a fresh policy proposed {a} and a used one "
+            f"{b} — the split depends on history, so this is not a direct rule"
+        )
+
+
+def test_the_direct_split_spans_the_amplitude_and_centres_on_a_half():
+    """The map itself: s=0 buys ACO, s=1 buys PSO, s=0.5 is even."""
+    from dynaswarm.allocation.policies import DirectAllocation
+
+    policy = DirectAllocation()
+    a = policy.amplitude
+    assert policy.propose(an_observation(recency=0.0)) == pytest.approx(0.5 + a / 2)
+    assert policy.propose(an_observation(recency=1.0)) == pytest.approx(0.5 - a / 2)
+    assert policy.propose(an_observation(recency=0.5)) == pytest.approx(0.5)
+
+
+def test_the_direct_amplitude_clears_the_floor_and_the_governor_bounds():
+    """T4's derivation, as the two constraints that are checkable.
+
+    Floor: one full swing must be worth whole evaluations. Ceiling: both
+    ends must sit inside the governor's hard bounds. The third
+    constraint, Reach, is a design judgement recorded in the docstring —
+    it is not asserted here because a test cannot check "meaningfully
+    different searches" without inventing a threshold.
+    """
+    from dynaswarm.allocation.governor import FRACTION_HIGH, FRACTION_LOW
+    from dynaswarm.allocation.policies import DirectAllocation
+    from dynaswarm.config import BudgetCfg
+
+    a = DirectAllocation().amplitude
+    assert a * BudgetCfg().evaluations >= 1.0, (
+        f"a full swing moves {a * BudgetCfg().evaluations:.2f} evaluations; "
+        f"below one it cannot change what is searched"
+    )
+    assert 0.5 + a / 2 <= FRACTION_HIGH
+    assert 0.5 - a / 2 >= FRACTION_LOW
+
+
+def test_the_direct_arm_is_severity_blind_because_recency_is():
+    """**This pins a limitation, not a feature.** Segment Y, T5b.
+
+    The segment commissioned an arm whose response scales with the size
+    of the disruption. It does not, and the reason is upstream of the
+    policy: ``RecencySignal.observe`` sets ``1.0 if obs.n_events > 0``,
+    so one road breaking and a hundred roads breaking are the same
+    reading. A direct *shape* cannot recover a magnitude the *signal*
+    has already discarded.
+
+    The staleness alternative was measured in T1 and is too sparse to
+    substitute — zero on 51 of 63 disrupted steps. So this is asserted as
+    the current, known behaviour: if someone later makes recency carry
+    severity, **this test fails**, and that failure is the reminder to
+    revisit the claim rather than a regression.
+    """
+    from dynaswarm.allocation.policies import DirectAllocation
+    from dynaswarm.control.signals import RecencySignal
+    from dynaswarm.harness.trial import StepObservation
+
+    small, large = RecencySignal(), RecencySignal()
+    small.observe(StepObservation(t=1, n_events=1, n_edges=700, best_cost=10.0, probe={}))
+    large.observe(StepObservation(t=1, n_events=100, n_edges=700, best_cost=10.0, probe={}))
+    assert small.value() == large.value() == 1.0, (
+        "recency now distinguishes disruption sizes — the arm may be "
+        "severity-aware after all, and both this test and "
+        "`DirectAllocation`'s docstring need revisiting"
+    )
+
+    policy = DirectAllocation()
+    assert policy.propose(an_observation(recency=small.value())) == pytest.approx(
+        policy.propose(an_observation(recency=large.value()))
+    )
+
+
+def test_the_governor_clamps_the_direct_arm_and_the_rate_is_recorded():
+    """**The clamp rate is the guarded property, not its absence.**
+
+    Segment Y, T3. ``recency`` jumps a full 0 -> 1 on the step a break
+    lands, so a direct policy with any amplitude large enough to matter
+    asks for a move the governor will not allow: 0.6 against a
+    ``sigma_max`` of 0.05. Measured at 78% of steps across four seeds.
+
+    The spec forbade shrinking the amplitude until the clamp stopped
+    firing, which is the right instruction — that would have hidden a
+    property of the governor inside a constant of the policy. So the
+    clamp is asserted to still be happening, and the day it stops, this
+    test fails and someone has to say which side changed.
+    """
+    from dynaswarm.config import (
+        BudgetCfg,
+        Config,
+        ExperimentCfg,
+        GraphCfg,
+        ScenarioCfg,
+    )
+    from dynaswarm.harness.trial import run_trial
+
+    cfg = Config(
+        graph=GraphCfg(model="geometric", n_nodes=200, density=0.04),
+        scenario=ScenarioCfg(name="clamp", events_per_step=0.3, timesteps=40),
+        experiment=ExperimentCfg(
+            arms=["hybrid_direct"], n_trials=1, eval_seeds=[1000]
+        ),
+        budget=BudgetCfg(evaluations=300),
+    )
+    rows = [r for r in run_trial(cfg, 0, ["hybrid_direct"]).steps]
+    proposed = [dict(r.probe)["alloc_proposed"] for r in rows]
+    applied = [dict(r.probe)["alloc_applied"] for r in rows]
+    clamped = sum(
+        1 for p, a in zip(proposed, applied, strict=False) if abs(p - a) > 1e-12
+    )
+    rate = clamped / len(rows)
+
+    assert rate > 0.5, (
+        f"the governor now clamps the direct arm on only {rate:.0%} of steps. "
+        f"Three things can cause that and they are not interchangeable: "
+        f"`sigma_max` was raised, the amplitude was lowered, or **the arm is "
+        f"wired to a different signal** — the last one produced exactly this "
+        f"failure at 30% when `hybrid_direct` was pointed at `volatility`, "
+        f"because a windowed rate signal does not jump 0->1 the way recency "
+        f"does. Check the signal before touching the governor."
+    )
+    # The rule itself must still be asking for the full swing, or the
+    # clamp above is measuring a policy that has quietly given up.
+    assert max(proposed) - min(proposed) > 0.5, (
+        f"the policy only spans {max(proposed) - min(proposed):.3f}; it is no "
+        f"longer proposing the amplitude it documents"
+    )

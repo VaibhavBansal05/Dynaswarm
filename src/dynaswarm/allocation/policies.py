@@ -21,6 +21,7 @@ from dynaswarm.allocation.observation import AllocationObservation
 
 __all__ = [
     "AllocationPolicy",
+    "DirectAllocation",
     "FrozenAllocation",
     "IncrementalAllocation",
     "ScheduledAllocation",
@@ -234,10 +235,92 @@ class ScheduledAllocation:
 #: ``LearnedAllocation`` is deliberately absent. §7.2 registers it, but
 #: D7 and O2 defer it to Phase 4 and make it conditional on mentor
 #: sign-off, and it carries its own budget conversation.
+
+@dataclass
+class DirectAllocation:
+    """The split is a function of the current signal. No history at all.
+
+    **Why this exists** (Entry 023). ``IncrementalAllocation`` is an
+    *integrator*: it reads only the sign of pressure, discards the
+    magnitude, and accumulates one-bit decisions. That is the right
+    instrument for hunting a setpoint you do not know — the rho problem
+    it was inherited from. Claim 3 asserts the setpoint **is** known:
+    fresh damage means ACO's trails describe a map that is gone, so
+    favour PSO. Both of the incremental rule's measured pathologies fall
+    out of using an integrator anyway — severity-blindness because
+    magnitude was thrown away, and 84% cancellation because integrating
+    an oscillating signal wanders around the middle.
+
+    So::
+
+        split = 0.5 + amplitude * (0.5 - s)
+
+    ``s = 0`` (nothing has happened lately) buys ACO; ``s = 1`` (damage
+    just landed) buys PSO; ``s = 0.5`` is exactly even. It is a pure
+    function of the observation, which is the defining property: it
+    cannot drift, cannot thrash, and cannot be somewhere it should not be
+    because of where it has been.
+
+    **No curvature is applied on purpose.** ``recency`` already decays by
+    x0.7 per quiet step, so a *linear* map on it is already exponential
+    in time. Adding a power or a sigmoid here would make the rule look
+    more sophisticated while changing nothing a reader could justify.
+
+    **Where ``amplitude = 0.6`` comes from (segment Y, T4).** Derived
+    from quantities fixed before any excess figure was looked at, and
+    that ordering is what makes this a derivation rather than a tuning:
+
+    ==========  ====================================================  ======
+    Floor       one full swing must move whole evaluations: 1/budget   0.0033
+    Ceiling     the governor's bounds, 0.5 +/- A/2 inside [0.05,0.95]  0.9
+    Reach       the two ends must be meaningfully different searches   0.6
+    ==========  ====================================================  ======
+
+    Reach is not a taste judgement. ``ScheduledAllocation`` already
+    sweeps 0.8 -> 0.2, so 0.6 makes this arm cover **exactly the span the
+    project's own open-loop control covers**. That matters for the
+    ablation: the scheduled arm exists to kill "any movement helps,
+    sensing is irrelevant", and that comparison is only fair if both arms
+    can reach the same places and differ solely in what drives them.
+
+    **The governor clamps this policy and that is a finding about the
+    governor, not about the rule** (segment Y, T3). ``recency`` jumps a
+    full 0 -> 1 on the step a break lands, measured in every seed and
+    every event rate, so the requested move is ``0.6`` against a
+    ``sigma_max`` of ``0.05`` — clamped by a factor of twelve. The
+    amplitude was **not** shrunk to make the clamp stop firing; see the
+    segment's findings.
+
+    Attributes:
+        amplitude: Full swing of the split, end to end.
+        name: Registry key.
+    """
+
+    amplitude: float = 0.6
+    name: str = "direct"
+
+    def propose(self, obs: AllocationObservation) -> float:
+        # `recency`, and nothing else. No baseline, no accumulator, no
+        # previous fraction — `obs.current_fraction` is deliberately NOT
+        # read, because reading it is how a direct rule quietly becomes
+        # an incremental one.
+        return 0.5 + self.amplitude * (0.5 - obs.recency)
+
+    def reset(self) -> None:
+        """Nothing to reset. Stated rather than omitted.
+
+        A no-op here is the point of the design: there is no state that
+        could survive a reset and no way for one trial to influence the
+        next through this object.
+        """
+        return
+
+
 POLICIES = {
     "frozen": FrozenAllocation,
     "incremental": IncrementalAllocation,
     "scheduled": ScheduledAllocation,
+    "direct": DirectAllocation,
 }
 
 

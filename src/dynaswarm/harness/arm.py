@@ -156,6 +156,16 @@ ARM_BUILDERS: dict[str, ArmSpec] = {
         signal="recency",
         policy="scheduled",
     ),
+    # The rule the problem calls for (segment Y). Same family, same
+    # signal, same starting split as the incremental arm — the ONLY
+    # difference is the shape of the response, which is what makes a gap
+    # between the two attributable to that and nothing else.
+    "hybrid_direct": ArmSpec(
+        family="hybrid_controlled",
+        build=lambda view, s, t, rng: Hybrid(view, s, t, rng),
+        signal="recency",
+        policy="direct",
+    ),
 }
 
 

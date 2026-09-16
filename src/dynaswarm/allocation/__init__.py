@@ -14,6 +14,7 @@ from dynaswarm.allocation.observation import AllocationObservation, observe
 from dynaswarm.allocation.policies import (
     POLICIES,
     AllocationPolicy,
+    DirectAllocation,
     FrozenAllocation,
     IncrementalAllocation,
     ScheduledAllocation,
@@ -21,6 +22,7 @@ from dynaswarm.allocation.policies import (
 )
 
 __all__ = [
+    "DirectAllocation",
     "AllocationGovernor",
     "AllocationObservation",
     "AllocationPolicy",

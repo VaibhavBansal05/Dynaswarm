@@ -53,6 +53,12 @@ MECHANISMS: list[tuple[str, str, str, str]] = [
     ("aco", "tau_clamped", "slots the MAX-MIN clip actually moved", "0 — bounds removed"),
     ("aco", "tau_ratio", "strongest trail over weakest", "1.0 — no spread"),
     ("aco", "lambda_branch", "competitive arcs per visited node", "1.0 — fully converged"),
+    # Measured in `rebind`, before the trails are zeroed. Reads 0.00 on a
+    # step where nothing broke AND on a step where plenty broke but none
+    # of it carried pheromone — those are different facts and this figure
+    # cannot tell them apart on its own. Read it beside `num_events`.
+    ("aco", "trail_mass_lost", "share of trail mass that died this step",
+     "0.00 — nothing the colony knew was invalidated"),
     ("pso", "particles_flown", "particles the flight step displaced", "0 — swarm frozen"),
     ("pso", "particles_repaired", "particles moved by repair instead", "0 — repair silent"),
     ("pso", "speed_mean", "mean |velocity| across the swarm", "unchanged from random init"),

@@ -107,12 +107,24 @@ class ACO:
 
         n_slots = view.topology.n_slots
         self._tau = np.full(n_slots, 1.0, dtype=np.float64)
+        # Inactive slots start at zero, not at 1.0. They were never
+        # reachable — construction is masked by `active` — so this changes
+        # no search behaviour, and `rebind` would zero them on the first
+        # step regardless. It matters because it makes "mass on an
+        # inactive slot" mean *mass that died this step* at every step
+        # including the first. Without it the opening rebind reports the
+        # initial inactive fraction (measured: 0.50) as damage.
+        self._tau[~np.asarray(view.active)] = 0.0
         self._eta = np.zeros(n_slots, dtype=np.float64)
         self._visits = np.zeros(view.n_nodes, dtype=np.float64)
         self._best: Solution | None = None
         self._iterations = 0
         self._tau_before = self._tau.copy()
         self._mech = dict.fromkeys(("evaporated", "deposited", "clamped"), 0.0)
+        #: Set in `rebind`, NOT in `_mech` — `spend` resets `_mech`
+        #: wholesale and runs after `rebind`, so a value parked there
+        #: would be zeroed before anything could read it.
+        self._trail_mass_lost = 0.0
         self._goal_cost = self._compute_goal_cost()
         self._refresh_visibility()
 
@@ -129,7 +141,17 @@ class ACO:
         # A trail on a slot that has gone inactive is meaningless; zeroing
         # it now avoids resurrecting a stale preference if the edge later
         # reopens with a quite different weight.
-        self._tau[~np.asarray(view.active)] = 0.0
+        #
+        # The mass about to be zeroed is *this step's* loss and not a
+        # running total, because a slot deactivated on an earlier step was
+        # already set to 0 here and the MAX--MIN clip is `where=active`,
+        # so nothing puts it back. That is what makes this one subtraction
+        # rather than a remembered previous mask.
+        dead = np.asarray(view.active)
+        total = float(self._tau.sum())
+        lost = float(self._tau[~dead].sum())
+        self._trail_mass_lost = lost / total if total > 0.0 else 0.0
+        self._tau[~dead] = 0.0
         self._sync_lists(structure=True)
         self._revalidate_best()
 
@@ -227,6 +249,7 @@ class ACO:
             "tau_evaporated": self._mech["evaporated"],
             "tau_deposited": self._mech["deposited"],
             "tau_clamped": self._mech["clamped"],
+            "trail_mass_lost": self._trail_mass_lost,
         }
 
     def reset_learned_state(self, strength: float) -> None:
