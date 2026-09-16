@@ -535,7 +535,9 @@ For each: read the prediction, decide whether you agree, then do it.
 
 Set the disruption preset to **Calm** and Race.
 
-**Predict:** the optimum is identical at every step. Every arm's excess settles and stops moving. The ledger never changes. "Broke this step" is 0 for all sixty steps.
+**Predict:** the optimum is identical at every step. The ledger never changes. "Broke this step" is 0 for all sixty steps. A\*, ACO and PSO each settle on one excess value and hold it.
+
+**The Hybrid is the exception, and it is not a fault.** It was still improving at t=59 when this was measured (2.06% at t=40, 0.96% at t=59). It has two components and an exchange between them, so it keeps finding small improvements long after the single-method arms have stopped. This clause used to read "every arm's excess settles and stops moving", which would have had you report a working Hybrid as broken — corrected in segment X, where the document was wrong rather than the code.
 
 **If instead** the optimum moves, something is generating events when it should not.
 
@@ -661,9 +663,23 @@ Crucially the check is against **the engine's count**, not the ledger's own sum.
 | **name** | the display name — *A\**, *ACO standalone*, *PSO standalone*, *Hybrid (baseline)* | never a code id like `erdos_renyi` |
 | **cost** | this arm's current best route cost | A\*'s **must equal the headline `best route` exactly** |
 | **hops** | roads in that route | |
-| **+%** | excess — how much worse than perfect | A\* `+0.0%` always · ACO and Hybrid low single digits · PSO higher |
+| **+%** | excess — how much worse than perfect | A\* `+0.0%` always · the others **vary enormously by seed** — see below |
 
 **A\* at anything other than `+0.0%` is impossible by construction.** If you ever see it, the measurement is broken, not the algorithm.
+
+> **Corrected in segment X — the document was wrong here, not the code.** This row used to say "ACO and Hybrid low single digits · PSO higher". That is true of **seed 1000 and of no other seed tested.** Measured on the moderate preset, 40 steps, mean excess:
+>
+> | seed | ACO | PSO | Hybrid |
+> |---|---|---|---|
+> | 1000 | 2.93% | 38.26% | 0.52% |
+> | 1001 | 8.06% | 13.29% | 8.19% |
+> | 7 | 18.98% | 11.05% | 10.91% |
+> | 42 | 28.84% | 11.67% | 18.26% |
+> | 9999 | 13.76% | 19.98% | 22.50% |
+>
+> Two things the old row got wrong. "Low single digits" holds for the Hybrid in **two of five** seeds. And **PSO is not reliably the worst** — at seeds 7 and 42 it beats ACO comfortably.
+>
+> **So do not treat a high ACO or Hybrid number as a fault.** Between-seed variation is larger than any difference between the arms, which is exactly why the project commits to ≥100 trials (D5, D9) rather than reading one run. The only value on this page you may treat as a hard invariant is A\*'s `+0.0%`.
 
 ## The trust report — what each row means
 

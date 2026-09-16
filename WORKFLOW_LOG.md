@@ -2036,3 +2036,131 @@ Phase 3 is done. The machine is connected to a trial, every arm demonstrably doe
 Segment X runs the automatable half of `WALKTHROUGH.md` and settles the sigma floor by measurement. Segment 22 is Rudra, by hand.
 
 ---
+
+---
+
+## Entry 023 — Segment X complete: the walkthrough found three defects the tests could not
+
+**Verified 16 Sept 2026.** 486 Python tests (from 476), 52 JS (from 50), `src/` 2167 statements against no ceiling, ruff clean. Both FINDINGS passes appended and archived to `findings/segment-X.md`.
+
+**Phase 3 and its verification pass are closed.**
+
+### The headline: the dashboard's seed box never reached the race
+
+`trial.py:135` builds the graph from the per-trial evaluation seed. `race_config` never passed `spec.graph.seed` to anything. **Every race in this project's history ran the same world regardless of what was typed into the seed box.**
+
+What kept it invisible is worth recording, because it is the exact shape of defect this project keeps producing: **the displayed world honoured the seed and only the raced one didn't.** Change the seed, the picture changes, the optimum in the header changes — everything a human checks responds correctly. The only thing that didn't respond was the part nobody could see.
+
+Beside it, a second one that hid the first. `read_run` derived `graph_id` from `root_seed` (42) while the graph came from the evaluation seed (1000), so the provenance caption named a world nobody raced — printed next to a **correct** `seed` field. Two halves of one provenance line disagreeing, neither wrong on its own.
+
+**Impact on the evidence: none.** Dashboard races are stamped `exploratory` and cannot become results — the `run_class` guard was built for precisely this and it held. Every affected run is a scratch run. That is the first time that guard has been load-bearing rather than theoretical, and it is worth saying so in the report.
+
+**Standing rule, new:** *a control is not wired until the thing it controls is measured downstream.* A parameter that visibly changes the display proves only that the display reads it.
+
+### `extra="forbid"` paid for itself inside the same segment
+
+I ruled this fixed now rather than deferred with Q3. Two returns, immediately:
+
+vClaude reached defect 1 only **because** `RaceSpec(seed=2024)` was silently dropped — it nearly filed exercise 3 as a system fault before re-reading its own request. The uncommissioned mistake found the real defect again. That is now so consistent across segments that it should be named in the report's methodology section rather than treated as luck.
+
+And forbidding extras **immediately found a live bug in vClaude's own segment 21 test**, which had been running 60 timesteps while its argument said 25. Noted for the record: segment 21's T3 arm series were produced at the horizon the code used, not the one the spec named. The conclusions are unaffected — all four arms still show their distinct shapes — but the horizon in that artefact is 60, not 25, and the report must not quote 25.
+
+### My statistics challenge was wrong, and the work was right
+
+I read *"0.37 paired SD"* as a standard deviation of 0.37 and flagged it as internally inconsistent with a zero-crossing interval and 4/6 wins. It means the effect is **0.37 standard deviations**. My mistake, not vClaude's.
+
+The underlying analysis is correct and complete:
+
+```
+paired differences (fixed − adaptive), pp:
+  [1.019, 2.782, 3.169, −0.207, −2.678, 0.636]
+  n=6   mean +0.787pp   paired SD 2.132   SE 0.870   t +0.90
+  95% CI [−1.451, +3.024]   crosses zero
+  wins 4/6
+  wrong denominator (SD of levels):      4.110pp
+  right denominator (SD of differences): 2.132pp
+```
+
+Every figure checks. The conclusion — undetermined, not "inside the noise" — is right, and reached on the correct denominator after I challenged the wrong one.
+
+### Seed count for segment 23, ruled
+
+From a paired SD of 2.132pp and an observed effect of +0.787pp: **58 seeds for 80% power, 78 for 90%.** D5/D9's planned ≥100 trials clears both, and T7's timing says the whole research-tier run is ~20 minutes single-threaded. **Cost is not a constraint here — so run the planned 100 and do not trim it.**
+
+One caveat that must reach the report rather than being lost in the arithmetic. **That calculation treats the observed +0.787pp as the true effect, and an observed effect from six non-significant pairs is a noisy estimate that typically runs high.** If the true difference is half this, 100 seeds is underpowered by a factor of two.
+
+Which is fine, and the honest framing is this: **100 seeds produces a publishable statement either way.** If the adaptive arm wins, it wins with adequate power for an effect of this size. If it does not, the run establishes an **upper bound** on how large the effect can be — and a bound is a result. What must not happen is the run coming back null and being written up as though the design had been powered for any effect at all.
+
+### Three wrong predictions in `WALKTHROUGH.md`, all mine, all one cause
+
+Exercise 7's "drifts back during calm"; Part 11's per-arm table claiming PSO is reliably worst (false at seeds 7 and 42) and the Hybrid reliably in low single digits (holds in two of five); exercise 1's "every arm settles" (the Hybrid is still improving at t=59, because it has an exchange the single-method arms don't).
+
+**All three were generalised from seed 1000.** I wrote 843 lines of verification document from a single world and stated single-world behaviour as system behaviour. Every one of them would have had Rudra reporting a correct system as broken during his manual pass.
+
+**Standing rule, new:** *a claim about system behaviour written from one seed is a claim about that seed.* Verification documents are held to the same evidence standard as the code they verify.
+
+### The judgement call I want on record
+
+vClaude's two scripts disagreed on the **sign** of the calm-step drift — −0.000800 against +0.000383. It traced the disagreement to horizon (40 steps against 60) before writing anything, and then wrote a prediction that claims only what survives both: the disrupted step is −0.006000 in all eight runs, the net is always negative, and **calm direction is explicitly marked not-meaningful** with only its magnitude (4–16× smaller) claimed.
+
+That is exactly right, and it closes a thread I left open two days ago: I said I could not tell from a mean whether individual quiet steps reverse. The answer is that the sign is not stable across horizons, so **no claim about it belongs in the document at all.** Recording what is stable and naming what isn't is a better outcome than either number would have been.
+
+### T7, and one finding that belongs in the report
+
+Nineteen combinations, no crashes, no wrong answers, no confident nonsense. The sparse case the document names as the invention risk came back honest: **ACO reports no route on 10 of 10 steps while A\* proves one exists.** That is the correct behaviour — it declines rather than inventing — but it is also a real limitation of ACO on sparse graphs and belongs in the report as one, not buried as a passed test.
+
+Timing for Phase 4: 1.9s at medium200/60 steps · 11.7s at large1000 · 16.5s at medium200/severe/500.
+
+### Where Claim 3 stands
+
+**Arguable in either direction, which it was not before.** At the old step size there was no measurement to interrogate — absent evidence, not weak evidence. Routes now differ on 32 of 60 steps, so the allocation reaches the search.
+
+Two caveats carried forward from FINDINGS, both of which must appear in the report:
+
+1. **The recency correlation cannot distinguish the thesis from its null.** Correlation reads direction and is blind to magnitude — it scored *stronger* under a mutation that broke the policy.
+2. **84% of the movement still cancels.**
+
+### The ruling that sets the next segment
+
+The second caveat is not a tuning problem. It is a statement that the rule is the wrong shape for the job.
+
+`IncrementalAllocation` is an **integrator**: it accumulates one-bit decisions, using only the *sign* of pressure and discarding its magnitude. Integrators are correct when hunting a setpoint you do not know — which is exactly the ρ situation Claim 2 came from, and exactly where this rule was inherited from. But **Claim 3 asserts that the setpoint is known**: fresh damage means the trails are stale, so favour PSO. An integrator is solving a problem this thesis does not have, and its two measured pathologies both follow directly — severity-blindness from discarding magnitude, and 84% cancellation from integrating an oscillating signal.
+
+**A second allocation policy is commissioned, and the incremental arm stays.** The justification is on the record and predates any outcome comparison: severity-blind (measured segment X), 84% cancellation (measured segment X), inherited rather than designed (its own docstring). None of it is "it did not win."
+
+Keeping both makes the design stronger rather than hedged. Claim 2 adapted ρ with an integrator; the incremental allocation arm holds that rule form constant while changing only the target, which isolates **what** is adapted. The new arm then isolates **how** it responds. Four arms, each killing one alternative explanation:
+
+| Arm | Kills the objection |
+|---|---|
+| `hybrid_fixed` | "the hybrid is just good" |
+| `hybrid_scheduled` | "any movement helps, sensing is irrelevant" — **the one a viva goes for** |
+| `hybrid_adaptive` | "you changed two things at once" |
+| the new arm | "the response shape doesn't matter" |
+
+### And the design question the new segment must answer first
+
+Rudra's proposal was a direct proportional map on recency. That is right about the *form* and I think incomplete about the *signal*, so the segment branches on a measurement rather than on either of our preferences.
+
+**Recency is a proxy for the quantity the principle actually names.** The principle is that ACO's pheromone describes a map that is gone. What matters is **how much of ACO's knowledge was invalidated** — and recency does not measure that, it measures elapsed time and assumes damage scales with freshness. Twenty-five roads breaking where ACO laid no pheromone invalidates nothing; three roads breaking on the current best path, where the trail is thickest, invalidates a great deal. Recency scores both 1.00.
+
+That quantity is measurable and is not oracle-derived. Segment 21 established that ACO's `rebind` zeroes trails **only on newly-inactive slots** — it already visits exactly the stale edges and already holds their pheromone. The fraction of trail mass that just died is available where it is already being computed.
+
+Its cost is that it couples the allocator to one component's internals, where the observation is currently component-agnostic. That is a real architectural price and the segment must name it rather than absorb it.
+
+**So the segment measures what the staleness signal costs before choosing.** Cheap → build on staleness. Expensive plumbing → build on recency and name staleness as the extension. The design follows the measurement, which is the same discipline that settled `sigma`.
+
+One correction to my own earlier framing, since it under-rated the simpler option: **a linear map on recency is already exponential in time**, because recency itself decays by ×0.7 per step. The shape of the simple map is right. Its only deficiency is that recency cannot report magnitude.
+
+### The trap the segment must check before choosing an amplitude
+
+The governor rate-limits. A direct policy's entire purpose is to jump hard on the step a break lands. **If that jump exceeds the rate limit, the governor clamps it and silently converts the direct policy back into a slow one — while every instrument continues to read the request rather than the result.**
+
+That is the `sigma` defect exactly, one layer up, and it is the single most likely way this segment produces a null result that means nothing. It gets measured before the amplitude is chosen.
+
+### Close
+
+Segment X did what it was for: running the manual found three defects that 476 tests did not, and two of them were in the instrument rather than the engine.
+
+Next is the allocation rule. Then segment 22 — Rudra by hand, including the six sequence-robustness checks that need a driven browser — then 23, and the arm set freezes.
+
+---
