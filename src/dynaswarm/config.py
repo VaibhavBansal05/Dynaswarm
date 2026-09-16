@@ -211,6 +211,15 @@ class ControlCfg:
     #: evidence set, these are Claim 3.
     sigma_max: float = 0.05
     initial_fraction: float = 0.5
+    #: The allocation policy's step size.  **Deliberately NOT `sigma`
+    #: above.** `sigma` feeds `IncrementalController`, which adapts rho
+    #: for `aco_adaptive` — Claim 2's settled evidence set (§8) — and rho
+    #: is a continuous parameter with no quantum, so 0.001 remains right
+    #: for it. This one steps a split of a discrete budget and is derived
+    #: from that budget (segment X, T1; see `IncrementalAllocation`).
+    #: Raising one to fix the other would have moved Claim 2's evidence
+    #: to fix Claim 3's.
+    allocation_sigma: float = 0.006
 
 
 @dataclass

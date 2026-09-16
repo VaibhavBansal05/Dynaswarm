@@ -1269,14 +1269,27 @@ def test_no_panel_shows_a_field_the_run_does_not_record(tmp_path):
 
 
 def test_the_allocation_view_is_a_labelled_gap_not_a_drawing(tmp_path):
-    """T8: reserved for Phase 3, and here is the measurement behind it.
+    """Plain `hybrid` holds one split all run, and that is why.
 
-    The bar shows `aco_fraction` moving as disruption lands. On the
-    uncontrolled hybrid it does not move: F7 leaves the prescheduled
-    controller built with no arguments, so it varies nothing while
-    logging itself active. A bar drawn today would be a flat line at 50%
-    presented as the project's novelty — F5's failure mode installed in
-    the one widget the thesis rests on.
+    **The reason in this docstring was wrong until segment X.** It said
+    the fraction was pinned because "F7 leaves the prescheduled
+    controller built with no arguments" — but F7 was closed in segment 20
+    and the class deleted, so the docstring was telling its next reader
+    that a closed defect was live. The assertion it guards was still
+    correct, for a different reason, which is the worst case: right
+    answer, retired explanation, no failure anywhere. Same family as
+    `model.js` claiming a test that never existed.
+
+    **The true reason:** `hybrid` is the plain baseline. It carries no
+    signal, no controller and no governor (§9), so nothing in the system
+    is able to move its `aco_fraction`. It is not a controlled arm whose
+    controller is broken; it is an arm with no allocation machinery at
+    all, and its flat line is the correct output rather than a symptom.
+
+    That distinction is the whole point of keeping it: `hybrid` pinned at
+    one value is the floor against which `hybrid_adaptive` moving is
+    evidence. If this ever fails, an arm that is supposed to have no
+    allocation policy has acquired one.
     """
     server = pytest.importorskip("dashboard.server")
     started = server.race(server.RaceSpec(arms=["hybrid"], evaluations=120), root=tmp_path)
@@ -1288,23 +1301,21 @@ def test_the_allocation_view_is_a_labelled_gap_not_a_drawing(tmp_path):
     }
     assert fractions, "hybrid did not record aco_fraction at all"
     assert len(fractions) == 1, (
-        f"aco_fraction now moves ({sorted(fractions)}) — the allocation view "
-        "can be built, and this test is the reminder to build it"
+        f"plain `hybrid` moved its split ({sorted(fractions)}). It has no "
+        f"signal, controller or governor, so nothing should be able to — "
+        f"either it has been given allocation machinery it must not have, "
+        f"or a governed arm's state is leaking into it"
     )
 
-    # This test used to end by asserting the slot still said "Phase 3",
-    # and described itself as "the reminder to build it". It has been
-    # built, so the reminder becomes a check that what replaced it is
-    # wired to real data rather than drawn.
+    # The view's own correctness is NOT asserted here any more. This used
+    # to end with `assert "arm.allocation.searched[t]" in app` — a
+    # substring search of app.js, which passes on a comment, on dead code,
+    # or on a function nobody calls. It now lives in tests/js/app.test.mjs
+    # as a render assertion that drives the real page and reads the width
+    # the bar actually draws ("the allocation bar, rendered"), and it was
+    # shown failing with `applied` substituted for `searched`.
     markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
     assert "alloc-body" in markup, "the allocation view is gone from the markup"
-    app = (ROOT / "dashboard" / "static" / "app.js").read_text()
-    assert "arm.allocation.searched[t]" in app, (
-        "the per-step bar no longer reads the recorded `searched` series — "
-        "if it has gone back to `applied`, it is drawing the decision taken "
-        "at the END of this step as though the step had searched with it, "
-        "which is F1's off-by-one in the view layer"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1360,3 +1371,75 @@ def test_arm_colours_stay_distinguishable_in_greyscale():
         "every arm is about as bright as every other; the spread is what "
         "makes the greyscale guarantee mean anything"
     )
+
+
+# ---------------------------------------------------------------------------
+# The seed box must reach the race (segment X, T4 exercise 3)
+# ---------------------------------------------------------------------------
+#
+# WALKTHROUGH Part 10 exercise 3 says a different seed gives "completely
+# different map, completely different breaks, different numbers throughout".
+# It did not. Every race ran on the same world whatever was typed, because
+# `race_config` never passed the seed anywhere the graph build could see it
+# — `trial.py:135` builds from the per-trial eval seed, and that was left at
+# its default. The page's own reference card promises "One seed, one run."
+
+
+def test_the_dashboard_seed_actually_changes_the_raced_world(tmp_path):
+    """Two seeds must give two worlds, in the numbers and not just the map.
+
+    Asserted on `optimum`, which is A*'s exact answer for the world the
+    arms actually ran on. A graph id that differs proves only that the id
+    is a function of the seed; `optimum` differing proves the search saw a
+    different graph.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    def raced_optimum(seed: int) -> float:
+        started = server.race(
+            server.RaceSpec(
+                arms=["astar"], evaluations=120,
+                graph=server.GraphSpec(seed=seed),
+                scenario=server.ScenarioSpec(events_per_step=0.0, timesteps=4),
+            ),
+            root=tmp_path,
+        )
+        frame = load_steps(started["path"], run_class=None)
+        return float(frame["optimum"].iloc[0])
+
+    first, second = raced_optimum(1000), raced_optimum(2024)
+    assert first != second, (
+        f"seeds 1000 and 2024 both raced a world with optimum {first} — the "
+        f"seed control does not reach the race, so every run on the "
+        f"dashboard is the same world with a different label"
+    )
+    assert raced_optimum(1000) == first, "the same seed gave two worlds"
+
+
+def test_the_reported_graph_id_names_the_world_that_was_raced(tmp_path):
+    """Provenance that is confidently wrong is worse than none.
+
+    `graph_id` was derived from `root_seed` while the graph was built from
+    the eval seed — 42 against 1000 at the defaults. The caption printed
+    it beside a correct `seed` field, so the two halves of one provenance
+    line disagreed and neither looked wrong on its own.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    started = server.race(
+        server.RaceSpec(
+            arms=["astar"], evaluations=120,
+            graph=server.GraphSpec(seed=1000),
+            scenario=server.ScenarioSpec(events_per_step=0.0, timesteps=4),
+        ),
+        root=tmp_path,
+    )
+    payload = server.read_run(started["run_id"], root=tmp_path)
+    displayed = server.build_world(server.GraphSpec(seed=1000))
+
+    assert payload["graph_id"] == displayed["graph_id"], (
+        f"the run reports graph {payload['graph_id']} but the world built "
+        f"from the same seed is {displayed['graph_id']} — the caption names "
+        f"a graph nobody raced"
+    )
+    assert payload["seed"] == 1000, "the recorded seed is not the one asked for"

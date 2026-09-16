@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from inspect import signature
 
 import numpy as np
 
 from dynaswarm.allocation.governor import AllocationGovernor
-from dynaswarm.allocation.policies import make_policy
+from dynaswarm.allocation.policies import POLICIES, make_policy
 from dynaswarm.config import ControlCfg
 from dynaswarm.control.controllers import (
     Controller,
@@ -238,8 +239,17 @@ def _make_governor(spec: ArmSpec, control: ControlCfg) -> AllocationGovernor | N
     """
     if spec.policy is None:
         return None
+    # `allocation_sigma`, not `sigma`: the latter belongs to the rho
+    # controller and Claim 2. Asked of the policy rather than matched
+    # against a list of names — `frozen` has no step size by definition
+    # and `scheduled` sets its own from its endpoints, and a hardcoded
+    # name list would silently stop covering the next policy added.
+    accepts = signature(POLICIES[spec.policy]).parameters
+    kwargs = (
+        {"sigma": control.allocation_sigma} if "sigma" in accepts else {}
+    )
     return AllocationGovernor(
-        policy=make_policy(spec.policy),
+        policy=make_policy(spec.policy, **kwargs),
         sigma_max=control.sigma_max,
         fraction=control.initial_fraction,
     )

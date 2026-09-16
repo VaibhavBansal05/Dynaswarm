@@ -1905,3 +1905,134 @@ All three become tasks in segment 21.
 ### Close
 
 The machine exists and has been proved in isolation. **Nothing has yet connected it to a trial**, which is both the honest statement of where this stands and segment 21's entire job.
+
+---
+
+## Entry 022 — Segment 21 complete: the thesis runs, and its step size is below its own resolution
+
+**Verified off the repository, 15 Sept 2026.** 476 Python tests, 50 JS, ruff clean, `src/` at 2163 statements reported against no ceiling. FINDINGS appended. The code landed in `4e4b6ad`, committed by Rudra — **the commit is labelled "segment 22" and contains segment 21.** Not worth amending; recorded here so the log and the history can be reconciled by whoever reads them next.
+
+**This closes Phase 3.**
+
+### What the segment actually established
+
+The causal chain the project asserts — disruption → recency → reallocation — is now observed end to end on a live trial rather than argued. Four arms, four distinct shapes:
+
+| Arm | Distinct splits | What it proves |
+|---|---|---|
+| `hybrid_fixed` | **1**, all exactly 0.5 | the ablation twin is genuinely pinned |
+| `hybrid_adaptive` | 17 | moves, and moves **with** recency at **−0.776**, 7.5× more strongly on a disruption step than a quiet one |
+| `hybrid_scheduled` | 40 | byte-identical in a violent world and a calm one — open-loop, as named |
+| `aco_fixed` / `aco_adaptive` | ρ: 1 vs 28 | Claim 2's evidence pair still separates |
+
+An effect found against this set can be attributed. That is what Phase 3 was for.
+
+### The finding that matters most: sigma is below the resolution of what it controls
+
+vClaude's read — *"the mechanism works and is too small to carry Claim 3"* — is correct, and understates it. I take it further, and the arithmetic is checkable:
+
+The hybrid splits a budget of **300 evaluations**. A split of 0.5 is 150/150. `IncrementalAllocation.sigma = 0.001` moves the declared fraction by 0.001, which is **0.3 of one evaluation.** The realised split cannot move by a third of an evaluation. It moves by zero, or by one, and one costs three consecutive adaptation steps.
+
+**The minimum step that can change any actual work is `1 / budget` = 0.0033.** `sigma` is set to less than a third of that.
+
+This is not "a small effect". It is a mechanism operating **below the quantisation of the thing it controls**, and it explains the observation vClaude reported without connecting it: the split travelled 0.06 over 60 steps and **all three hybrids finished at +0.0% excess with identical routes.** Identical routes is what you get when the allocation never actually changed the search.
+
+`sigma = 0.001` was inherited from `IncrementalController`, where it nudged **ρ on [0,1] over a whole tuning run** — a continuous parameter with no quantum. Carried across to a split of a discrete budget over 60 steps, it became a no-op. Nobody chose it for this job; it was chosen for a different one and survived the restructure because keeping it constant was the honest thing to do *for comparability*, which vClaude correctly says.
+
+**Standing rule, new — and CORRECTED on 16 Sept by segment X's measurement. Read the correction, not the original.**
+
+*Original, as written:* "A step size is only meaningful above the resolution of the quantity it steps. A controller whose increment is smaller than one unit of the work it allocates is **provably inert** regardless of what its telemetry shows."
+
+**"Inert" is wrong, and the error is mine.** Segment X T1a measured it: at budget 300, with `sigma` below the floor, the realised split still took 6 distinct values, followed 15 of 57 requested moves, and travelled 15 evaluations (150 → 147). It degraded; it did not stop.
+
+I confused the **step** with the **level**. `sigma` is the size of an increment, but what the budget quantises is the resulting *position*. A run of sub-quantum increments accumulates, and the accumulation does cross integer boundaries — just coarsely, and on its own schedule rather than the policy's.
+
+**The rule, corrected:** *A step below the resolution of what it controls does not disable the controller — it silently replaces it with a coarser one.* The requested trajectory and the realised trajectory diverge in resolution while both remain live, and every instrument reading the requested one continues to report a healthy mechanism. That is the real danger, and it is worse than inertness, because inertness would eventually show up as a flat line.
+
+**Confirmed, though: the budget-dependence is exact.** At 1000 and 2000 evaluations, where 0.001 sits at or above `1/budget`, realised tracked declared on 57 of 57 moves. The mechanism of the explanation holds; only my conclusion from it was overstated.
+
+### Ruling on Q1 — sigma is chosen before the evidence run, and derived, not swept
+
+Not Phase 4's job. Claim 3 is argued **from** the evidence run; running it at a provably inert step size produces a null result that reads as a refutation of the thesis rather than of the number.
+
+But it must not be swept-and-picked either. Trying values and keeping the one that wins is tuning to the outcome — the exact practice Claim 2 says does not generalise, and the practice this project's credibility rests on not doing. **So: derive it, from quantities fixed before any result is seen, and record the derivation.**
+
+Three constraints, all known in advance:
+
+| Constraint | Source | Value |
+|---|---|---|
+| **Floor** | one adaptation step must move ≥ 1 evaluation | `1/budget` = **0.0033** |
+| **Ceiling** | the governor's rate limit, above which the declared step is not the applied step | `sigma_max` = **0.05** |
+| **Reach** | over the ~37 of 60 steps the policy actually moves, it must be able to cover half the distance to a bound (0.225) | 0.225 / 37 ≈ **0.006** |
+
+**0.006 satisfies all three**: ~2 evaluations per step, an order of magnitude under the rate limit, and half-way-to-bound within one scenario.
+
+I am not ruling 0.006 into the code from a chair. **Segment X measures the floor first** — declared `aco_fraction` against realised `aco_spent`/`pso_spent`, which `hybrid.py:140-152` already reports separately for exactly this kind of question. If a 0.001 step provably fails to change realised spend, the floor is demonstrated rather than asserted, and `sigma` is then set from a measurement. If it *does* change spend, my arithmetic is wrong and I want to know before the value moves.
+
+### Ruling on the three replaced tests — two approved, one sent back
+
+vClaude asked me to check all three. Correct instinct: rewriting a guard to match code you just wrote is the one edit an author cannot review.
+
+**Approved — `test_a_hybrid_never_reports_a_controller_it_does_not_have`.** Stronger than what it replaced, and correctly so. The old test proved a bad configuration was rejected; this proves the arm's record of itself is true. Replacing a retired *mechanism* with the *danger* it guarded is the right move and I want it stated as the pattern.
+
+**Approved — `test_the_recorded_split_is_what_the_step_searched_with_not_the_next_one`.** This is the segment's best work. It asserts a relationship between consecutive rows because no single row can be wrong alone, **and** it guards itself against its own tautology twice: `len(set(applied)) > 1` refuses to run on data where the two series cannot be told apart, and the second assertion refuses to pass if `aco_fraction` and `alloc_applied` are the same column written twice. Both of those are my own standing rules applied unprompted, to a test vClaude wrote itself. Noted.
+
+**Sent back — `test_the_allocation_view_is_a_labelled_gap_not_a_drawing`.** Three defects, all small, all the same family as the one vClaude caught in `model.js`:
+
+1. **Its docstring asserts F7 as a live cause.** *"F7 leaves the prescheduled controller built with no arguments, so it varies nothing while logging itself active."* **F7 was closed in segment 20 and the class was deleted.** The assertion is still right — plain `hybrid` has no governor, so its fraction is fixed — but it is right for a *different reason*, and the docstring now tells the next reader that a closed defect is live. This is `model.js` claiming a test that never existed, one file over.
+2. **Its failure message is stale.** *"this test is the reminder to build it"* — it has been built. If `hybrid` ever moved, the message would send the reader to build a view that exists.
+3. **Its new half is a source-text grep.** `assert "arm.allocation.searched[t]" in app` asserts a substring of `app.js`, not a rendered value — written in the same segment in which vClaude concluded, twice, that a text grep was the wrong instrument (surprise 2, and the I1 docstring match). A JS suite exists and runs. **This belongs in `tests/js/` as a render assertion**: drive the harness one step, read what the bar draws, compare it to the recorded `searched` series.
+
+None of these is severe and none blocks the phase. All three go into Segment X.
+
+### Rulings on Q2, Q3, Q4
+
+**Q2 — §9 needs a `hybrid_scheduled` row.** Mine. Written this entry (see below). vClaude was right to add the arm and not edit `ARCHITECTURE.md`; the display-name map is the Architect's.
+
+**Q3 — should a governed arm reject a declared `control.targets`?** **Yes, loudly — but in segment 23, not now.** An accepted-and-ignored config knob is the silent-zero pattern in config form: the same family as `.get(key, default)` on a required field, which this project has now had to close twice. It is not F2 any more, correctly, because nothing claims the targets were applied — so it is not urgent. It touches the config schema and every existing config, and segment 23 is the manifest segment where configs are frozen anyway. **Deferred to 23 with a reason, not left open.**
+
+**Q4 — `path_invalidated` has never been `True`.** This is more serious than "carried for the record." **A field that has never once taken its other value has never had its wiring exercised.** It could be permanently `False` through a bug — an inverted test, a wrong attribute, a `solution` that is never `None` — and nothing in 476 tests would say so. My own standing rule applies directly: *a test of a feature must run on data where the feature is active.*
+
+**Ruling:** Segment X must force it `True` at least once, at a high enough event rate that the hybrid genuinely loses a path. If it can be made `True`, the field is wired and may be carried. **If it cannot be made `True` under any scenario, it is dead and comes out** — a permanently-false column in the observation is a rule-input that silently votes the same way forever, and no policy should be able to read it.
+
+### §9 — the `hybrid_scheduled` row (Q2, resolved)
+
+Added to the display-name map:
+
+| Code id | Display name | Family | Signal | Control | Metered | Role |
+|---|---|---|---|---|---|---|
+| `hybrid_scheduled` | **Scheduled Hybrid** *(open-loop control)* | `hybrid_controlled` | — | `ScheduledAllocation` | yes | **the open-loop control**: varies the split on a timetable, with no access to the world |
+
+vClaude's placeholder string was right and is adopted verbatim. **Why the arm exists, for the report:** `hybrid_fixed` shows what happens when the split cannot move; `hybrid_scheduled` shows what happens when it moves *without looking at anything*. Between them, `hybrid_adaptive` beating both is the only result that isolates **sensing** rather than mere variation. Without the open-loop arm, "the adaptive split wins" is compatible with "any moving split wins", which would be a much duller finding wearing the thesis's clothes.
+
+Note that it shares the `hybrid_controlled` family, so it draws identical randomness to the other two (§9.2). That is required and is what `test_every_hybrid_sees_the_identical_world_governor_or_not` now pins.
+
+### The `model.js` phantom test
+
+Worth recording on its own, because it is the cleanest example this project has produced of a comment that cost nothing until it did.
+
+`model.js` read: *"their relative luminances are spread — checked in `tests/js/model.test.mjs`, not assumed."* **No such test existed.** `luminance` was exported and never called by any test. It was free for four segments. Then segment 21 made three more arms raceable with no colours, all three fell through to the `?? "#888"` default, and **three identical grey lines drew on the excess chart — Claim 1's evidence.** Nothing failed.
+
+**Standing rule, new:** *A comment that names a test is a claim, and an unverifiable one. If it is worth writing, the test is worth having; if the test exists, the comment is redundant.* The project now asserts the luminance spread in Python, where the palette lives, with `MIN_ARM_LUMINANCE_GAP` pinned at the measured 0.071 so the next arm cannot erode it silently.
+
+### On T6, and the honesty of the 20% ruling
+
+vClaude kept the threshold and recorded that it **cannot currently fail** — *"unfalsifiable for this policy"*, since reaching the bound needs 450 consecutive one-directional steps and scenarios run 60. It did not lower it to fit.
+
+That is the correct call and the correct reason, and it is the second half of a rule I have been enforcing one-sidedly: I have said a threshold must come from the property protected, never the measurement replaced. vClaude has added the other half — **a threshold that the current system cannot trip is not thereby wrong, but any report claiming it as evidence is.** The guard binds on `ScheduledAllocation`, whose timetable can end anywhere, and it is the guard that matters most for a future `LearnedAllocation`, which has no built-in reason to stay near the middle.
+
+**For the report:** a run passing the saturation check is evidence of nothing for the incremental arm. The live half is the `distinct` clause, and it *does* fail — correctly — on every static-scenario run, because with no disruptions recency never moves.
+
+### A change to how FINDINGS are kept
+
+Segment 21's FINDINGS existed only as an uncommitted diff against a file that is **rewritten every segment**. Every prior segment's FINDINGS survive only inside `git show`, which means the primary record of what was measured is the one document nobody opens.
+
+From now on each segment's FINDINGS block is archived to **`findings/segment-<id>.md`** when I write the next spec. Segment 21's is there now. `currentWorkFlow.md` continues to be the working spec and continues to be replaced.
+
+### Close
+
+Phase 3 is done. The machine is connected to a trial, every arm demonstrably does what its name says, and the one thing standing between this and Claim 3 is a step size that was never chosen for the job it now has.
+
+Segment X runs the automatable half of `WALKTHROUGH.md` and settles the sigma floor by measurement. Segment 22 is Rudra, by hand.
+
+---

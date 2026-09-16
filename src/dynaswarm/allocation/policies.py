@@ -104,6 +104,50 @@ class IncrementalAllocation:
     be widened again by the segment that most needs it to have been
     stable.
 
+    **Where ``sigma = 0.006`` comes from (segment X, T1).**
+
+    It was 0.001, inherited unchanged from ``IncrementalController``
+    where it nudged rho on [0,1] over a whole tuning run — a continuous
+    parameter with no quantum.  Carried onto a *split of a discrete
+    budget*, that inheritance stopped being conservative and started
+    being a measurement error: 0.001 of a 300-evaluation budget is 0.3
+    of one evaluation, and a third of an evaluation cannot be spent.
+
+    Three constraints, all fixed from the budget and the scenario length
+    **before any excess figure was looked at** — that ordering is what
+    makes this a derivation rather than a tuning, and it is only true
+    because it was done in that order:
+
+    ==========  =======================================  ==========
+    Floor       one step must move >= 1 evaluation        1/300   = 0.0033
+    Ceiling     the governor's own rate limit             sigma_max = 0.05
+    Reach       able to cover half the distance to a      0.225/37 = 0.0061
+                bound over the ~37 of 60 steps it moves
+    ==========  =======================================  ==========
+
+    0.006 satisfies all three: ~1.8 evaluations per step, an order of
+    magnitude under the rate limit, and able to travel half-way to a
+    bound within one scenario.
+
+    **What the measurement added, and what it refuted.**  At 0.001 the
+    realised split was *not* frozen, as had been predicted — it moved,
+    in quantised unit jumps, taking 6 distinct values against the 17 the
+    policy asked for and following only 15 of 57 requested moves.  Below
+    the floor the mechanism loses resolution; it does not stop.  The
+    budget-dependence was exact, though: at 1000 and 2000 evaluations,
+    where 0.001 is at or above 1/budget, realised tracked declared on
+    57 of 57 steps.
+
+    **The constraint that actually binds is Reach, not Floor**, and it
+    binds at every budget.  84% of this policy's movement cancels — the
+    declared fraction travelled 0.057 in total variation but only 0.009
+    net — because the baseline EMA decays pressure rather than reversing
+    it, so the walk is close to unbiased.  Sigma scales both numbers, so
+    0.006 buys roughly 6x the net displacement and not the full 0.225 the
+    Reach row names.  Sizing sigma to force that number would be fitting
+    it to one run's realised behaviour, which is the tuning this
+    derivation exists to avoid.
+
     One of the eight is a live caveat rather than a design choice:
     ``path_invalidated`` was measured constant-``False`` across a
     60-step moderate run (segment 21, T4).  The field is wired
@@ -112,13 +156,14 @@ class IncrementalAllocation:
     it would need a scenario that actually invalidates paths first.
 
     Attributes:
-        sigma: Step size per adaptation cycle.
+        sigma: Step size per adaptation cycle.  **0.006, derived — see
+            below.**
         deadband: Pressure magnitude below which nothing moves.
         baseline_alpha: Weight of the newest reading in the baseline.
         adapt_every: Timesteps between adaptation cycles.
     """
 
-    sigma: float = 0.001
+    sigma: float = 0.006
     deadband: float = 0.0
     baseline_alpha: float = 0.05
     adapt_every: int = 1

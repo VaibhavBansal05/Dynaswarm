@@ -370,14 +370,26 @@ def test_the_governor_is_the_only_thing_that_enforces():
 
     A policy that clamped internally would hide its own saturation, and
     the record would show a well-behaved policy that was in fact pinned.
+
+    Walked as an AST, not grepped. As a substring check over the module
+    source this fired on `IncrementalAllocation`'s own docstring, where
+    the derivation of `sigma` names `sigma_max` as the ceiling it must
+    stay under — prose *about* the guard, read as a violation of it.
+    That is the third time in two segments a text grep has flagged a
+    comment (Entry 022 T3, and the I1 docstring match before it), so it
+    is fixed here the same way: by asking what the code references.
     """
+    import ast
     import inspect
 
     from dynaswarm.allocation import policies
 
-    source = inspect.getsource(policies)
+    tree = ast.parse(inspect.getsource(policies))
+    referenced = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {
+        n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+    }
     for guard in ("FRACTION_LOW", "FRACTION_HIGH", "sigma_max"):
-        assert guard not in source, f"a policy is enforcing {guard} itself"
+        assert guard not in referenced, f"a policy is enforcing {guard} itself"
 
 
 # ---------------------------------------------------------------------------
@@ -670,4 +682,319 @@ def test_the_recorded_split_is_what_the_step_searched_with_not_the_next_one():
         "`aco_fraction` equals `alloc_applied` in every row — the recorded "
         "split is the decision made at the END of the step, so the response "
         "to a disruption is drawn one step early. This is F1."
+    )
+
+
+# ---------------------------------------------------------------------------
+# `path_invalidated` — the field that had never been True (Entry 022 Q4)
+# ---------------------------------------------------------------------------
+
+
+#: The scenario that actually breaks routes. Sparse enough that the graph
+#: has few alternatives and violent enough to remove them: 2.5 events per
+#: step of 70 roads each, on a 250-node graph at density 0.018. Every
+#: number here was found by search (segment X, T2) and none of them is
+#: decorative — at the default 0.3/25 on a 0.04 graph the hybrid never
+#: loses a route in 60 steps, which is how the field went unexercised.
+PATH_LOSS_SCENARIO = dict(
+    model="geometric", n_nodes=250, density=0.018,
+    events_per_step=2.5, cluster_size=70, timesteps=40, seed=1000,
+)
+
+
+def _severe_rows(arm="hybrid_adaptive"):
+    from dynaswarm.config import (
+        BudgetCfg,
+        Config,
+        ExperimentCfg,
+        GraphCfg,
+        ScenarioCfg,
+    )
+    from dynaswarm.harness.trial import run_trial
+
+    c = PATH_LOSS_SCENARIO
+    cfg = Config(
+        graph=GraphCfg(model=c["model"], n_nodes=c["n_nodes"], density=c["density"]),
+        scenario=ScenarioCfg(
+            name="severe", events_per_step=c["events_per_step"],
+            cluster_size=c["cluster_size"], timesteps=c["timesteps"],
+        ),
+        experiment=ExperimentCfg(arms=[arm], n_trials=1, eval_seeds=[c["seed"]]),
+        budget=BudgetCfg(evaluations=300),
+    )
+    return [r for r in run_trial(cfg, 0, [arm]).steps if r.arm == arm]
+
+
+def test_path_invalidated_is_reachable_and_means_a_route_was_lost():
+    """Entry 022 Q4: a field that never takes its other value is unproven.
+
+    `path_invalidated` was `False` in every row the project had ever
+    recorded. That is not evidence it works — an inverted test, a wrong
+    attribute or a `solution` that is never `None` would look exactly the
+    same, and 476 tests said nothing.
+
+    Two things are asserted, and the second is the one that matters.
+    `True` must be reachable at all; and it must appear **after** a step
+    where the route was valid. A `True` only ever at t=0 would mean the
+    field reports "no route found yet", which is a different claim from
+    the one its name makes and would make it useless as a disruption
+    signal.
+    """
+    rows = _severe_rows()
+    valid = [r.path_valid for r in rows]
+
+    assert not all(valid), (
+        "the hybrid never lost a route even under the severe scenario — "
+        "`path_invalidated` is still unexercised and this test proves nothing"
+    )
+
+    lost_after_holding = [
+        t for t in range(1, len(valid)) if valid[t - 1] and not valid[t]
+    ]
+    assert lost_after_holding, (
+        f"routes were missing at {[t for t, v in enumerate(valid) if not v]} but "
+        f"never LOST — every invalid step precedes the first valid one, so the "
+        f"field is reporting 'not found yet', not 'invalidated'"
+    )
+
+    # And the row agrees with itself: no route means no cost.
+    for row in rows:
+        if not row.path_valid:
+            assert row.best_cost is None, (
+                f"t={row.timestep} reports no valid path but carries a cost of "
+                f"{row.best_cost} — one of the two is wrong"
+            )
+
+
+def test_the_observation_carries_the_lost_route_through_to_the_policy():
+    """The field is only worth keeping if it reaches the thing that reads it.
+
+    Built through `observe()` — the production entry point — on the step
+    the route was actually lost, rather than on a hand-made fixture that
+    could be `True` for reasons the harness never produces.
+    """
+    rows = _severe_rows()
+    valid = [r.path_valid for r in rows]
+    lost = next(t for t in range(1, len(valid)) if valid[t - 1] and not valid[t])
+    row = rows[lost]
+
+    obs = observe(
+        t=row.timestep,
+        events_this_step=row.num_events,
+        current_fraction=dict(row.probe)["aco_fraction"],
+        budget=300,
+        probe=dict(row.probe),
+        own_cost=row.best_cost,
+        previous_cost=rows[lost - 1].best_cost,
+        path_invalidated=not row.path_valid,
+        recency=row.signal_value,
+        steps_since_disruption=0,
+    )
+    assert obs.path_invalidated is True, (
+        "the harness recorded a lost route but the observation the policy "
+        "sees says the path is fine"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The step size must stay above the resolution of what it steps (segment X)
+# ---------------------------------------------------------------------------
+#
+# Where the line is drawn between test and script, stated because the spec
+# asked for it: the FLOOR is a property of the system — a step smaller than
+# one unit of the work it allocates is inert by construction, at any budget,
+# forever — so it is a test. The measured distinct-value counts that
+# demonstrated it (17 declared against 6 realised at budget 300) are a
+# snapshot of one seed and one scenario, so they stay in
+# scripts/measure_step_size.py and are not asserted anywhere.
+
+
+def test_the_allocation_step_moves_at_least_one_evaluation():
+    """`sigma` must exceed `1/budget`, or it asks for fractions of work.
+
+    The hybrid splits a discrete budget. A declared step of 0.001 on 300
+    evaluations asks the split to move by 0.3 of one evaluation, which
+    cannot be spent — the realised split then takes 6 distinct values
+    against 17 requested, and the arm loses resolution it is reported as
+    having.
+
+    This is the general form of that: whatever `sigma` and whatever the
+    default budget, one adaptation step must be worth at least one unit
+    of the thing being allocated.
+    """
+    from dynaswarm.allocation.policies import IncrementalAllocation
+    from dynaswarm.config import BudgetCfg, ControlCfg
+
+    sigma = IncrementalAllocation().sigma
+    budget = BudgetCfg().evaluations
+    floor = 1.0 / budget
+
+    assert sigma > floor, (
+        f"sigma={sigma} is below 1/budget={floor:.4f} at the default budget "
+        f"of {budget} evaluations — one step asks the split to move "
+        f"{sigma * budget:.2f} of an evaluation, and the realised split "
+        f"cannot follow it"
+    )
+    assert sigma == pytest.approx(ControlCfg().allocation_sigma), (
+        "the policy default and the config default have drifted apart, so "
+        "an arm built through the config steps differently from one built "
+        "from the dataclass"
+    )
+
+
+def test_the_allocation_step_stays_under_the_governors_rate_limit():
+    """Above `sigma_max` the declared step is not the applied step.
+
+    A policy asking for more than the governor will allow is not wrong,
+    but it is no longer the thing being reported: every step would be
+    clipped, `sigma` would stop describing the arm's behaviour, and the
+    saturation record would show a policy permanently held back.
+    """
+    from dynaswarm.allocation.policies import IncrementalAllocation
+    from dynaswarm.config import ControlCfg
+
+    assert IncrementalAllocation().sigma < ControlCfg().sigma_max
+
+
+def test_the_rho_controller_keeps_its_own_step_size():
+    """Claim 2's evidence set must not move when Claim 3's does.
+
+    `ControlCfg.sigma` feeds `IncrementalController`, which adapts rho for
+    `aco_adaptive` — a continuous parameter with no quantum, where the
+    budget-derived floor above does not apply. Segment X raised the
+    allocation step and deliberately left this one alone; this asserts
+    they are still separate numbers, because merging them would silently
+    re-tune the evidence for a different claim.
+    """
+    from dynaswarm.config import ControlCfg
+
+    cfg = ControlCfg()
+    assert cfg.sigma == 0.001, (
+        "rho's step size changed — that moves Claim 2's settled evidence "
+        "set (§8), which no segment since 21 has authorised"
+    )
+    assert cfg.sigma != cfg.allocation_sigma, (
+        "rho and the allocation split now step by the same amount; one of "
+        "them is no longer derived from its own constraint"
+    )
+
+
+def test_the_adaptive_arm_responds_to_disruption_not_to_the_clock():
+    """The arm must move *because of* recency, not merely while it varies.
+
+    Segment X mutation (specified): replace the baseline EMA update
+    ``self._baseline += self.baseline_alpha * pressure`` with
+    ``self._baseline = reading``. The baseline then tracks the signal
+    exactly, so pressure is the one-step difference rather than a
+    departure from history.
+
+    **That mutation passed all 476 tests, and the recency correlation
+    got stronger** — −0.798 against −0.776. The correlation cannot tell
+    the two apart, because both move in step with recency; what changes
+    is that the mutant moves just as hard during calm as during
+    disruption, oscillating around its start instead of reallocating.
+
+    Measured over four seeds: the real policy moves ~13x harder on a
+    disruption step than a quiet one (0.0060 against 0.0004); the mutant
+    moves ~1x (0.0055 against 0.0057). The threshold below is set at 3,
+    well inside that gap, because the claim being protected is
+    qualitative — an arm whose calm behaviour is indistinguishable from
+    its disrupted behaviour is not recency-driven, whatever its
+    correlation says.
+    """
+    import statistics as st
+
+    from dynaswarm.config import (
+        BudgetCfg,
+        Config,
+        ExperimentCfg,
+        GraphCfg,
+        ScenarioCfg,
+    )
+    from dynaswarm.harness.trial import run_trial
+
+    cfg = Config(
+        graph=GraphCfg(model="geometric", n_nodes=200, density=0.04),
+        scenario=ScenarioCfg(name="moderate", events_per_step=0.3, timesteps=60),
+        experiment=ExperimentCfg(
+            arms=["hybrid_adaptive"], n_trials=1, eval_seeds=[1000]
+        ),
+        budget=BudgetCfg(evaluations=300),
+    )
+    rows = [r for r in run_trial(cfg, 0, ["hybrid_adaptive"]).steps]
+    fractions = [dict(r.probe)["aco_fraction"] for r in rows]
+    events = [r.num_events for r in rows]
+    delta = [b - a for a, b in zip(fractions, fractions[1:], strict=False)]
+
+    # delta[i] is the change FROM step i, so a disruption at step i shows
+    # up in delta[i]. Reading delta[i-1] here reports the step before the
+    # event and produces a clean, wrong zero (segment 21, T3).
+    disrupted = [delta[i] for i in range(len(delta)) if events[i] > 0]
+    calm = [delta[i] for i in range(len(delta)) if events[i] == 0]
+    assert disrupted and calm, "this scenario has no contrast to measure"
+
+    hit = abs(st.mean(disrupted))
+    drift = abs(st.mean(calm))
+    assert hit > 3 * drift, (
+        f"the arm moves {hit:.6f} per disrupted step and {drift:.6f} per calm "
+        f"step — a ratio of {hit / drift if drift else float('inf'):.1f}. It is "
+        f"varying on the clock rather than on the signal, which correlates "
+        f"with recency just as well and reallocates nothing"
+    )
+
+
+def test_the_arm_the_harness_builds_carries_the_derived_step_size():
+    """The step size the config declares must be the one the arm holds.
+
+    **My own mutation, segment X.** `_make_governor` was changed to pass
+    `control.sigma` — rho's step size, 0.001 — instead of
+    `control.allocation_sigma`. A one-word slip of exactly the kind the
+    two-field split invites, and it silently returns every arm built
+    through the config to the inert regime this segment exists to leave.
+
+    **It survived all 479 tests.** Every step-size assertion written for
+    T9 reads `IncrementalAllocation().sigma` — the dataclass default,
+    which the mutation does not touch — so all of them passed while no
+    arm the harness produced stepped by that amount. That is Entry 019's
+    rule broken in the tests written to enforce it: *every test drives
+    the production entry point*. A default is not a wiring.
+
+    So this reads the governor off an arm from `build_arms`, and it
+    varies the config to prove it is reading the wiring and not a
+    constant that happens to agree with it.
+    """
+    from dynaswarm.config import ControlCfg, GraphCfg
+    from dynaswarm.core.generate import build
+    from dynaswarm.core.rng import stream
+    from dynaswarm.harness.arm import build_arms
+
+    view, source, target = build(
+        GraphCfg(model="geometric", n_nodes=40, density=0.15), stream(42, "graph")
+    )
+
+    def governor_sigma(control: ControlCfg) -> float:
+        arms = build_arms(
+            ["hybrid_adaptive"], view, source, target,
+            root_seed=42, trial=0, control=control,
+        )
+        governor = arms[0].governor
+        assert governor is not None, "hybrid_adaptive was built with no governor"
+        return governor.policy.sigma
+
+    default = ControlCfg()
+    assert governor_sigma(default) == pytest.approx(default.allocation_sigma), (
+        "the arm the harness builds does not step by `allocation_sigma`; if it "
+        "is stepping by `sigma` instead, that is rho's number and the "
+        "allocation is back below its floor"
+    )
+
+    # And it is genuinely read from the config, not a constant agreeing
+    # with it by coincidence.
+    bumped = ControlCfg(allocation_sigma=0.02)
+    assert governor_sigma(bumped) == pytest.approx(0.02), (
+        "changing `allocation_sigma` did not change the built arm — the "
+        "governor is ignoring the config"
+    )
+    assert governor_sigma(bumped) != governor_sigma(default), (
+        "two different configs produced the same step size"
     )

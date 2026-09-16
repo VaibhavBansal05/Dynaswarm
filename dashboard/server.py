@@ -526,7 +526,21 @@ def race_config(spec: RaceSpec) -> Config:
         run_class="exploratory",
         graph=_graph_cfg(spec.graph),
         scenario=ScenarioCfg(name="custom", **spec.scenario.model_dump()),
-        experiment=ExperimentCfg(arms=list(spec.arms), n_trials=1, parallel_jobs=1),
+        # `eval_seeds`, not `root_seed`: `trial.py:135` builds the graph from
+        # the per-trial evaluation seed, so that is the only field the
+        # dashboard's seed box can reach. Setting `root_seed` here would
+        # look right, change the manifest, and change nothing that runs.
+        #
+        # Found in segment X, T4 exercise 3: the seed control did not
+        # affect the race at all. Two different seeds produced byte-
+        # identical excess for all four arms, because every race used this
+        # default regardless of what was typed. The reference card promises
+        # "One seed, one run. The seed fixes the world and its sequence of
+        # breaks" — it now does.
+        experiment=ExperimentCfg(
+            arms=list(spec.arms), n_trials=1, parallel_jobs=1,
+            eval_seeds=[spec.graph.seed],
+        ),
         budget=BudgetCfg(evaluations=spec.evaluations),
     )
 
@@ -667,9 +681,15 @@ def read_run(run_id: str, root: Path | None = None) -> dict:
         "path": str(directory),
         "run_class": str(frame["run_class"].iloc[0]),
         "horizon": int(frame["timestep"].max()) + 1,
+        # Built from the seed the graph was ACTUALLY built from — the
+        # recorded eval seed — not from `root_seed`. They are different
+        # numbers (42 against 1000 at the defaults), so this caption used
+        # to name a world that was never raced while sitting beside a
+        # correct `seed` field. A provenance line that is confidently
+        # wrong is worse than none.
         "graph_id": graph_id(GraphSpec(
             model=graph["model"], n_nodes=graph["n_nodes"],
-            density=graph["density"], seed=manifest["config"]["root_seed"],
+            density=graph["density"], seed=int(frame["seed"].iloc[0]),
         )),
         "seed": int(frame["seed"].iloc[0]),
         "arms": arms,

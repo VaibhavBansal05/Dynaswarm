@@ -516,6 +516,7 @@ Contents: the `edge_ratio`, `volatility` and `lambda_branch` signals; `Increment
 | `hybrid` | **Hybrid (baseline)** | `hybrid` | — | — | yes | the Hybrid with no control machinery at all |
 | `hybrid_fixed` | **Fixed / Static Hybrid** | `hybrid_controlled` | recency | `FrozenAllocation` | yes | **the ablation twin** |
 | `hybrid_adaptive` | **New Recency-Based Adaptive Hybrid** | `hybrid_controlled` | recency | `IncrementalAllocation` (or `Learned`) | yes | **the thesis** |
+| `hybrid_scheduled` | **Scheduled Hybrid** *(open-loop control)* | `hybrid_controlled` | — | `ScheduledAllocation` | yes | **the open-loop control**: varies the split on a timetable, with no access to the world |
 | `aco_fixed` | **ACO, frozen ρ** *(evidence set)* | `aco_controlled` | volatility | null | yes | reproduces Claim 2 |
 | `aco_adaptive` | **ACO, adaptive ρ** *(evidence set)* | `aco_controlled` | volatility | incremental | yes | reproduces Claim 2 |
 
@@ -529,6 +530,8 @@ They are different arms and are not interchangeable:
 - `hybrid_fixed` shares the `hybrid_controlled` family with `hybrid_adaptive`. Fed identical bits from identical starting parameters, **the pair can diverge for exactly one reason**: whether the policy was permitted to move the split. That is the ablation.
 
 `hybrid` remains useful as a plain baseline for Claim 1 (Hybrid vs its components). It is never the control arm for Claim 3.
+
+**`hybrid_scheduled` is the second control, and it is not redundant with the first.** `hybrid_fixed` shows what happens when the split *cannot move*. `hybrid_scheduled` shows what happens when it moves **without looking at anything** — a timetable, identical in a violent world and a calm one. Between them, `hybrid_adaptive` beating both is the only result that isolates **sensing** rather than mere variation. Without the open-loop arm, "the adaptive split wins" stays compatible with "any moving split wins", which is a much duller finding wearing the thesis's clothes. It shares the `hybrid_controlled` family, so it draws identical randomness to the other two (§9.2); `test_every_hybrid_sees_the_identical_world_governor_or_not` pins that.
 
 ### 9.2 Why `family` keys the random stream
 

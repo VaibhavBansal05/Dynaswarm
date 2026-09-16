@@ -420,3 +420,80 @@ describe("the shared-timeline line", () => {
       "the line is reading the current form rather than the run");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The allocation bar draws what the step SEARCHED with (Entry 022 T3.3)
+// ---------------------------------------------------------------------------
+//
+// This replaces `assert "arm.allocation.searched[t]" in app` in
+// tests/test_dashboard.py — a substring check over app.js's source, written
+// in the same segment that concluded twice that a text grep is the wrong
+// instrument. A grep passes if the string is present in a comment, in dead
+// code, or in a function nobody calls.
+//
+// So: drive the real renderer one step and read the width the bar actually
+// draws. The fixture is a real recorded race (not hand-written numbers), and
+// in it `searched` and `applied` differ at 58 of 60 positions, so the two
+// candidate readings give visibly different bars. Drawing `applied` here is
+// F1's off-by-one in the view layer: the split decided at the END of a step,
+// drawn as though that step had searched with it.
+
+describe("the allocation bar, rendered", () => {
+  const raced = readFixture("race_allocation.json");
+
+  function acoWidth(nodes) {
+    const body = nodes["alloc-body"];
+    const bar = body.children.find((c) => (c.className ?? "") === "alloc-bar");
+    assert.ok(bar, "no allocation bar was rendered at all");
+    const aco = bar.children.find((c) => (c.className ?? "").includes("aco"));
+    assert.ok(aco, "the bar rendered with no ACO segment");
+    return parseFloat(aco.style.width);
+  }
+
+  test("the bar shows the split the step searched with, not the one it decided", async () => {
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+
+    const alloc = raced.arms.find((a) => a.allocation).allocation;
+    const t = alloc.searched.findIndex(
+      (s, i) => s !== null && alloc.applied[i] !== null && s !== alloc.applied[i],
+    );
+    assert.ok(t > 0, "fixture has no step where the two series differ");
+
+    hook.show(t);
+    const drawn = acoWidth(nodes);
+
+    assert.ok(
+      Math.abs(drawn - alloc.searched[t] * 100) < 1e-6,
+      `at t=${t} the bar drew ${drawn}% but the step searched with `
+      + `${alloc.searched[t] * 100}%`,
+    );
+    assert.ok(
+      Math.abs(drawn - alloc.applied[t] * 100) > 1e-6,
+      `at t=${t} the bar drew ${drawn}%, which is the split decided at the END `
+      + `of this step (applied=${alloc.applied[t]}). The response to a `
+      + `disruption is being drawn one step early — F1, in the view layer.`,
+    );
+  });
+
+  test("the bar tracks the cursor rather than rendering one fixed step", async () => {
+    // Guards the reading where the widths happen to coincide because the
+    // renderer ignores `t` entirely — which the assertion above cannot see.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = raced;
+    const alloc = raced.arms.find((a) => a.allocation).allocation;
+
+    const widths = new Set();
+    for (const t of [3, 10, 20]) {
+      hook.show(t);
+      widths.add(acoWidth(nodes));
+    }
+    assert.ok(
+      widths.size > 1,
+      `the bar drew the same width at every cursor position (${[...widths]}), `
+      + `so it is not reading t`,
+    );
+    assert.equal(new Set(alloc.searched.slice(0, 21)).size > 1, true,
+      "fixture is flat over the sampled range; the test proves nothing");
+  });
+});
