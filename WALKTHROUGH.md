@@ -587,11 +587,32 @@ Try: 4 places · 1 timestep · `large1000` · a budget of 1 evaluation.
 
 ### 7. The thesis itself **[after 21]**
 
-Race the **Recency-Based Adaptive Hybrid** and watch the allocation view.
+Race the **New Recency-Based Adaptive Hybrid** alongside the **Fixed / Static Hybrid** and watch the allocation view.
 
-**Predict:** the fraction sits near its start, jumps when a disruption lands, and drifts back during calm. The **Fixed / Static Hybrid** stays at exactly 0.5 throughout.
+> **This exercise predicted the wrong behaviour until segment X**, and the old prediction is worth knowing because it is the intuitive one. It said the fraction "jumps when a disruption lands, and **drifts back during calm**" — a mean-reverting controller, returning to where it started. This one does not mean-revert. It ratchets: each disruption moves it down and calm does not undo that. Measured over eight runs (two horizons × four seeds), it ended **below** its start every single time.
+>
+> The distinction is not cosmetic. A mutation that makes the arm mean-revert — tested in segment X — passes all 486 tests **and makes the recency correlation look stronger**, while reallocating nothing on net. If you see the old prediction's behaviour, that is the failure, not the success.
 
-**If the adaptive line is flat, stop and tell me.** That is the one failure that would make every subsequent number meaningless — and it is exactly what defect F7 did.
+**Predict, concretely:**
+
+- The Fixed / Static Hybrid sits at **exactly 0.5** for the whole run. One value, no movement.
+- The adaptive one starts at 0.5 and walks **downward**, toward PSO. Over 40–60 steps it ends somewhere around **0.39–0.49** — a gentle staircase, not a sawtooth.
+- Each step where roads break moves it down by **one full step of 0.006**. That figure is exact and does not vary with the seed.
+- Between disruptions it moves **very little** — a tenth of that or less. Sometimes slightly up, sometimes slightly down; the direction in calm is not stable and is not meant to be. What matters is that calm movement is **much smaller** than disrupted movement, roughly 5–15× smaller.
+
+**What a real failure looks like:**
+
+- **The Fixed hybrid is not at exactly 0.5.** It has acquired an allocation policy it must not have.
+- **The adaptive line is genuinely flat** — one distinct value for the whole run. Nothing is driving it. This is what F7 did, and it makes every later number meaningless.
+- **The line oscillates around 0.5 and ends where it started.** It is moving as much in calm as under disruption. It is varying on the clock rather than on the signal — which correlates with recency just as well and allocates nothing.
+- **The line is identical in a calm world and a violent one.** Then it is not reading the signal at all. (The *Scheduled* Hybrid is *supposed* to do this — it is the open-loop control. The adaptive one is not.)
+
+**What is small-but-working, and is NOT a failure to report:**
+
+- A total travel of only a few hundredths over the run. The step is 0.006 and there are ~15 disrupted steps in 60 at the moderate preset, so a few hundredths is the arithmetic working, not the mechanism failing. On screen it is a shallow slope. **Zoom before concluding it is flat** — the chart's axis is fixed to 0–1 deliberately, so a real 0.06 move looks small, and an auto-scaled axis that made it look dramatic would be the chart overstating the evidence.
+- The three hybrids finishing at similar excess. At the time of writing, the allocation changes the *search* (routes differ on roughly half the steps) but whether it changes the *outcome* is not yet established — see segment X's findings. A small or absent excess difference is a real result, not a broken run.
+
+**Check the number, not the picture.** In the per-step panel, `asked` and `allowed` should agree (the governor only holds a proposal back if it exceeds 0.05 in one step, which this policy never does), and `at a bound` should read `no` throughout.
 
 ---
 

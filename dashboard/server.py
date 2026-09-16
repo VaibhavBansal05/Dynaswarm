@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from dynaswarm.analysis.load import load_steps, per_trial_excess
 from dynaswarm.config import (
@@ -287,6 +287,16 @@ class GraphSpec(BaseModel):
     rather than a closed set the user must pick from.
     """
 
+    #: **A field this model does not know is an error, not a shrug.**
+    #: Pydantic's default is to drop unknown keys silently, and this is
+    #: the HTTP boundary — a browser posts JSON, so a typo or a field at
+    #: the wrong nesting level runs a *different experiment* and returns a
+    #: perfectly well-formed result. Found in segment X, T4: a race asked
+    #: for with a top-level `seed` (which belongs under `graph`) ran the
+    #: default world and reported success. Same family as F2 and F6, at
+    #: the one layer where a human is typing the values.
+    model_config = ConfigDict(extra="forbid")
+
     model: str = "geometric"
     n_nodes: int = Field(default=200, ge=4, le=2000)
     density: float = Field(default=0.04, gt=0.0, le=1.0)
@@ -300,6 +310,16 @@ class ScenarioSpec(BaseModel):
     own default, so a request that sets nothing gets exactly what the
     engine would have used.
     """
+
+    #: **A field this model does not know is an error, not a shrug.**
+    #: Pydantic's default is to drop unknown keys silently, and this is
+    #: the HTTP boundary — a browser posts JSON, so a typo or a field at
+    #: the wrong nesting level runs a *different experiment* and returns a
+    #: perfectly well-formed result. Found in segment X, T4: a race asked
+    #: for with a top-level `seed` (which belongs under `graph`) ran the
+    #: default world and reported success. Same family as F2 and F6, at
+    #: the one layer where a human is typing the values.
+    model_config = ConfigDict(extra="forbid")
 
     events_per_step: float = Field(default=0.3, ge=0.0, le=10.0)
     cluster_size: int = Field(default=25, ge=1, le=200)
@@ -492,6 +512,16 @@ RACEABLE = tuple(ARM_DISPLAY)
 
 class RaceSpec(BaseModel):
     """One trial of some arms on one world, at one budget."""
+
+    #: **A field this model does not know is an error, not a shrug.**
+    #: Pydantic's default is to drop unknown keys silently, and this is
+    #: the HTTP boundary — a browser posts JSON, so a typo or a field at
+    #: the wrong nesting level runs a *different experiment* and returns a
+    #: perfectly well-formed result. Found in segment X, T4: a race asked
+    #: for with a top-level `seed` (which belongs under `graph`) ran the
+    #: default world and reported success. Same family as F2 and F6, at
+    #: the one layer where a human is typing the values.
+    model_config = ConfigDict(extra="forbid")
 
     graph: GraphSpec = Field(default_factory=GraphSpec)
     scenario: ScenarioSpec = Field(default_factory=ScenarioSpec)

@@ -1182,7 +1182,14 @@ def test_a_raceable_controlled_arm_moves_its_split_or_provably_does_not(
     """
     server = pytest.importorskip("dashboard.server")
     started = server.race(
-        server.RaceSpec(arms=[arm], evaluations=120, timesteps=25), root=tmp_path
+        server.RaceSpec(
+            arms=[arm], evaluations=120,
+            # Nested, because `RaceSpec` now refuses unknown keys. Written
+            # flat first, where it was silently dropped and this test ran
+            # 60 steps while saying 25 — the guard caught it on the spot.
+            scenario=server.ScenarioSpec(timesteps=25),
+        ),
+        root=tmp_path,
     )
     frame = load_steps(started["path"], run_class=None)
     fractions = {
@@ -1443,3 +1450,51 @@ def test_the_reported_graph_id_names_the_world_that_was_raced(tmp_path):
         f"a graph nobody raced"
     )
     assert payload["seed"] == 1000, "the recorded seed is not the one asked for"
+
+
+def test_a_field_the_api_does_not_know_is_refused_not_dropped():
+    """The HTTP boundary must not accept a request it will not honour.
+
+    Pydantic drops unknown keys by default. That is the silent-drop
+    pattern this project has already closed twice in Python (F2 and F6,
+    where a controller ignored an unknown target), and it is **worse
+    here**: a browser posts JSON, so a typo or a field at the wrong
+    nesting level runs a different experiment and returns a perfectly
+    well-formed result with a run id.
+
+    Found the hard way in segment X: `RaceSpec(seed=2024)` — where `seed`
+    belongs under `graph` — was accepted, the race ran the default world,
+    and exercise 3 was reported as a system defect before the request was
+    re-read. Forbidding extras would have said so on the first call.
+    """
+    import pydantic
+
+    server = pytest.importorskip("dashboard.server")
+
+    misplaced = [
+        ("RaceSpec", {"seed": 2024}),            # belongs under `graph`
+        ("RaceSpec", {"events_per_step": 0.0}),  # belongs under `scenario`
+        ("RaceSpec", {"nonsense": 1}),
+        ("GraphSpec", {"sead": 1000}),           # a plain typo
+        ("ScenarioSpec", {"events": 0.3}),
+    ]
+    for name, payload in misplaced:
+        model = getattr(server, name)
+        with pytest.raises(pydantic.ValidationError, match="[Ee]xtra"):
+            model(**payload)
+
+    # And the shapes the page actually sends still validate, or the guard
+    # has been bought by breaking the dashboard.
+    spec = server.RaceSpec(
+        graph=server.GraphSpec(
+            model="geometric", n_nodes=120, density=0.04, seed=2024
+        ),
+        scenario=server.ScenarioSpec(
+            events_per_step=0.3, cluster_size=25, timesteps=8,
+            p_closure=0.15, p_traffic_up=0.30, p_traffic_down=0.20,
+            p_reopen=0.10, p_delete=0.10, p_add=0.15, traffic_factor=2.0,
+        ),
+        arms=["astar", "aco"], evaluations=150,
+    )
+    assert spec.graph.seed == 2024
+    assert spec.scenario.timesteps == 8
