@@ -473,3 +473,30 @@ button:disabled { opacity: 0.55; cursor: default; }
 .pane-figures { margin: 0 0 7px; font: 400 12.5px/1 var(--mono);
                 font-variant-numeric: tabular-nums; color: var(--ink-dim); }
 .shared { margin: 0 0 11px; font-size: 13px; color: var(--ink-faint); }
+
+
+/* The ranking tab (segment Z). The evidence line is styled to be the
+   loudest thing in the block, not the quietest: a table from one race
+   looks authoritative and is worth nothing, and the caveat has to
+   compete with the table for attention rather than hide under it. */
+.score-evidence {
+  margin: 0 0 12px; padding: 9px 13px; border-radius: 6px;
+  font: 600 13px var(--mono); letter-spacing: 0.01em;
+}
+.score-evidence.weak { background: #3a2410; color: #ffcf9a; border: 1px solid #6b4318; }
+.score-evidence.strong { background: #10301c; color: #9fe3b8; border: 1px solid #1d5c33; }
+
+.score-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.score-table th, .score-table td {
+  padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line-soft);
+}
+.score-table th { color: var(--ink-faint); font-weight: 600; text-align: right; }
+.score-table th:first-child, .score-table td:first-child { text-align: left; }
+.score-table td.num { font-family: var(--mono); }
+.score-table tr.reference td { color: var(--ink-faint); font-style: italic; }
+.score-table tr.reference { border-top: 1px solid var(--line); }
+.score-table .rank { font-weight: 700; color: var(--ink); }
+.score-table .swatch {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px;
+}
+.score-table .censored { color: var(--warn); }

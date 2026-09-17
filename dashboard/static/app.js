@@ -609,6 +609,98 @@ function drawAllocationNow(t) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The ranking tab (segment Z)
+// ---------------------------------------------------------------------------
+//
+// Its job is to make a NULL legible. The dashboard showed one mean per arm
+// for two segments, and that hid an arm moving in the right direction and
+// arriving nowhere. So three things are on the face of it and none of them
+// is behind a hover:
+//
+//   * the evidence strength, styled to compete with the table rather than
+//     hide under it — a ranking from one race looks authoritative and is
+//     worth nothing;
+//   * Pareto dominance beside the mean rank, because "no arm dominates any
+//     other" is the honest description of a null and the mean rank alone
+//     cannot say it;
+//   * the metric set itself, since which four metrics are in the score is
+//     the only arbitrary choice left once the weights are gone.
+
+async function drawScore(runId) {
+  const wrap = document.getElementById("score-wrap");
+  let data;
+  try {
+    data = await fetch(`/api/run/${runId}/score`).then((r) => r.json());
+  } catch { wrap.hidden = true; return; }
+  if (!data.arms || !data.arms.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const line = document.getElementById("score-evidence");
+  line.className = `score-evidence ${data.evidence.is_evidence ? "strong" : "weak"}`;
+  line.textContent = data.evidence.line;
+
+  const table = document.getElementById("score-table");
+  table.replaceChildren();
+  const head = document.createElement("tr");
+  for (const label of data.columns) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    head.append(th);
+  }
+  table.append(head);
+
+  const row = (label, cells, colour, extra) => {
+    const tr = document.createElement("tr");
+    if (extra) tr.className = extra;
+    const name = document.createElement("td");
+    if (colour) {
+      const dot = document.createElement("i");
+      dot.className = "swatch";
+      dot.style.background = colour;
+      name.append(dot);
+    }
+    name.append(document.createTextNode(label));
+    tr.append(name);
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.className = c.censored ? "num censored" : "num";
+      td.textContent = c.text;
+      if (c.title) td.title = c.title;
+      tr.append(td);
+    }
+    table.append(tr);
+  };
+
+  for (const arm of data.arms) {
+    // A recovery mean built partly from disruptions the arm never recovered
+    // from is a different kind of number, and the dagger says so.
+    const cells = arm.cells.map((text, i) => {
+      const key = data.metrics[i].key;
+      if (key === "mean_recovery" && arm.n_censored > 0) {
+        return {
+          text: `${text} (${arm.n_censored}\u2020)`,
+          censored: true,
+          title: `${arm.n_censored} of ${arm.n_disruptions} never recovered, `
+            + `counted at the remaining horizon`,
+        };
+      }
+      return { text };
+    });
+    cells.push({ text: arm.mean_rank.toFixed(2) });
+    row(ARM_NAMES[arm.arm] ?? arm.arm, cells, ARM_COLORS[arm.arm] ?? "#888");
+  }
+
+  if (data.reference) {
+    row(`${ARM_NAMES[data.reference.arm] ?? data.reference.arm} \u2014 reference, not ranked`,
+        [...data.reference.cells.map((text) => ({ text })), { text: "" }],
+        null, "reference");
+  }
+
+  document.getElementById("score-pareto").textContent = data.pareto_line;
+  document.getElementById("score-basis").textContent = data.basis_line;
+}
+
 // §4.3.1's identity, on screen. It is not a statistic — it is an
 // invariant an examiner can watch hold for sixty steps, and a divergence
 // would be visible the moment it happened.
@@ -801,6 +893,7 @@ async function runRace() {
   $("grid-wrap").hidden = false;
   drawExcess();
   drawAllocation();
+  drawScore(started.run_id).catch(() => {});
   show(state.t);
 }
 

@@ -2164,3 +2164,154 @@ Segment X did what it was for: running the manual found three defects that 476 t
 Next is the allocation rule. Then segment 22 — Rudra by hand, including the six sequence-robustness checks that need a driven browser — then 23, and the arm set freezes.
 
 ---
+
+---
+
+## Entry 024 — Segment Y: a better instrument, a genuine null, and the arm set freezes
+
+**Verified 17 Sept 2026.** 491 Python tests (from 486), 52 JS, `src/` 2180 statements, ruff clean. Uncommitted, per protocol.
+
+This entry does three things: it records what Segment Y found, it **revises segment 21's headline number**, and it **pre-registers the evidence run** — written now, while the outcome is unknown, because that is the only time a pre-registration is worth anything.
+
+### The finding that revises segment 21
+
+Segment 21 reported `corr(recency, Δfraction) = −0.776` and both of us read it as evidence that the mechanism senses disruption and allocates accordingly.
+
+**It was a correlation of increments.** It says: *when disruption rises, the split moves downward.* It does **not** say: *when disruption is high, the split is low.*
+
+Those are different claims, and **only the second one is the thesis.** Claim 3 is about where the compute actually sits, not about the direction of travel.
+
+Measured on the level:
+
+| Arm | mean corr(split, recency) | right sign | calm-vs-disrupted gap |
+|---|---|---|---|
+| incremental | **−0.016** | **2 of 6 seeds** | +0.0001 |
+| direct | **−0.239** | **6 of 6 seeds** | +0.0774 |
+
+The incremental arm moves in the right direction and **ends up nowhere in particular.** That is precisely the integrator failure Entry 023 derived from first principles, now measured rather than argued.
+
+Segment 21's −0.776 is not wrong — it is a correct measurement of a quantity that does not carry the claim. It must not appear in the report as evidence for Claim 3 without the level figure beside it.
+
+**Standing rule, new:** *a correlation of increments is not a correlation of levels.* An integrator can score near-perfectly on the first while scoring zero on the second, and the second is almost always the one a thesis rests on.
+
+### T1 — staleness measured, and rejected by the measurement
+
+The plumbing was **cheap**: 6 statements, 2 files, no new wiring, because pheromone mass sitting on a slot deactivated this step already *is* this step's loss — earlier deactivations were zeroed and the MAX–MIN clip is `where=active`. My cost framing was wrong; the cost was not the obstacle.
+
+The **distribution** was. Zero on 51 of 63 disrupted steps, and confined to [0, 0.1] rather than spanning [0, 1]. A linear map needs a signal that spans its range; making this one fit requires a rescaling constant **fitted to observed data**, which is tuning wearing a derivation's clothes. vClaude did not fit it. Correct.
+
+**The important reading, and it belongs in the report:** the sparsity is the signal *being right*. A break that destroys no pheromone genuinely invalidates nothing. So this is not "staleness is a bad idea" — it is **"staleness is correct and unusable by a linear map."** It needs a different policy shape (a threshold, or a nonlinear map), which is a second design question, not a rescaling.
+
+It ships as an ACO probe and a trust-report row — evidence for the extension — and is deliberately **not** wired into the observation, so T1c's coupling cost stays unpaid. That is the right call: pay for the coupling when something uses it.
+
+### T3 — the trap bit, and harder than I specified it
+
+I predicted the governor might clamp. It does, on **78.3% of steps**. But vClaude found the sharper statement, which I had not:
+
+**T4's three constraints are mutually unsatisfiable.** Reach needs `A ≈ 0.6`. The rate limit caps effective travel at 0.05 per step. And 0.05 spans **less range than the incremental arm already achieves.** There is no amplitude that satisfies the derivation.
+
+Recency jumps a full 0→1 in all twelve runs, so *any* `A > 0.05` clamps. vClaude did not shrink `A` to make the clamp stop — it set `A = 0.6`, matching `ScheduledAllocation`'s existing 0.8→0.2 span so the sensing arm and the open-loop control cover the same ground, and reported the clamp as a finding. **That is exactly what the spec demanded and it is the harder path.**
+
+**This is a finding about the governor, not the policy.** Ruled: the rate limit stays as it is, and here is why.
+
+vClaude measured both: **−0.642pp clamped, −1.225pp unclamped.** Removing the rate limit makes the arm *worse*.
+
+**My reading, marked as reading:** the rate limit is protecting something real. ACO's pheromone and PSO's swarm each need time to settle at a given budget; slamming the split means neither ever operates at a stable allocation long enough to benefit from it. If that is right, "allocation changes must be gradual" is a **positive finding hidden inside a null**, and a good one for the report. It rests on two numbers at n=6, neither significant, so it is a hypothesis with an obvious test — compare clamped and unclamped at the full seed count — not a result.
+
+**Do not raise `sigma_max` to make an arm work.** A safety limit is changed for a reason derived from the property it protects, never from the performance of the thing it constrains.
+
+### The real blocker is upstream of every policy we have built
+
+`RecencySignal` is **binary on arrival**: 1.0 if `n_events > 0`. Nine roads breaking and twenty-five roads breaking produce **identical** output.
+
+**No policy shape can recover a magnitude that the signal discarded.** Both arms are severity-blind, and both are severity-blind for the same reason, and it is not the policy.
+
+That reframes the last two segments. Entry 023 diagnosed the integrator as the problem and commissioned a direct rule. The direct rule fixed what it was commissioned to fix — the split now sits in the right place, 6 of 6 seeds against 2 of 6 — and severity-blindness survived intact, because it was never a property of the rule.
+
+Staleness is the signal that would carry magnitude. It measures. It does not fit a linear map. **That is a coherent research direction and it is not this project's remaining time.**
+
+### The mutation result, which is a finding on its own
+
+The specified mutation made the policy allocate **exactly backwards**. It was caught by **exactly one of five tests.**
+
+Purity, floor/ceiling, severity and clamp-rate all **passed** on a policy pointing the wrong way. Every one of them verifies that the policy behaves *like a policy* — bounded, deterministic, responsive, within limits — and none of them asks whether it points the right way.
+
+**Standing rule, new:** *tests that verify a mechanism's properties cannot detect an inverted sign.* Direction needs its own explicit assertion, and a suite can be comprehensive on behaviour and blind on orientation.
+
+vClaude's own mutation (wiring the arm to volatility) was caught by the clamp-rate test at 30%, and in the process exposed that its own error message confidently named two causes and missed the real one. Noted.
+
+### Ruling: **the arm set is frozen. No further policies.**
+
+Four reasons, and the fourth is the one that matters.
+
+1. Two arms now allocate by recency, and one of them demonstrably does it correctly. That is sufficient to test Claim 3.
+2. The remaining improvement needs a **new signal and a new policy shape together**. That is a research project, not a segment.
+3. `sigma_max` will not be moved, and no parameter will be changed after this entry.
+4. **Every arm built after a null looks like fishing.** We have now seen two policies, at n=6, land on opposite sides of zero — incremental +0.787pp, direct −0.642pp, neither close to significance. Building a third at this point would be indistinguishable from searching for one that wins, whatever the stated reason.
+
+What Segment Y actually bought is in vClaude's own verdict and I endorse it: **a null from a well-positioned allocator means something, where a null from the incremental arm was confounded with its own positioning failure.** Before Y, a null was uninterpretable. After Y, it is a result.
+
+### **AMENDMENT — 17 Sept 2026: Claim 2 was missing from the pre-registration below.**
+
+*Added the same day the original was written, before the manifest and before any run. Rudra caught it by asking whether everything the report needs exists. The original text below is unchanged.*
+
+**The omission.** The pre-registration lists P1, P2, P3 (Claim 3) and S1, S2 (Claim 1). **Claim 2 — that adapting a parameter does not help — has no comparison and no decision rule.** It is a whole claim of the project, it has a dedicated arm pair built for it, and I left it out. That is exactly the kind of gap that becomes "we did not plan to test that" under questioning.
+
+**Added as P4, at the same precedence as P1:**
+
+| # | Comparison | What it tests |
+|---|---|---|
+| **P4** | `aco_adaptive` vs `aco_fixed` | **Claim 2** — does adapting ρ help |
+
+Paired, same world, same treatment as every other comparison: Wilcoxon signed-rank, Holm across the family, Cliff's delta.
+
+**Decision rules, fixed now:**
+
+- **No significant difference** → Claim 2 reproduced. Parameter adaptation does not help, and the mechanism explanation stands.
+- **`aco_adaptive` beats `aco_fixed`** → **Claim 2 is contradicted by this project's own evidence.** It is reported as prominently as any positive result, and the report's argument for moving from parameters to allocation loses its premise and must be rewritten rather than retained.
+- **`aco_fixed` beats `aco_adaptive`** → stronger than Claim 2 as stated: adaptation actively hurts. Report the effect size; do not soften it to "no benefit."
+
+**One thing I want on the record**, because it is the honest risk here: Claim 2 is the premise Claim 3 is built on. If P4 comes back contradicting it, the whole argument changes shape. Writing that down now, while the answer is unknown, is the only thing that makes the commitment worth anything.
+
+---
+
+### **Pre-registration of the evidence run**
+
+Written 17 Sept 2026, **before segment 23's manifest and before any run at the full seed count.** The point of writing it now is that the outcome is unknown. If any of this changes later, the change and its date go in this log, above the original, and the original stays.
+
+**Design.** ≥100 seeds, paired — every arm sees byte-identical worlds (§10.2 guarantee 1). Paired Wilcoxon signed-rank, Holm correction across the family, Cliff's delta for effect size at the existing thresholds.
+
+**The comparisons, in order of precedence.**
+
+| # | Comparison | What it tests |
+|---|---|---|
+| **P1** | `hybrid_adaptive` vs `hybrid_fixed` | does sensing beat not moving |
+| **P2** | `hybrid_direct` vs `hybrid_fixed` | same, with the split correctly positioned |
+| **P3** | best sensing arm vs `hybrid_scheduled` | does *sensing* beat *moving blindly* |
+| **S1** | `hybrid_direct` vs `hybrid_adaptive` | does response shape matter |
+| **S2** | `hybrid` vs `aco`, `pso` | Claim 1, separate question |
+
+**The decision rules, fixed now.**
+
+- A sensing arm beats `hybrid_fixed` **and** beats `hybrid_scheduled` → **Claim 3 supported.** Both must hold; beating fixed alone is compatible with "any movement helps."
+- A sensing arm beats `hybrid_fixed` but **not** `hybrid_scheduled` → **what helped was varying the split, not sensing when to.** This is reported as the finding, not buried. It is a genuinely interesting negative result and it is the reason the open-loop arm exists.
+- **Neither sensing arm beats `hybrid_fixed`** → **a null, reported as a null**, together with the upper bound the run establishes on how large the effect can be. A bound is a result.
+- `hybrid_direct` beats `hybrid_adaptive` → the response shape matters independently of the target, and both are reported.
+
+**Committed in advance, regardless of outcome:**
+
+- No arm is added, and no parameter is changed, after this entry.
+- All four comparisons are reported whatever they say. **No comparison is dropped for being unflattering.**
+- The scorer's metric set is fixed in segment Z, before the run, by the rules already agreed: mean rank and Pareto, no weights, every metric passing "why is more of it better," non-recoveries counted rather than dropped.
+- Segment 21's −0.776 appears in the report only with the level correlation beside it.
+- The severity-blindness of `RecencySignal`, the 78% clamp rate, and the staleness distribution all appear in the limitations section. They are not discovered late; they are known now and written down now.
+
+**On reading a null honestly.** The project's second claim is that tuning parameters adaptively does not generalise. A null on Claim 3 does not contradict that — it extends it, and a minor project that reports two carefully-instrumented negative results with the instruments shown is worth considerably more than one that reports a win nobody can reproduce.
+
+### Close
+
+Segment Y did what it was commissioned to do and then told us the commission was aimed one layer too low. The policy was fixable and has been fixed. The signal is what limits the thesis, and that is now written down rather than discovered during a viva.
+
+Next: **Segment Z** — the ranking tab and the scorer, built to the rules above so that "these arms are indistinguishable" can be shown honestly rather than argued. Then segment 22 by hand, then the manifest, then the run.
+
+---

@@ -32,6 +32,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
 
 from dynaswarm.analysis.load import load_steps, per_trial_excess
+from dynaswarm.analysis.scoring import score_run
 from dynaswarm.config import (
     BudgetCfg,
     Config,
@@ -490,6 +491,11 @@ ARM_DISPLAY = {
     # to the Architect, who owns that table. Do not treat this line as
     # the canonical name; it is a placeholder awaiting a §9 row.
     "hybrid_scheduled": "Scheduled Hybrid (open-loop control)",
+    # Also awaiting a §9 row (segment Y). Display-only, like the line
+    # above it: the arm itself is frozen by Entry 024 and is not touched
+    # here — this makes an existing arm visible so segment 22 can drive
+    # all four hybrids by hand.
+    "hybrid_direct": "Direct Recency Hybrid",
 }
 
 #: Every arm the dashboard may race.
@@ -644,6 +650,20 @@ def _allocation_series(rows):
     ]
     return series
 
+def _run_directory(run_id: str, root: Path | None = None) -> Path:
+    """Locate a run directory by id.
+
+    Extracted in segment Z because the scorer needs the same lookup
+    `read_run` does, and a second copy of a path-matching rule is how the
+    two quietly come to disagree about which directory a run id names.
+    """
+    base = OUTPUTS if root is None else Path(root)
+    matches = sorted(base.glob(f"*/{run_id}"))
+    if not matches:
+        raise FileNotFoundError(f"no run directory named {run_id!r} under {base}")
+    return matches[-1]
+
+
 def read_run(run_id: str, root: Path | None = None) -> dict:
     """Read a finished run back off disk.
 
@@ -667,11 +687,7 @@ def read_run(run_id: str, root: Path | None = None) -> dict:
     Raises:
         FileNotFoundError: If no such run directory exists.
     """
-    root = OUTPUTS if root is None else Path(root)
-    matches = sorted(root.glob(f"*/{run_id}"))
-    if not matches:
-        raise FileNotFoundError(f"no run directory named {run_id!r} under {root}")
-    directory = matches[-1]
+    directory = _run_directory(run_id, root)
 
     frame = load_steps(directory, run_class=None)
     trials = per_trial_excess(frame)
@@ -820,6 +836,7 @@ ARM_COLORS = {
     "pso": "#c9762b",              # 0.527
     "hybrid_fixed": "#c04a6e",     # 0.445  the ablation twin
     "hybrid": "#22683d",           # 0.307
+    "hybrid_direct": "#154a4a",    # 0.228  the rule the problem calls for
 }
 
 #: The closest luminance pair the palette achieves. Four arms left ~0.2
@@ -860,6 +877,19 @@ def api_arms() -> dict:
             for a in RACEABLE
         ]
     }
+
+
+@app.get("/api/run/{run_id}/score")
+def api_score(run_id: str) -> dict:
+    """The ranking, and the caveat that qualifies it.
+
+    Read-only: every figure comes from columns the run recorded. The
+    evidence-strength block is part of the payload rather than something
+    the page decides, so a tab cannot render an ordering without it.
+    """
+    return score_run(
+        load_steps(_run_directory(run_id), run_class=None), display=ARM_DISPLAY
+    )
 
 
 @app.get("/api/runs")

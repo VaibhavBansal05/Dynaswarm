@@ -1498,3 +1498,73 @@ def test_a_field_the_api_does_not_know_is_refused_not_dropped():
     )
     assert spec.graph.seed == 2024
     assert spec.scenario.timesteps == 8
+
+
+def test_the_score_endpoint_cannot_return_a_ranking_without_its_caveat(tmp_path):
+    """T5: evidence strength is data, not decoration.
+
+    A ranking table from one race looks authoritative and is worth
+    nothing. The caveat is part of the payload rather than something the
+    page chooses to render, so there is no code path that produces an
+    ordering without it — a view *can* ignore a field, but it cannot
+    ignore one that has to be read to draw the table.
+    """
+    server = pytest.importorskip("dashboard.server")
+
+    started = server.race(
+        server.RaceSpec(
+            arms=["astar", "hybrid_fixed", "hybrid_adaptive"], evaluations=120,
+            graph=server.GraphSpec(seed=1000),
+            scenario=server.ScenarioSpec(events_per_step=0.3, timesteps=20),
+        ),
+        root=tmp_path,
+    )
+    payload = server.score_run(
+        server.load_steps(server._run_directory(started["run_id"], tmp_path),
+                          run_class=None)
+    )
+
+    assert payload["arms"], "no arms were ranked"
+    assert "evidence" in payload, "a ranking was produced with no evidence block"
+    assert payload["evidence"]["n_seeds"] == 1
+    assert payload["evidence"]["is_evidence"] is False
+
+    assert "astar" not in [a["arm"] for a in payload["arms"]], (
+        "A* is being ranked against arms that can lose"
+    )
+    assert payload["reference"]["arm"] == "astar"
+
+
+def test_the_ranking_page_renders_the_evidence_line_before_the_table():
+    """The caveat must not be reachable only by scrolling past the answer.
+
+    Asserted on the markup's ordering rather than on a screenshot,
+    because ordering is the property — a viewer who reads the table first
+    and the caveat second has already formed the conclusion.
+    """
+    markup = (ROOT / "dashboard" / "static" / "index.html").read_text()
+    wrap = markup[markup.index('id="score-wrap"'):]
+    evidence = wrap.index('id="score-evidence"')
+    table = wrap.index('id="score-table"')
+    assert evidence < table, (
+        "the ranking table appears above its evidence-strength line"
+    )
+
+    # The wording lives in the scorer, not the page: it is built where the
+    # seed count is, so there is no path that renders a ranking and
+    # composes its own caveat. Asserted through the production function
+    # rather than by grepping either file.
+    import pandas as pd
+
+    from dynaswarm.analysis.scoring import score_run
+
+    weak = pd.DataFrame([
+        {"arm": a, "timestep": t, "excess": 0.1, "num_events": 0,
+         "seed": 1000, "run_class": "exploratory"}
+        for a in ("hybrid_fixed", "hybrid_adaptive") for t in range(12)
+    ])
+    line = score_run(weak)["evidence"]["line"]
+    assert "NOT EVIDENCE" in line, (
+        f"a single-seed exploratory ranking describes itself as {line!r} — "
+        f"a low-n table would render with no visible warning"
+    )
