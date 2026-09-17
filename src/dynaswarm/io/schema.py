@@ -51,6 +51,11 @@ STEP_SCHEMA = pa.schema(
         # cost
         pa.field("evaluations_spent", pa.int32()),
         pa.field("wall_ms", pa.float64()),
+        # Segment Z2. `wall_ms` is the search alone; these three make the
+        # time ledger checkable from a recorded run without re-running it.
+        pa.field("rebind_ms", pa.float64()),
+        pa.field("step_wall_ms", pa.float64()),
+        pa.field("oracle_ms", pa.float64()),
         pa.field("astar_expansions", pa.float64(), nullable=True),
         # what was sensed, and what responded to it
         pa.field("signal_kind", pa.string()),

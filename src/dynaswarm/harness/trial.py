@@ -67,7 +67,27 @@ class StepRow:
     path_len: int
     best_path: list[int]
     evaluations_spent: int
+    #: Time inside `spend()` only — the search, and nothing else. Not
+    #: rebind, not row construction, not the parquet write, and above all
+    #: not the oracle: `shortest_path` runs once per timestep OUTSIDE this
+    #: loop, so no arm's total carries it. A timing number has no oracle
+    #: to contradict it and no identity to balance, so what it excludes
+    #: has to be written down rather than assumed.
     wall_ms: float
+    #: Time inside `rebind()` — adopting the new world, separately from
+    #: searching it. **Recorded apart from `wall_ms` deliberately**
+    #: (segment Z2, T1): it is real cost an arm pays and the arms pay
+    #: different amounts of it, but it is driven by the environment
+    #: changing rather than by the search budget, so folding it into
+    #: `wall_ms` would conflate "what the budget buys" with "what the
+    #: disruption costs". Report either; do not silently mix them.
+    rebind_ms: float
+    #: The whole timestep, measured independently with its own clock, and
+    #: the oracle's share of it. These repeat across the arms of one
+    #: timestep. They exist so the time ledger can be checked from the
+    #: recorded frame alone — see `scripts/time_ledger.py`.
+    step_wall_ms: float
+    oracle_ms: float
     astar_expansions: float | None
     signal_kind: str
     controller_kind: str
@@ -150,13 +170,20 @@ def run_trial(
     quiet_steps: dict[str, int] = {}
 
     for t in range(timeline.timesteps):
+        # Measured with its own clock around the entire timestep, NOT
+        # summed from the parts. A total derived from its components
+        # makes the ledger a tautology that balances however wrong the
+        # components are — segment 14's lesson, in the timing layer.
+        step_started = time.perf_counter()
         state = timeline.state_at(t)
         before_hash = state.state_hash()
         # Recorded per timestep, not once: closures and additions change
         # the live edge count, and a constant column would hide that.
         n_edges = state.n_active_edges
 
+        oracle_started = time.perf_counter()
         optimum, _, _ = shortest_path(state, source, target, heuristic=True)
+        oracle_ms = (time.perf_counter() - oracle_started) * 1000.0
         if not np.isfinite(optimum):
             optimum = None
 
@@ -182,7 +209,9 @@ def run_trial(
         # that F13 needed belongs inside PSO, on the memory
         # invalidation, and it is there — see PSO.rebind.
         for arm in arms:
+            rebind_started = time.perf_counter()
             arm.optimizer.rebind(state)
+            rebind_ms = (time.perf_counter() - rebind_started) * 1000.0
             assert state.state_hash() == before_hash, (
                 f"{arm.name} mutated the shared world at t={t}"
             )
@@ -288,6 +317,10 @@ def run_trial(
                     best_path=list(path),
                     evaluations_spent=meter.spent,
                     wall_ms=wall_ms,
+                    rebind_ms=rebind_ms,
+                    # Filled in after the timestep closes; see below.
+                    step_wall_ms=0.0,
+                    oracle_ms=oracle_ms,
                     astar_expansions=probe.get("expansions"),
                     signal_kind=arm.signal.name if arm.signal else "",
                     controller_kind=arm.controller.name if arm.controller else "",
@@ -299,6 +332,16 @@ def run_trial(
             previous_path[arm.name] = path
 
         assert state.state_hash() == before_hash, f"shared world mutated during t={t}"
+
+        # The timestep's own elapsed time, stamped onto every row that
+        # belongs to it. Taken here rather than accumulated, so the ledger
+        # compares a measured total against measured parts: if the parts
+        # ever exceed it, something is double-counted, and that is a
+        # failure the residual can express as a negative number.
+        step_wall_ms = (time.perf_counter() - step_started) * 1000.0
+        for row in outcome.steps:
+            if row.timestep == t and row.step_wall_ms == 0.0:
+                row.step_wall_ms = step_wall_ms
 
     return outcome
 

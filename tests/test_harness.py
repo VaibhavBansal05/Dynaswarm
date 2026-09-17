@@ -188,7 +188,16 @@ def test_same_family_receives_the_same_stream():
 #: Fields that legitimately vary between identical runs.  Wall-clock time
 #: measures the machine, not the search, and is recorded for cost
 #: reporting rather than as part of the result.
-_NONDETERMINISTIC = {"wall_ms"}
+#: Clocks, not results. Every one of these is a duration measured on the
+#: machine that happened to run the trial, so requiring bit-equality of
+#: them would assert that two runs took identical time — which is not
+#: reproducibility, it is a claim about the hardware.
+#:
+#: **Kept as an explicit list rather than a `*_ms` pattern.** A suffix
+#: rule would silently excuse the next timing-shaped column from the
+#: reproducibility guarantee, and deciding that a column is exempt is
+#: exactly the kind of choice that should cost somebody a line of code.
+_NONDETERMINISTIC = {"wall_ms", "rebind_ms", "step_wall_ms", "oracle_ms"}
 
 
 def _comparable(row) -> tuple:

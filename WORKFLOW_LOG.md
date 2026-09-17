@@ -2315,3 +2315,171 @@ Segment Y did what it was commissioned to do and then told us the commission was
 Next: **Segment Z** — the ranking tab and the scorer, built to the rules above so that "these arms are indistinguishable" can be shown honestly rather than argued. Then segment 22 by hand, then the manifest, then the run.
 
 ---
+
+---
+
+## Entry 025 — Segment Z: the bias was already in the codebase, and a tolerance reordered the results
+
+**Verified 17 Sept 2026.** 505 passed, **1 failed** — the JS line budget at 920 against a 900 ceiling, deliberately not resolved and correctly escalated. 52 JS tests, `src/` 2292 statements, ruff clean.
+
+### Ruling: **`MAX_JS_LINES` is removed. Not raised.**
+
+vClaude recommended raising to 1000 with a derivation. I am going further, and the reasoning is the same one Rudra applied to the statement ceiling.
+
+This cap has now been wrong **twice**. Segment 8 set it at 700 from a 414-line file — the "memento" error I had ruled against three segments earlier. It was then raised to 900 with a derivation that came back **3× out** (the excess chart is 36 lines, not ~120). It is now blocking a tab that Entry 024 itself commissioned, and vClaude has already cut that tab from 94 lines to 66 and verified there is no dead JavaScript left to remove.
+
+**A cap that has never caught a real problem, has twice been derived wrongly, and now blocks commissioned work is not protecting anything.** Applying my own standing rule: *a threshold must come from the property protected.* The property worth protecting in the browser layer is not **shortness**, it is **testedness** — and that is already guarded by 52 JS tests that run under `node --test` and fail loudly when absent.
+
+So: remove the cap, report the count, exactly as with `src/`. The JS suite is the guard. Line count is a fact, not a limit.
+
+Worth recording that vClaude again **refused to shave lines to pass** — the third time in this project — and instead moved formatting and both prose lines into the scorer, noting that *"how a metric renders is part of what it is."* That is a real architectural improvement that happened to arrive through a budget argument, and it stays regardless of the ruling.
+
+### T2 — the trap was not hypothetical. It was already live.
+
+I wrote T2 as a warning about a bias a scorer *could* acquire. `summarise_recovery` in `recovery.py` **already averaged only the transients that recovered.**
+
+On the constructed fixture — three disruptions each — an arm that recovers instantly twice and **never recovers once** scores **1.00** with censored cases dropped against **15.67** with them counted. An arm that always recovers in 8 steps scores 8.00 either way.
+
+**Dropping made the permanently-failing arm look eight times better than the reliable one.**
+
+Two things follow, and the second matters more than the first.
+
+**The fix is right.** Censored cases are now counted at the full remaining horizon — a lower bound, so it under-states rather than invents a penalty — and shown separately as `0.25 (2†)`. The `MIN_HORIZON` exclusion is kept and tested as a *distinct* thing, because no opportunity to recover is not the same as failing to recover. That distinction is correct and I had not specified it.
+
+**And the existing function was not wrong for its own question.** "When it recovers, how long does it take" is legitimately answered by averaging recoveries. It is catastrophic only as a *ranking input*. So no prior recovery figure needs retracting — but **every recovery number in the report must say which of the two questions it answers**, because the same name currently covers both.
+
+### The finding inside the finding: **no real scenario produces a censored recovery**
+
+vClaude tried every setting available and could not produce one on real data.
+
+So the property most able to bias the entire ranking is the one a real run never exercises. That is why the fixture is constructed, and vClaude said so rather than quietly presenting a synthetic case as a natural one.
+
+And the consequence lands squarely on my own mutation: **the `dropna` I specified changed nothing on a real race.** Zero censored cases, so zero difference — invisible on exactly the data anyone would naturally check it against.
+
+**Standing rule, new:** *a bias that real data cannot expose is not a smaller risk than one it can — it is a larger one*, because every honest attempt to verify it comes back clean. Such a property needs a constructed fixture that declares itself, and the fixture is part of the evidence, not a testing convenience.
+
+### vClaude's mutation is the most dangerous one this project has produced
+
+It raised `AT_OPTIMUM_TOLERANCE` from `1e-9` to `0.005`. **A change that reads as a rounding fix.** It passed all 501 tests and **swapped `hybrid_scheduled` and `hybrid_fixed` in the final ranking.**
+
+Nothing broke. Nothing looked wrong. The results simply came out in a different order.
+
+At `0.005`, a route **0.5% above optimal** counts as "at the optimum" — so the column labelled *% of steps at optimum* stops being true, and one of the four pre-registered metrics quietly changes meaning underneath a ranking built on it.
+
+Closed by pinning the meaning rather than the number.
+
+**Standing rule, new:** *a tolerance is a definition, not a convenience.* Changing one changes what a column means, and a suite that tests behaviour will not notice, because the behaviour is unchanged — only the thing being counted is.
+
+This is also the fourth segment running in which **the uncommissioned mutation was the more dangerous one.** That pattern is now strong enough to belong in the report's methodology section rather than being treated as a run of luck.
+
+### T9 — the answer, and it changes how the report leads
+
+The question was whether the tab makes a null legible. vClaude's answer:
+
+> **The tab makes a null legible, but Pareto does it, not the ranking.**
+
+The mean rank produced a clean 1-2-3-4 **from a race where the bottom three arms sit within 0.14pp of each other.** It will always produce an ordering, including from noise. Pareto reported that the adaptive arm genuinely dominates two others and that `hybrid_direct`'s second place is an **averaging artefact** — a sentence a mean rank is structurally incapable of producing.
+
+**Ruling for segment 25: the report leads with Pareto dominance and shows the mean rank beside it, not the other way round.** A clean ordering from indistinguishable arms is precisely the misreading this project exists to avoid, and we now have a measured example of the ranking producing one.
+
+### T6 — the family question, answered
+
+`family` is **mechanically load-bearing**: it keys the search RNG, and the two families visibly draw different bits. Merging is not free.
+
+But merging would reduce `hybrid` vs `hybrid_fixed` from two differences to one, making that pair a direct test of **whether the allocation machinery costs anything at all** — which is a question nothing currently answers. Noted for after the evidence run, not done. Correct: the arm set is frozen.
+
+### Close
+
+Segment Z found that the bias it was written to prevent was already in the code, and that the mechanism most able to distort the ranking is one no real run exercises. Both of those are better outcomes than a clean pass.
+
+Next: **Segment Z2** — per-arm, per-timestep timing, which must land and be verified *before* segment 23 freezes the schema. Then segment 22, Rudra by hand.
+
+---
+
+---
+
+## Entry 026 — Segment 22: Rudra's manual pass. Four findings, one of them from a screenshot.
+
+**17 Sept 2026.** Rudra worked `WALKTHROUGH.md` end to end, plus `SEGMENT-22-CHECKLIST.md` section D (the ranking tab, which postdates the walkthrough). **Complete.**
+
+This is the first segment in the project carried out by a human rather than by either agent, and it found four things the 505-test suite did not. Recording them together because they share a shape: **every one is an instrument that reads plausibly while saying nothing.**
+
+### 1. The long straight road — resolved, and it opened a real question
+
+Rudra noticed a route crossing half the map in one unbroken segment and asked whether the display was drawing a road that did not exist. It was not. The inspector confirmed: road 63–125, **original**, open, never changed, on the best route. The display is honest.
+
+The cause is `_ensure_connected` in `generate.py`. A geometric graph at low density comes out in disconnected components; the generator bridges them by picking **one node at random from each** — not the nearest pair — so a bridge can span the entire canvas, and since weight is Euclidean distance it is priced accordingly. Hence 87.228.
+
+**The question this opens is the valuable part, and it is a competing explanation for a null.** If a small number of enormous bridging edges carry most of a typical optimal route, then the search problem is largely *"reach the bridge"* — and every arm will look alike **for a structural reason rather than because allocation does not help.** Those two conclusions produce identical-looking results.
+
+**Ruled: do not change the generator.** Every measurement in this project was taken on these instances, and changing them now invalidates all of it — and changing the problem after seeing flat results is indistinguishable from searching for a difference. **Measure it instead**, and the measurement belongs in the manifest segment as instance characterisation, which a report needs regardless.
+
+### 2. The staleness row is an instrument that cannot fail
+
+The trust report gained a row in Segment Y:
+
+```
+share of trail mass that died this step    0    0    live   0.00 — nothing the colony knew was invalidated
+```
+
+**Its observed value is 0. Its own broken-value is 0.00. And the verdict reads `live`.**
+
+That row cannot distinguish alive from dead. It displays exactly the number that means "not running" and labels it healthy.
+
+It is not a code defect — Segment Y measured that the signal reads zero on **51 of 63 disrupted steps**, so zero is its normal value. But `first` and `last` are the wrong summary for a signal that is usually zero, and unlike the velocity row it carries no `!` caveat declaring the blind spot.
+
+This is the same failure family as `model.js` claiming a test that did not exist, and the `F7` docstring: **a statement that is true-looking and uninformative.** The trust report's entire worth rests on the `when broken` column being a real discriminator.
+
+### 3. `mean steps to recover` is 0.00 for every arm — so the ranking runs on three metrics, not four
+
+On the ranking tab, **every** arm reports `0.00`. A metric constant across all arms discriminates nothing and contributes nothing to a mean rank.
+
+That is precisely the reason I excluded hops and evaluations from the metric set in Segment Z: *a column identical for every row is not a comparison.* One of the four survivors has quietly become one of those, and nobody noticed because it still prints a number.
+
+Two possibilities and they are very different: either every arm genuinely recovers within a step at this disruption level, in which case the metric is fine and simply uninformative here; or the metric is degenerate and is not measuring recovery at all. **This must be settled before the evidence run**, because segment 24's ranking is built on it and Claim 3's whole argument is about recovery speed.
+
+### 4. Fixed and Adaptive are identical to four significant figures
+
+On the ranking tab, `hybrid_fixed` and `hybrid_adaptive` returned **the same mean excess, the same % at optimum, the same worst excess, and the same mean rank of 2.63.**
+
+Not a defect. One seed, and entirely consistent with Entry 024's measurement that the incremental arm correlates with recency at **−0.016** on position and lands nowhere in particular. **But it is the null, visible on a screen, and Rudra saw it before any statistics were run.**
+
+Also worth recording from the same screenshot, because it is the ranking tab doing exactly what it was built for: PSO ranks **first** on mean rank while being **worse** than both controlled hybrids on mean excess — it wins on two metrics of four. The Pareto line refuses to claim that ordering and says so in words: *"any ordering above not listed here is an artefact of averaging ranks across metrics that disagree."* Entry 025 ruled that the report leads with Pareto; this is the concrete case that ruling was made for.
+
+### Ruling on F13's heading — and it is not a text edit
+
+The trust report still carries `F13 — PSO VELOCITY, OPEN FOR PHASE 3`. **Phase 3 closed two segments ago.**
+
+My first read was that the heading was simply stale. On looking at the content, that is wrong and I am correcting it: **the heading is misleading but the question underneath it is genuinely unresolved.** The section reports velocity falling to `2.78e-04` under disruption against `~1.4e-02` stable in isolation — a **50× gap that survived the segment-18 fix.** What segment 18 fixed was the memory wipe (`_own_cost` cleared every timestep). The velocity collapse was never explained.
+
+**Ruled:**
+
+1. **Retitle it to say what is true**: an open characterisation question about PSO, with **Phase 3 recorded as having closed without answering it.** A section that names a phase as its owner, after that phase has ended, tells the next reader something false about who is dealing with it. Do not quietly drop the phase reference — record that it passed.
+2. **Do not attempt to resolve it before the evidence run.** It is a characterisation question, not a correctness one. PSO runs, it converges, and it is one component of a hybrid.
+3. **It bears on Claim 1 and that belongs in the report.** PSO ends every run effectively idle — personal bests improved `93 → 0`, global best `7 → 0`, spread collapsed to `3.7e-04`. If PSO stops searching in the back half of a run, part of the hybrid's advantage over PSO-alone is simply that **ACO is still working.** That is a legitimate and interesting mechanism for Claim 1, and stating it is stronger than letting an examiner find it.
+
+**And one piece of good news that should be said out loud.** `WALKTHROUGH.md` Part 11 records that *"falling to ~1e-14 was defect F13."* The current report reads **2.78e-04** — ten orders of magnitude better. The segment-18 fix is visibly working, and that comparison belongs in the report as evidence the repair was real.
+
+### What this segment demonstrates about the method
+
+A human looked at pictures for two hours and found four things that 505 automated tests, four mutation rounds and two agents did not.
+
+Every one of them is the same class: **an instrument producing a plausible reading that carries no information.** A row whose broken-value equals its live value. A metric identical across every arm. A section header naming a phase that has ended. A route drawn correctly across a road nobody had thought to ask about.
+
+Tests check that values are *correct*. They are very poor at noticing that a value is *uninformative*. That gap is what the manual pass is for, and it should be said plainly in the report's methodology rather than left as a story about diligence.
+
+### Next
+
+**Segment Z3** collects all four, and it must land before the manifest — items 2 and 3 change numbers the manifest would otherwise freeze, and item 1's measurement is an input to the manifest's own decisions. Held until Z2 hands back, because `currentWorkFlow.md` is in flight.
+
+Its scope, fixed now:
+
+| | |
+|---|---|
+| **T1** | the staleness row — a caveat, or a summary that can discriminate |
+| **T2** | **is `mean steps to recover` real or degenerate?** Settle it before the run |
+| **T3** | instance characterisation — how many bridging edges, and what fraction of an optimal route's cost sits on them, across seeds and models |
+| **T4** | retitle the F13 section per the ruling above |
+| **T5** | the intermittent `test_a_hybrid_can_actually_be_tuned` error, if Z2 has not already closed it |
+
+---
