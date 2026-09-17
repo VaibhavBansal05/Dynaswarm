@@ -52,6 +52,24 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
 OUTPUTS = ROOT / "outputs"
 
+#: Where dashboard races are written. **Deliberately not `outputs/`.**
+#:
+#: Segment Z2 found a leftover browser writing real run directories into
+#: the evidence tree: `api_race` took no root, so an unsupervised page on
+#: `?demo=1` wrote straight into `outputs/<date>/`. The session guard in
+#: `tests/conftest.py` caught it, which is the containment working — but
+#: only after the fact, and only because a test happened to be running.
+#:
+#: Ruled in Entry 027: **a dedicated scratch root, not a `root`
+#: parameter.** A parameter moves the decision to the caller and the
+#: caller here is a browser nobody is supervising. Dashboard runs are
+#: `exploratory` by construction and can never become evidence, so
+#: relocating them costs nothing — and the collision disappears before
+#: segment 24 rather than being managed around it.
+#:
+#: The evidence tree becomes a place only the CLI can write to.
+SCRATCH = ROOT / "dashboard-runs"
+
 #: The research tier, and not a negotiable default.  ``small30`` is
 #: Erdos-Renyi and carries **no coordinates**, so every visual built on it
 #: is a meaningless tangle — which is exactly what the first run of this
@@ -598,7 +616,7 @@ def race(spec: RaceSpec, root: Path | None = None) -> dict:
     """
     cfg = race_config(spec)
     stamp = datetime.now()
-    root = OUTPUTS if root is None else Path(root)
+    root = SCRATCH if root is None else Path(root)
     directory = root / stamp.strftime("%Y-%m-%d") / stamp.strftime("%H-%M-%S")
     run_id = directory.name
     directory.mkdir(parents=True, exist_ok=True)
@@ -657,7 +675,7 @@ def _run_directory(run_id: str, root: Path | None = None) -> Path:
     `read_run` does, and a second copy of a path-matching rule is how the
     two quietly come to disagree about which directory a run id names.
     """
-    base = OUTPUTS if root is None else Path(root)
+    base = SCRATCH if root is None else Path(root)
     matches = sorted(base.glob(f"*/{run_id}"))
     if not matches:
         raise FileNotFoundError(f"no run directory named {run_id!r} under {base}")
@@ -756,6 +774,8 @@ def run_classes() -> dict[str, int]:
         ``{run_class: n_rows}``, empty if nothing has been run yet.
     """
     try:
+        # Reads the evidence tree on purpose: this endpoint answers "what
+        # has been run", and the CLI's runs are the ones that matter.
         frame = load_steps(OUTPUTS, run_class=None)
     except FileNotFoundError:
         return {}

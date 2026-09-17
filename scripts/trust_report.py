@@ -58,7 +58,7 @@ MECHANISMS: list[tuple[str, str, str, str]] = [
     # of it carried pheromone — those are different facts and this figure
     # cannot tell them apart on its own. Read it beside `num_events`.
     ("aco", "trail_mass_lost", "share of trail mass that died this step",
-     "0.00 — nothing the colony knew was invalidated"),
+     "peak 0 over 0 steps — no invalidation ever seen"),
     ("pso", "particles_flown", "particles the flight step displaced", "0 — swarm frozen"),
     ("pso", "particles_repaired", "particles moved by repair instead", "0 — repair silent"),
     ("pso", "speed_mean", "mean |velocity| across the swarm", "unchanged from random init"),
@@ -87,6 +87,37 @@ NON_MECHANISM = frozenset({
 #: What each probe cannot see.  Beside the probe, per Entry 015 R3 — a
 #: report listing only what it can prove, with no account of what it
 #: cannot, is the over-claim this phase was built to prevent.
+#: Fields whose **normal** value is zero, so `first` and `last` say
+#: nothing about whether they are alive.
+#:
+#: Found by Rudra's manual pass (Entry 026). The staleness row read:
+#:
+#:     share of trail mass that died this step  0  0  live  0.00 — evaporation off
+#:
+#: Observed 0, broken-value 0.00, verdict `live`. **A row whose live and
+#: broken readings are identical discriminates nothing**, and this
+#: document's entire worth rests on the `when broken` column being a real
+#: discriminator.
+#:
+#: It is not a probe defect — Segment Y measured the signal at zero on 51
+#: of 63 disrupted steps, because a break that destroys no pheromone
+#: genuinely invalidates nothing. Zero IS its normal value. The defect is
+#: that a first/last summary of a sparse signal is a summary of its
+#: silence.
+#:
+#: These rows report **peak** and **how many steps were non-zero**
+#: instead. Both move when the mechanism dies: a dead signal has a peak of
+#: 0 over 0 steps, a live one does not. The column meanings differ from
+#: the rest of the table, so every such row carries a `!` line saying so —
+#: an unexplained column change is its own kind of misreading.
+SPARSE_FIELDS: dict[str, str] = {
+    "trail_mass_lost": (
+        "columns are PEAK and COUNT OF NON-ZERO STEPS, not first/last: this "
+        "signal is zero on most disrupted steps by design, so first/last "
+        "would read 0 whether it was working or dead"
+    ),
+}
+
 BLIND_SPOTS: dict[str, str] = {
     "speed_mean": "cannot detect a frozen swarm: velocity keeps its random initial value",
     "tau_deposited": "cannot detect deposit on the WRONG edges; the count is identical either way",
@@ -172,10 +203,16 @@ def render(run: dict, series: dict[str, dict[str, list[float]]], horizon: int) -
             if values is None:
                 lines.append(f"  {what:<34}{'not recorded':>22}  {'':<6}{broken}")
                 continue
+            if field in SPARSE_FIELDS:
+                left, right = max(values), float(sum(1 for v in values if v != 0))
+            else:
+                left, right = values[0], values[-1]
             lines.append(
-                f"  {what:<34}{scale(values[0]):>12}{scale(values[-1]):>12}"
+                f"  {what:<34}{scale(left):>12}{scale(right):>12}"
                 f"   {verdict(values):<6}{broken}"
             )
+            if field in SPARSE_FIELDS:
+                lines.append(f"    ! {SPARSE_FIELDS[field]}")
             if field in BLIND_SPOTS:
                 lines.append(f"    ! {BLIND_SPOTS[field]}")
         lines.append("")
@@ -192,17 +229,47 @@ def f13(series: dict[str, dict[str, list[float]]]) -> str:
     speed = series.get("pso", {}).get("speed_mean")
     if not speed:
         return ""
+    bests = series.get("pso", {}).get("own_best_updates") or []
+    globals_ = series.get("pso", {}).get("swarm_best_updates") or []
+    spread = series.get("pso", {}).get("diversity") or []
     return "\n".join([
-        "F13 — PSO VELOCITY, OPEN FOR PHASE 3",
+        "F13 — PSO VELOCITY COLLAPSE: UNEXPLAINED. PHASE 3 CLOSED WITHOUT ANSWERING IT.",
         "-" * 96,
         f"  under disruption   {scale(speed[0])}  ->  {scale(speed[-1])}"
         f"   ({len(speed)} timesteps)",
         "  in isolation       ~1.4e-02, stable, measured over the same horizon",
         "",
-        "  Reported as a measurement, not a verdict. The flight step still runs and still",
-        "  displaces particles, by amounts near the limit of float resolution. Whether that",
-        "  is convergence working or exploration failing is Phase 3's to answer, and it",
-        "  comes before the inertia decision in §17.1 rather than beside it.",
+        "  The heading used to read 'OPEN FOR PHASE 3'. That was not merely stale — a",
+        "  section naming a phase as its owner, after that phase has ended, tells the next",
+        "  reader something false about who is handling it. Nobody is. Phase 3 built the",
+        "  allocation layer and closed; this was never picked up.",
+        "",
+        "  WHAT SEGMENT 18 DID AND DID NOT FIX. It fixed the memory wipe — `_own_cost`",
+        "  was being cleared on every timestep regardless of whether the world had",
+        "  changed. It did NOT explain the velocity collapse, and the collapse survived",
+        "  the repair. Two defects in one mechanism; one is closed.",
+        "",
+        "  THE REPAIR WAS REAL, THOUGH, AND THIS IS THE EVIDENCE. WALKTHROUGH Part 11",
+        "  records the pre-fix reading as ~1e-14. It is now 2.78e-04 — ten orders of",
+        "  magnitude better, and the clearest single number showing segment 18 worked.",
+        "  A 50x gap against isolation remains, which is the open part.",
+        "",
+        "  BEARING ON CLAIM 1, which is why this is not a footnote. PSO ends a run",
+        "  effectively idle:",
+        f"      personal bests improved   {scale(bests[0]) if bests else '?'}"
+        f"  ->  {scale(bests[-1]) if bests else '?'}",
+        f"      global best improved      {scale(globals_[0]) if globals_ else '?'}"
+        f"  ->  {scale(globals_[-1]) if globals_ else '?'}",
+        f"      spread of priorities      {scale(spread[0]) if spread else '?'}"
+        f"  ->  {scale(spread[-1]) if spread else '?'}",
+        "",
+        "  So part of the Hybrid's margin over PSO-alone is not that the combination is",
+        "  clever — it is that ACO is still working when PSO has stopped. Any claim that",
+        "  the hybrid beats its components must say this, or it credits the architecture",
+        "  with a result that belongs to one half of it.",
+        "",
+        "  Reported as a measurement, not a verdict, and not resolved here: this is",
+        "  characterisation, not correctness.",
         "",
     ])
 

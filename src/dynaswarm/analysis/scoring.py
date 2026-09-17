@@ -21,6 +21,7 @@ score. A metric that is not a virtue is bias wearing a number's clothes.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -33,6 +34,7 @@ __all__ = [
     "ArmScore",
     "arm_metrics",
     "censored_recovery",
+    "RecoverySummary",
     "mean_ranks",
     "pareto_dominance",
     "score_run",
@@ -131,55 +133,97 @@ class ArmScore:
     ranks: dict[str, float]
     mean_rank: float
     n_disruptions: int
+    n_damaged: int
+    n_unchanged: int
+    n_improved: int
+    n_censored: int
+
+
+class RecoverySummary(NamedTuple):
+    """Recovery, and the population it was measured over.
+
+    The counts are not diagnostics hanging off the number — they are what
+    makes the number readable. At one seed the mean rests on three or four
+    observations, and a reader who cannot see that will treat it as solid.
+    """
+
+    mean: float
+    n_scoreable: int
+    n_damaged: int
+    n_unchanged: int
+    n_improved: int
     n_censored: int
 
 
 def censored_recovery(
     excess: list[float | None], events: list[int]
-) -> tuple[float, int, int]:
-    """Mean steps to recover, **counting the ones that never recovered.**
+) -> RecoverySummary:
+    """Mean steps to recover, over the disruptions that caused damage.
 
-    This is the function the whole segment turns on.
+    Two aggregation rules, both learned the hard way in this metric.
 
-    ``summarise_recovery`` in ``recovery.py`` averages only the transients
-    that recovered. That is correct for describing *how fast recovery was
-    when it happened*, and it is **catastrophic as a ranking input**: an
-    arm that never recovers has its worst cases deleted from its own
-    average and scores better than an arm that recovered slowly every
-    time. One quiet filter, and the ranking favours the worst behaviour.
+    **Censored cases are counted, never dropped** (segment Z). An
+    unrecovered disruption is scored at the full remaining horizon — a
+    lower bound, so it under-states rather than invents a penalty.
+    Dropping them made an arm that never recovers score 1.00 against 8.00
+    for one that always did.
 
-    So an unrecovered disruption is scored at **the full remaining
-    horizon** — the number of steps left in the trial after it landed.
-    That is a *lower bound* on the truth: the arm had not recovered by
-    then, so its real recovery time is at least this and possibly much
-    more. Choosing the bound rather than a penalty constant means the
-    metric under-states how bad these cases are, which is the safe
-    direction to be wrong in and needs no constant to justify.
+    **Undamaged disruptions are excluded** (segment Z3, Entry 028). You
+    cannot measure recovery from an event that caused no degradation, and
+    a `recovery` of 0 there is arithmetically right and informationally
+    empty. Measured: only 3-4 of 19 scoreable disruptions actually damage
+    an arm, so ~80% of the population contributed a zero that pulled every
+    arm toward zero **and toward each other**. Restricted to damaged
+    events the arms spread by 3x and the `hybrid_fixed` /
+    `hybrid_scheduled` tie breaks.
 
-    Disruptions inside ``MIN_HORIZON`` of the end are still excluded by
-    ``disruptions()``, and that exclusion is kept. It is a different thing
-    from censoring: an arm hit on the final timestep had **no opportunity**
-    to recover, and scoring it as a failure penalises whichever arm
-    happened to be hit late.
+    **Why conditioning on an outcome is legitimate here**, since it is the
+    obvious objection: it discards the information that a robust arm was
+    rarely damaged. But robustness is already carried by the other three
+    metrics — mean excess, % at optimum and worst excess all measure how
+    well an arm does, including how rarely it is hurt. Recovery answers a
+    different question, *speed of return*, which is the one Claim 3 is
+    about. The metric set has no gap and no double-count.
+
+    The two rules compose without interacting: an undamaged disruption can
+    never be censored, because if damage <= 0 then the excess never rose
+    above the recovery band and `recovery` is 0 at the disruption step
+    itself. So excluding undamaged events keeps every censored one.
 
     Returns:
-        ``(mean_recovery, n_disruptions, n_censored)``. The mean is
-        ``nan`` when nothing was scoreable, which keeps an empty trial out
-        of an average instead of pulling it toward zero.
+        A :class:`RecoverySummary`. ``mean`` is ``nan`` when nothing
+        damaging was scoreable, which keeps an arm that was never hurt out
+        of an average rather than crediting it with instant recovery.
     """
     horizon = len(excess)
     transients = disruptions(excess, events)
     if not transients:
-        return float("nan"), 0, 0
+        return RecoverySummary(float("nan"), 0, 0, 0, 0, 0)
+
+    # `improved` is counted apart from `unchanged` deliberately. A
+    # disruption can open a shorter route — measured at -0.0017 — and
+    # merging "the disruption helped" into "nothing happened" throws away
+    # a real and counter-intuitive property of dynamic graphs.
+    damaged = [t for t in transients if t.damage > 0.0]
+    unchanged = sum(1 for t in transients if t.damage == 0.0)
+    improved = sum(1 for t in transients if t.damage < 0.0)
 
     times, censored = [], 0
-    for t in transients:
+    for t in damaged:
         if t.recovery is None:
             censored += 1
             times.append(float(horizon - t.timestep))
         else:
             times.append(float(t.recovery))
-    return float(np.mean(times)), len(transients), censored
+
+    return RecoverySummary(
+        mean=float(np.mean(times)) if times else float("nan"),
+        n_scoreable=len(transients),
+        n_damaged=len(damaged),
+        n_unchanged=unchanged,
+        n_improved=improved,
+        n_censored=censored,
+    )
 
 
 def arm_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float]]:
@@ -195,7 +239,7 @@ def arm_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float]]:
         events = [int(v) for v in group["num_events"]]
         present = [v for v in excess if v is not None]
 
-        recovery, n_dis, n_cens = censored_recovery(excess, events)
+        recovery = censored_recovery(excess, events)
         out[str(arm)] = {
             "mean_excess": float(np.mean(present)) if present else float("nan"),
             # Of the steps where a route existed. A step with no route is
@@ -208,9 +252,12 @@ def arm_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float]]:
                 else float("nan")
             ),
             "worst_excess": float(max(present)) if present else float("nan"),
-            "mean_recovery": recovery,
-            "_n_disruptions": float(n_dis),
-            "_n_censored": float(n_cens),
+            "mean_recovery": recovery.mean,
+            "_n_disruptions": float(recovery.n_scoreable),
+            "_n_damaged": float(recovery.n_damaged),
+            "_n_unchanged": float(recovery.n_unchanged),
+            "_n_improved": float(recovery.n_improved),
+            "_n_censored": float(recovery.n_censored),
         }
     return out
 
@@ -261,6 +308,9 @@ def mean_ranks(metrics: dict[str, dict[str, float]]) -> dict[str, ArmScore]:
             ranks=ranks,
             mean_rank=float(np.mean(list(ranks.values()))),
             n_disruptions=int(m.get("_n_disruptions", 0)),
+            n_damaged=int(m.get("_n_damaged", 0)),
+            n_unchanged=int(m.get("_n_unchanged", 0)),
+            n_improved=int(m.get("_n_improved", 0)),
             n_censored=int(m.get("_n_censored", 0)),
         )
     return scores
@@ -329,6 +379,9 @@ def score_run(frame: pd.DataFrame, display: dict[str, str] | None = None) -> dic
             "ranks": s.ranks,
             "mean_rank": s.mean_rank,
             "n_disruptions": s.n_disruptions,
+            "n_damaged": s.n_damaged,
+            "n_unchanged": s.n_unchanged,
+            "n_improved": s.n_improved,
             "n_censored": s.n_censored,
             "dominates": sorted(dominance.get(s.arm, [])),
             "dominated_by": sorted(

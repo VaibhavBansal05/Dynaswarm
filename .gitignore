@@ -33,3 +33,7 @@ multirun/
 .idea/
 .vscode/
 *.swp
+
+# Dashboard scratch runs (segment Z3). Exploratory by construction and
+# never evidence; kept out of outputs/ so only the CLI writes there.
+dashboard-runs/

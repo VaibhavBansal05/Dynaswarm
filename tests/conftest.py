@@ -18,7 +18,18 @@ from pathlib import Path
 
 import pytest
 
-OUTPUTS = Path(__file__).resolve().parents[1] / "outputs"
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUTS = ROOT / "outputs"
+
+#: The dashboard's scratch root, ignored by this guard **by name**.
+#:
+#: Named rather than left outside `outputs/` by accident of path: the
+#: carve-out is a decision, and a decision that exists only because two
+#: directories happen not to overlap is one nobody can find later. If the
+#: dashboard is ever pointed back at the evidence tree, this guard must
+#: still fire — so it excludes one specific directory, not "anything that
+#: is not outputs/".
+SCRATCH = ROOT / "dashboard-runs"
 
 
 def _snapshot() -> set[str]:

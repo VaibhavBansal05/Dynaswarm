@@ -2483,3 +2483,218 @@ Its scope, fixed now:
 | **T5** | the intermittent `test_a_hybrid_can_actually_be_tuned` error, if Z2 has not already closed it |
 
 ---
+
+---
+
+## Entry 027 — Segment Z2: a ledger that balances while every row is wrong
+
+**17 Sept 2026.** 514 passed (from 505 + 1 failed), 52 JS, `src/` 2306 statements across 42 files, `dashboard/static` 920 lines **reported not capped**, ruff clean. Uncommitted.
+
+`MAX_JS_LINES` is deleted per Entry 025. `MAX_PRESENTATION_LINES` survives, and vClaude was right to keep it and say why: **markup and styling do not execute, so they cannot disagree with the engine.** Different question, different answer.
+
+### The intermittent error: diagnosed, and it was not the code
+
+Full traceback puts it in **teardown**, not setup or body:
+
+```
+___________ ERROR at teardown of test_a_hybrid_can_actually_be_tuned ___________
+    @pytest.fixture(scope="session", autouse=True)
+    def outputs_is_read_only():
+        ...
+>       assert not appeared
+E       AssertionError: the test suite wrote into outputs/, the evidence tree:
+E           2026-09-17/10-58-26
+tests/conftest.py:41
+```
+
+It is the session-scoped containment guard, attributed to the tuning test only because that test runs last. **The tuning test is not implicated at all.**
+
+**Cause: a leftover dashboard server and a headless Chrome still pointed at `?demo=1`**, which auto-runs a race. `api_race` takes no `root`, so it writes to the live `OUTPUTS`. When one of those late requests landed inside a pytest session, a directory appeared mid-session and the guard fired. One run in five. Both processes killed.
+
+**The shared-state hypothesis checked out clean**, and vClaude took it seriously because of what it would have meant for segment 24: `trial.py` carries exactly two module-level names (`__all__` and a float), **no function attributes and no `global` anywhere in `src/`**, and every timing variable is local to `run_trial`. So the timing path is safe under `parallel_jobs`. The `run_trial._carry` I flagged was scaffolding inside vClaude's own mutation and never existed in committed source.
+
+**The guard worked from a direction nobody anticipated.** `conftest.py` was written after 25 directories accumulated in an afternoon — from *tests*. It caught a **browser** writing into the evidence tree. A containment rule that only catches the failure it was designed for is a rule that will be surprised later; this one generalised.
+
+**Action for Rudra:** `outputs/2026-09-17/10-58-26/` is still there and must be deleted by hand. vClaude cannot — the guardrail forbids touching `outputs/`, and refusing to clean up its own mess because the rule carves out no exception for it remains the correct reading (Entry 011).
+
+### Ruling on `/api/run` — **separate root, not a parameter**
+
+vClaude asked whether the endpoint should accept a run root or refuse to write. Neither, quite.
+
+Adding a `root` parameter only moves the decision to whoever calls it, and the caller here is a browser nobody is supervising. **The dashboard writes to a dedicated scratch root that is not `outputs/<date>/`.**
+
+The reasoning is the same one that made `run_class` load-bearing: the evidence tree should be a place only the CLI can write to. Dashboard runs are `exploratory` by construction and can never become evidence, so nothing is lost by putting them somewhere else — and the collision disappears before segment 24 rather than being managed around it.
+
+Goes into Segment Z3.
+
+### Ruling on `rebind_ms` — **accepted, and it is better than what I specified**
+
+I asked vClaude to rule rebind in or out of `wall_ms` and defend the choice. It refused the either/or and recorded it in **its own column**, with `test_rebind_is_recorded_separately_from_the_search` failing if the two are ever mixed.
+
+That is the right call. Both readings are defensible — rebind is real work a deployed system pays, *and* it is driven by the environment rather than by the search budget — and my spec would have thrown away information the report needs. The ledger attributes it explicitly either way.
+
+`oracle_ms` is a genuine improvement I had not asked for: the oracle's exclusion was already structural (it runs outside the arms loop), and timing it into its own column makes that **checkable from a recorded run rather than by reading the loop.** A structural guarantee that can be verified from data beats one that requires trusting the code.
+
+### The segment's three real findings
+
+**1. The first red case was not red.**
+
+Double-counting rebind — counting it in `rebind_ms` and again inside `wall_ms` — **passed all six timing tests.** At 200 nodes, rebind is 0.75ms against a 46ms timestep, so doubling it moves the residual by 1.6% and vanishes inside the tolerance.
+
+**A tolerance-based identity can only catch a double-count larger than its own overhead.** The detector was written on a fixture where the thing it detects is immaterial.
+
+The fix runs it where the doubled quantity matters — 1000 nodes, 20 evaluations, where rebind is **26% of the timestep** — and asserts that precondition first, because *a detector whose own preconditions have drifted is a detector that cannot fail*.
+
+```
+  n=  200 budget= 300: rebind  0.75 ( 1.6%)  residual  3.5%
+  n= 1000 budget=  20: rebind 16.90 (25.9%)  residual 16.6%   <- here
+```
+
+**Standing rule, new:** *a tolerance is a detection floor.* An identity checked within tolerance is blind to every error smaller than that tolerance, and the fixture must be chosen so the error it hunts is above it.
+
+**2. The specified mutation preserved every ratio — which is worse than what I predicted.**
+
+I expected a constant overhead that would compress the ratios and flatter the slow arms. Instead **every arm inflated by the same 1.1×**, because the added work is proportional to the arm rather than constant — rebind and `probe()` both scale with the arm's own state.
+
+So every comparison between arms survives intact and **only the absolute numbers are 10% high.** A reader comparing arms is entirely correct; a reader quoting a number is wrong, and nothing in the table looks odd. A constant offset would have been more visible.
+
+**3. The rotation mutation passed 513 tests, and this is the segment.**
+
+vClaude rotated `wall_ms` attribution *within* a timestep — each arm handed the previous arm's duration. The multiset of durations is unchanged, so every sum is exact, the ledger balances to the identical residual, and the overhead fraction is unmoved.
+
+```
+   astar    evaluations    0   true    3.22ms -> REPORTED  122.38ms
+   aco      evaluations  300   true  114.68ms -> REPORTED    3.28ms
+```
+
+**A\* spends zero evaluations and reports 122ms. ACO spends 300 and reports 3ms.** Every value believable, the entire cost story inverted. F1's shape in the timing layer: correct values, wrong owner.
+
+Closed by a **cross-column** check rather than another identity — an arm that spent no evaluation budget did no search and cannot have taken longer than one that spent all of it. Deliberately a loose bound, not a ranking.
+
+**Standing rule, new, and it generalises past timing:** *a balancing identity proves the total is right and says nothing about any individual row.* A suite can hold an exact conservation law and be blind to every entry being misattributed. Attribution needs a check that crosses columns.
+
+### The timing table, and one thing in it I want in the report
+
+```
+  size                    astar              aco              pso           hybrid
+  small            0.02 ± 0.00     1.46 ± 0.04     2.50 ± 0.08     2.17 ± 0.05
+  medium200        0.40 ± 0.00    10.44 ± 0.26     6.84 ± 0.06    13.65 ± 0.06
+  large1000        3.22 ± 0.03   114.68 ± 1.07    16.90 ± 0.06   106.08 ± 0.77
+```
+
+Apple M2, one machine, 5 repeats, medians with spreads, and the script refuses to present overlapping spreads as an ordering.
+
+**A\* is faster than every metered arm at every size tested, by one to two orders of magnitude, and it is exact.** Reported in the same words it would have had if the result had gone the other way. That settles the compute framing conversation with a measurement: the report scopes A\* as the oracle, cites D\* Lite as the appropriate exact baseline for the dynamic setting, and does not claim a compute win.
+
+**And a consequence nobody has stated, which only exists because time is now measured.**
+
+At `large1000`, 300 ACO evaluations cost 114.68ms and 300 PSO evaluations cost 16.90ms. **One ACO evaluation is roughly seven times more expensive in wall-clock than one PSO evaluation.**
+
+§10.2 guarantee 2 makes the arms equal in **evaluations** — and it is tested on `evaluations_spent`. It does **not** make them equal in time, and cannot. So an arm that shifts its split toward PSO is systematically **cheaper in wall-clock at an identical evaluation budget.**
+
+The thesis arm shifts toward PSO. On the measured 0.06 of travel that is roughly 18 evaluations moving, ≈6ms of ~106 — about **5%**.
+
+This is not a confound, because the declared fairness currency is evaluations and it holds exactly. But it must be **stated**, and it cuts in the project's favour: if the adaptive arm matches the fixed arm on excess while costing measurably less time, that is a real efficiency finding that the excess metric alone cannot see. It goes in the report either way, and it is now measurable because Z2 exists.
+
+Also worth the report's space, from the same table: **ACO scales badly** (1.46 → 10.44 → 114.68, roughly an order of magnitude per tier) while PSO goes 2.50 → 6.84 → 16.90 — and **the Hybrid tracks ACO, not PSO** (106.08 against 114.68 and 16.90). Its cost is dominated by its more expensive half, which is exactly the kind of thing an allocation argument has to account for.
+
+### Housekeeping
+
+vClaude found and removed **dead code it had left itself** — a `timings` dict written on every arm and never read — while auditing for shared state. Harmless, and exactly the shape the audit was hunting.
+
+It also overran its own time estimate twice by adding verification runs at ~105s each after it already had the answer, and said so plainly when Rudra pulled it up. Recorded because the honest version is the useful one: **the failure was not stopping once the question was answered.**
+
+### Close
+
+Z2 delivered a column that can be quoted and, more valuably, showed that this project's favourite kind of guard — a conservation identity — is structurally blind to an entire class of defect. That lesson is not about timing.
+
+Next: **Segment Z3**, the collected findings from the manual pass plus the `/api/run` ruling. Then the manifest.
+
+---
+
+---
+
+## Entry 028 — Z3 T1 ruling: the recovery metric averages over non-events
+
+**17 Sept 2026.** Segment Z3 is **not** complete — vClaude stopped at T1 as instructed, because the answer changes a pre-registered metric and needed a ruling before anything was implemented. Correct call.
+
+### The finding, and it is neither answer I offered
+
+I posed T1 as *real or degenerate*. It is **diluted**: the per-disruption measurement is correct, and the population it averages over is wrong.
+
+```
+hybrid_fixed      recovery [0, 0, 2, 0, 0, 0, 0, 0]
+                  damage   [0.0, -0.0017, 0.019, 0.0, 0.0231, 0.0, 0.0, 0.0]
+pso               recovery [0, 30, 0, 0, 0, 0, 0, 0]
+```
+
+PSO returns 30, so the loop can plainly produce large values — it is not structurally broken. But look at `damage`: **most disruptions did the arm no harm at all.** A `recovery` of 0 there is arithmetically right and informationally empty.
+
+**You cannot measure recovery from an event that caused no degradation.** vClaude's framing is exactly right and I am adopting its words: averaging those in is like including students who never sat the exam.
+
+Pooled over three seeds:
+
+| arm | scoreable | damage>0 | mean, all | mean, damaged only |
+|---|---|---|---|---|
+| `hybrid_fixed` | 19 | 3 | 0.263 | **1.667** |
+| `hybrid_adaptive` | 19 | 3 | 0.421 | **2.667** |
+| `hybrid_scheduled` | 19 | 4 | 0.263 | **1.250** |
+| `hybrid_direct` | 19 | 4 | 0.789 | **3.750** |
+| `aco` | 19 | 4 | 2.632 | 12.500 |
+| `pso` | 19 | 3 | 3.158 | 20.000 |
+
+**Only 3–4 of 19 scoreable disruptions actually damaged the arm.** The other ~80% contribute a zero that pulls every arm toward zero and toward each other. Restricted to damaged events the arms spread by **3×**, and the `hybrid_fixed` / `hybrid_scheduled` tie breaks.
+
+It also explains Rudra's screenshot reading exactly `0.00` for every arm: at the dashboard's shorter horizon `MIN_HORIZON=8` excludes more disruptions, and the survivors are disproportionately undamaged.
+
+**Same family as Segment Z's censoring bias: the measurement was right and the aggregation was wrong.** That is now twice in the same metric, from two different directions.
+
+### Ruling — adopt it, with three additions
+
+**1. Restrict the mean to `damage > 0`, and report the count alongside.** It composes with the censoring rule, since never-recovered cases are damaged ones by definition.
+
+**Why restricting on an outcome is legitimate here**, since that is the obvious objection: conditioning on damage discards the information that a robust arm was rarely damaged at all. But **robustness is already carried by the other three metrics** — mean excess, % of steps at optimum, and worst excess all measure how well the arm does, including how rarely it is hurt. Recovery answers a different question, *speed of return*, and that is the one Claim 3 is about. The metric set as a whole has no gap and no double-count. That reasoning must appear in the report, because someone will ask.
+
+**2. Count `damage < 0` separately. Do not merge it into "undamaged."** vClaude's own data shows `-0.0017` — an event that **opened a shorter route.** Lumping "the disruption helped" together with "nothing happened" throws away a real and slightly counter-intuitive fact about dynamic graphs, and reporting it is the kind of thing that makes a results section credible.
+
+**3. Show the damaged-disruption count next to the value on the tab**, the way the censored count already appears. vClaude proposed this and it is right: at n=1 the metric rests on 3–4 observations and the tab must not let that read as solid.
+
+### Do **not** change the scenario — and here is the arithmetic
+
+3–4 damaging events per 60-step run is very few, and Claim 3 is *about* recovery. The tempting move is a more violent scenario so recovery becomes measurable.
+
+**Not needed.** At the pre-registered ≥100 seeds that is **300–400 damaged disruptions per arm**, which is ample. The design already solves this, and changing the scenario now would be changing the problem after seeing a metric behave awkwardly — the exact move ruled out in Entry 024.
+
+Decision made from a measurement, before the run. That is the whole point of doing T1 first.
+
+### **The uncomfortable number, recorded rather than softened**
+
+On the corrected metric, `hybrid_adaptive` recovers in **2.667** steps against `hybrid_fixed`'s **1.667**.
+
+**The thesis arm recovers more slowly than its ablation twin.**
+
+Three observations per arm, so it is nearly meaningless — but it is the direction the correction produces and it goes in the log at full strength. Two things follow.
+
+First, it is **the strongest available evidence that this fix is not self-serving.** A correction discovered mid-project that makes the thesis arm look worse is not a correction anyone chose for its result.
+
+Second, if the 100-seed run reproduces it, **that is a finding about Claim 3 and it gets reported as one** — the pre-registration already commits to reporting every comparison whatever it says.
+
+### **AMENDMENT to the pre-registration (Entry 024), 17 Sept 2026**
+
+The metric set was pre-registered in Entry 024. **How one of those four metrics is computed is changing**, so it goes on the record here, before the run, with the reasoning and the date.
+
+> `mean steps to recover` is computed over disruptions with `damage > 0` only, with the damaged-disruption count reported alongside and events with `damage < 0` counted separately. Reason: the previous population included events that caused no degradation, for which recovery time is undefined rather than zero. Identified from per-disruption values, not from any arm's standing. The correction makes `hybrid_adaptive` look **worse** than `hybrid_fixed` on this metric.
+
+No other metric changes. The set remains four. The scenario, the arm set and the seed count are unchanged.
+
+### Standing rule
+
+*A rate or duration averaged over a population must first establish that every member of that population could have exhibited the thing being measured.* Zero is not a small value when the event never happened — it is a missing observation wearing a number, and it drags every average toward agreement.
+
+This project has now hit that twice in one metric: censored cases silently dropped (Segment Z), and non-events silently included (here). Both directions, same root — **an aggregation that never asked who belonged in it.**
+
+### Outstanding
+
+Z3's T2 through T5 remain: the staleness row, the F13 retitle, the `/api/run` scratch root, and the bridging-edge characterisation. T1's implementation now joins them.
+
+---

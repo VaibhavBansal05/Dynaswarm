@@ -121,6 +121,7 @@ export async function loadPage(fixtures) {
     "/api/runs": fixtures.runs ?? { run_classes: {} },
     "/api/run": fixtures.started ?? { run_id: "fixture-run", run_class: "exploratory" },
     "/api/run/fixture-run": fixtures.raced ?? null,
+    "/api/run/fixture-run/score": fixtures.score ?? null,
   };
   // Records what the page asked for, so a test can assert that Stage 1
   // and Stage 2 actually POST rather than merely that they rendered.

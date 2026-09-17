@@ -118,8 +118,13 @@ def test_a_censored_recovery_is_counted_at_the_remaining_horizon():
     safe direction and needs no penalty constant to defend.
     """
     excess, events = _gives_up(horizon=60)
-    mean, n, censored = censored_recovery(excess, events)
-    assert (n, censored) == (3, 1)
+    summary = censored_recovery(excess, events)
+    mean = summary.mean
+    assert (summary.n_scoreable, summary.n_censored) == (3, 1)
+    assert summary.n_damaged == 3, (
+        "the fixture's disruptions no longer damage the arm, so the mean is "
+        "measured over a different population than this test assumes"
+    )
     # Two instant recoveries plus one scored at the remaining horizon.
     last = max(i for i, e in enumerate(events) if e > 0)
     expected = (1.0 + 1.0 + (len(excess) - last)) / 3
@@ -140,8 +145,8 @@ def test_a_disruption_with_no_time_to_recover_is_still_excluded():
     """
     excess = [0.10] * 55 + [0.50] * 5
     events = [0] * 55 + [5] + [0] * 4
-    _, n, censored = censored_recovery(excess, events)
-    assert n == 0 and censored == 0, (
+    summary = censored_recovery(excess, events)
+    assert summary.n_scoreable == 0 and summary.n_censored == 0, (
         "a disruption five steps from the end was scored; an arm has no "
         "opportunity to recover there and would be penalised for being hit late"
     )
@@ -323,3 +328,115 @@ def test_at_optimum_means_at_the_optimum_not_near_it():
     assert AT_OPTIMUM_TOLERANCE < 1e-6, (
         f"tolerance {AT_OPTIMUM_TOLERANCE} admits more than float noise"
     )
+
+
+# ---------------------------------------------------------------------------
+# Segment Z3 / Entry 028 — recovery is measured over damaged events only
+# ---------------------------------------------------------------------------
+
+
+def _undamaged(horizon=60):
+    """Disruptions that land but never move this arm's excess."""
+    excess, events = [0.10] * 4, [0] * 4
+    while len(excess) < horizon:
+        excess += [0.10] * 6
+        events += [5] + [0] * 5
+    return excess[:horizon], events[:horizon]
+
+
+def test_a_disruption_that_did_no_damage_is_not_a_fast_recovery():
+    """**The dilution Entry 028 ruled on.**
+
+    An event that leaves excess untouched has nothing to recover from.
+    Scoring it as `recovery = 0` is arithmetically right and empty, and
+    measured across three seeds only 3-4 of 19 scoreable disruptions
+    actually damaged an arm — so ~80% of the population was contributing
+    a zero that pulled every arm toward zero and toward each other.
+    """
+    excess, events = _undamaged()
+    summary = censored_recovery(excess, events)
+
+    assert summary.n_scoreable > 0, "the fixture produced no scoreable disruptions"
+    assert summary.n_damaged == 0, "the fixture is supposed to do no damage"
+    assert summary.mean != summary.mean, (  # nan
+        f"an arm that was never damaged scored {summary.mean} for recovery "
+        f"speed. Every one of its disruptions is a non-event, and crediting "
+        f"it with instant recovery is the dilution this rule removes"
+    )
+
+
+def test_recovery_discriminates_once_undamaged_events_are_excluded():
+    """The point of the rule: the metric has to separate arms.
+
+    Two arms, identical except that one takes markedly longer to come
+    back from the disruptions that hurt it. Both are surrounded by the
+    same majority of harmless events. Under the old aggregation those
+    zeros dominate and compress the two together.
+    """
+    def arm(recovery_steps, horizon=60):
+        excess, events = [0.10] * 4, [0] * 4
+        while len(excess) < horizon:
+            excess += [0.50] * recovery_steps + [0.10] * 3
+            events += [5] + [0] * (recovery_steps + 2)
+            excess += [0.10] * 6          # harmless events in between
+            events += [5] + [0] * 5
+        return excess[:horizon], events[:horizon]
+
+    quick = censored_recovery(*arm(1))
+    slow = censored_recovery(*arm(5))
+
+    assert quick.n_damaged and slow.n_damaged, "neither fixture did damage"
+    assert quick.n_unchanged and slow.n_unchanged, (
+        "the fixtures contain no harmless events, so this proves nothing "
+        "about excluding them"
+    )
+    assert slow.mean > quick.mean, (
+        f"the slower arm scored {slow.mean:.2f} against {quick.mean:.2f}. "
+        f"Harmless events are still diluting the mean"
+    )
+
+
+def test_a_disruption_that_helped_is_counted_apart_from_one_that_did_nothing():
+    """Entry 028's second addition. `damage < 0` is its own category.
+
+    An event can open a shorter route — measured at -0.0017 on a real run.
+    Merging "the disruption helped" into "nothing happened" throws away a
+    real and slightly counter-intuitive property of dynamic graphs, and it
+    is the kind of fact that makes a results section credible.
+    """
+    horizon = 40
+    excess, events = [0.20] * 4, [0] * 4
+    while len(excess) < horizon:
+        excess += [0.10] * 6          # excess FALLS after the event
+        events += [5] + [0] * 5
+    summary = censored_recovery(excess[:horizon], events[:horizon])
+
+    assert summary.n_improved > 0, (
+        "a disruption that lowered excess was not counted as an improvement"
+    )
+    assert summary.n_damaged == 0, "nothing here should read as damage"
+
+    # The three categories must PARTITION the scoreable disruptions. That
+    # is what makes "improved" a real category rather than a label applied
+    # on top of one of the others — only the first event here improves
+    # things, and the rest genuinely change nothing.
+    total = summary.n_damaged + summary.n_unchanged + summary.n_improved
+    assert total == summary.n_scoreable, (
+        f"{summary.n_scoreable} scoreable disruptions split into "
+        f"{total} categorised ones; the categories overlap or leak"
+    )
+
+
+def test_the_damaged_count_reaches_the_payload():
+    """Entry 028's third addition: the tab must be able to show it.
+
+    At one seed the mean rests on three or four observations. A reader who
+    cannot see that will read it as solid, which is the same reason the
+    censored count is already on the face of the table.
+    """
+    frame = _frame({"a": _always_recovers(), "b": _gives_up()})
+    payload = score_run(frame)
+    for arm in payload["arms"]:
+        for key in ("n_damaged", "n_unchanged", "n_improved", "n_censored"):
+            assert key in arm, f"{key} is missing from the ranking payload"
+    assert any(a["n_damaged"] > 0 for a in payload["arms"])

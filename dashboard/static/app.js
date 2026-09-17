@@ -677,15 +677,19 @@ async function drawScore(runId) {
     // from is a different kind of number, and the dagger says so.
     const cells = arm.cells.map((text, i) => {
       const key = data.metrics[i].key;
-      if (key === "mean_recovery" && arm.n_censored > 0) {
-        return {
-          text: `${text} (${arm.n_censored}\u2020)`,
-          censored: true,
-          title: `${arm.n_censored} of ${arm.n_disruptions} never recovered, `
-            + `counted at the remaining horizon`,
-        };
-      }
-      return { text };
+      if (key !== "mean_recovery") return { text };
+      // Recovery is measured over the disruptions that actually damaged
+      // this arm, and at one seed that is three or four events. The count
+      // travels with the number because a mean over four observations
+      // reads exactly like a mean over four hundred.
+      const notes = [`${arm.n_damaged} damaging`];
+      if (arm.n_censored > 0) notes.push(`${arm.n_censored}\u2020 never recovered`);
+      return {
+        text: `${text} (${arm.n_damaged})`,
+        censored: arm.n_censored > 0 || arm.n_damaged < 5,
+        title: `${notes.join(", ")} of ${arm.n_disruptions} scoreable `
+          + `\u00b7 ${arm.n_unchanged} did no damage, ${arm.n_improved} helped`,
+      };
     });
     cells.push({ text: arm.mean_rank.toFixed(2) });
     row(ARM_NAMES[arm.arm] ?? arm.arm, cells, ARM_COLORS[arm.arm] ?? "#888");
@@ -782,6 +786,7 @@ if (typeof globalThis.__TEST__ !== "undefined") {
   // Stage 3 the way a user does.
   globalThis.__TEST__.generate = () => generate();
   globalThis.__TEST__.race = () => runRace();
+  globalThis.__TEST__.drawScore = (id) => drawScore(id);
   globalThis.__TEST__.demo = (pace = 0) => demo(pace);
   globalThis.__TEST__.tellingSteps = tellingSteps;
 }

@@ -1,8 +1,8 @@
-# SEGMENT Z2 — The clock. One column, and it is easy to get wrong.
+# SEGMENT Z3 — Four instruments that read plausibly and say nothing
 
-**The last code before segment 22.** One job: record how long each arm actually spends searching, per timestep, honestly enough that a number from it can appear in a report.
+**The last segment before the manifest.** Everything here came out of Rudra's manual pass (Entry 026) plus one ruling from Z2 (Entry 027). None of it is new capability. All of it is a reading that looks fine and carries no information — which is the failure this project's tests are worst at catching.
 
-> Read `AGENT_PROTOCOL.md`, `WORKFLOW_LOG.md` **Entries 024 and 025**, and `ARCHITECTURE.md` **§10.2 (fairness), §12 (provenance)**.
+> Read `AGENT_PROTOCOL.md` and `WORKFLOW_LOG.md` **Entries 026 and 027 in full** — every task below is a ruling recorded there.
 > Append your findings to the **bottom** of this file.
 >
 > ## ⛔ YOU DO NOT COMMIT
@@ -12,95 +12,104 @@
 
 ---
 
-## Why this is a segment and not a line of code
+## ⚠️ T0 — Measure, both surfaces, no caps
 
-A wrong timing number is the worst kind of defect this project can produce, because **nothing contradicts it.** An excess figure has an oracle to check it against. A ledger has an identity that must balance. A timing number has neither — it looks plausible at any value, and a reader has no way to tell that setup, logging, or the oracle's own work leaked into an arm's total.
+`pytest`, `node --test`, `ruff`, counts reported. Before and after.
 
-Segment Z has just shown what that failure mode costs: a tolerance change that read as a rounding fix passed 501 tests and reordered the results.
-
-This also has to land **before segment 23**, because 23 freezes the schema and a schema change must be verified before it is frozen, not during.
+**Note the environment rule you established yourself last segment: no leftover servers, no leftover browsers.** Kill anything you start, before you run the suite.
 
 ---
 
-## ⚠️ T0 — Measure. **The JS cap is removed** (Entry 025).
+## T1 — ⚠️ **Is `mean steps to recover` real or degenerate?** Settle this first.
 
-`pytest`, `node --test`, `ruff`, statement counts reported. `MAX_JS_LINES` is deleted, not raised — the JS suite is the guard, line count is a fact. Report both counts; neither is a limit.
+On the ranking tab, **every arm reports `0.00`**, A\* included.
 
----
+A metric identical across every row discriminates nothing. That is exactly why Entry 024 excluded hops and evaluations from the metric set — and one of the four survivors has quietly become one of them, while still printing a number.
 
-## T1 — Decide what is being timed, and write it down before measuring
+Two possibilities, very different:
 
-State precisely what the clock starts and stops around, and defend it:
+- **Real** — at this disruption level every arm genuinely recovers inside one step, so the metric is correct and simply uninformative *here*. Then find a scenario where it *does* discriminate, and say what that scenario is.
+- **Degenerate** — it is not measuring recovery at all. Then it is a defect feeding a ranking, and Claim 3's entire argument is about recovery speed.
 
-- **the search only**, not the harness bookkeeping, not the row construction, not the parquet write
-- **not the oracle.** A\* runs every step to produce the optimum. If any part of that lands inside another arm's timer, every number is inflated by a constant that looks like real work.
-- what happens to the warm-up/rebind step — is rebinding part of the arm's cost? **Argue it either way, pick one, say why.** It is genuinely arguable and the report needs the answer stated.
+**Do not guess between these. Measure.** Show the underlying per-disruption recovery values, not the mean. If they are genuinely all zero, show why. If they are not, the aggregation is wrong.
 
-Use a monotonic clock, not wall time-of-day.
-
----
-
-## T2 — ⚠️ **The time ledger.** This is the segment's real test.
-
-The edge ledger works because an identity must balance: `initial + added + reopened − closed − deleted = current`, checked against the engine's own count. Timing gets the same treatment.
-
-**Per-timestep, the sum of all arms' recorded times plus unattributed overhead must equal the measured wall-clock for that timestep**, within a stated tolerance.
-
-1. Record the timestep's total wall-clock independently.
-2. Assert the arms' times plus an explicit `overhead` term reconcile to it.
-3. **Report the overhead fraction.** If it is large, the timers are measuring the wrong region; if it is near zero, check that the total is not simply being computed *from* the parts, which would make the identity a tautology.
-4. Write the test. **Make sure it can fail** — construct a case where a timer double-counts and show it going red.
-
-That last point matters: segment 14 established that an invariant tested only against correct data cannot tell an invariant from a tautology.
+**This blocks the manifest.** Segment 24's ranking is built on this metric.
 
 ---
 
-## T3 — Repeats, and the median
+## T2 — The staleness row cannot fail
 
-A single timing run on a laptop is not a measurement. Thermal throttling and background load are real, and an M-series chip downclocks under sustained work.
+```
+share of trail mass that died this step    0    0    live   0.00 — nothing the colony knew was invalidated
+```
 
-- Repeat each configuration **at least 5 times**
-- Report the **median**, and report the **spread**
-- **If the spread is wide enough that the arms are indistinguishable, say so.** A timing table whose error bars overlap for every arm is a valid result and must not be presented as a ranking.
+Observed value 0. Broken-value 0.00. Verdict `live`.
 
----
+The trust report's entire worth rests on the `when broken` column being a real discriminator. This row's live and broken readings are identical, so it discriminates nothing — and unlike the velocity row it declares no blind spot.
 
-## T4 — The three-size table
+It is **not** a code defect: Segment Y measured that the signal reads zero on 51 of 63 disrupted steps. Zero is normal. The defect is that `first`/`last` is the wrong summary for such a signal.
 
-`small` · `medium200` · `large1000`, all arms plus A\*, median per timestep with spread.
-
-**One machine only.** Whichever machine produces this table produces all of it. Mixing a laptop and a cloud VM in one table makes every row meaningless, and it is invisible to a reader.
-
-Record which machine, in the artefact itself.
+Fix the **presentation**, not the probe. Options — pick one and defend it: a `!` caveat naming the blind spot explicitly; or a summary that can move, such as the maximum over the run, or the count of steps where it was non-zero. **Whichever you choose, the row must read differently when the mechanism is dead than when it is alive**, or it does not belong in this document.
 
 ---
 
-## T5 — ⚠️ What this table is allowed to claim
+## T3 — Retitle the F13 section, per Entry 026's ruling
 
-Entry 025 and the framing ruling constrain this directly. The table is **context and limitation, not a claim.**
+It currently reads `F13 — PSO VELOCITY, OPEN FOR PHASE 3`. **Phase 3 closed two segments ago.**
 
-- A\* at these sizes is expected to be **faster and exact**. Report that plainly if it is what you find.
-- Do **not** write "the hybrid is cheaper" unless the measured numbers say so at a size you actually ran.
-- The units are not comparable in the abstract — one evaluation builds a whole path, one A\* step pops a node. **Wall-clock is the only common currency**, and the artefact should say so.
+The ruling, and note that it is not a text edit:
 
-If any arm is cheaper than A\* at any size, that is interesting and gets reported with its spread. If none is, that gets reported too, in the same words.
+1. The **question is genuinely unresolved** — velocity falls to `2.78e-04` under disruption against `~1.4e-02` stable in isolation, a 50× gap that survived the segment-18 fix. Segment 18 fixed the memory wipe; the collapse was never explained.
+2. Retitle it to say that plainly, and **record that Phase 3 closed without answering it.** Do not quietly drop the phase reference — a section naming a phase as its owner, after that phase has ended, tells the next reader something false about who is handling it.
+3. **Do not attempt to resolve it.** It is characterisation, not correctness.
+4. Add its bearing on Claim 1: PSO ends every run effectively idle (personal bests `93 → 0`, global best `7 → 0`, spread `3.7e-04`), so part of the hybrid's margin over PSO-alone is that **ACO is still working.**
+
+While you are there: Part 11 of `WALKTHROUGH.md` records *"falling to ~1e-14 was defect F13."* The current reading is `2.78e-04` — ten orders of magnitude better. **Say so in the section.** It is the clearest available evidence that the segment-18 repair was real.
+
+---
+
+## T4 — `/api/run` writes into the evidence tree. Close it.
+
+Your own finding, and my ruling from Entry 027: **a dedicated scratch root, not a `root` parameter.**
+
+A parameter only moves the decision to the caller, and the caller here is an unsupervised browser. The evidence tree should be a place **only the CLI can write to.**
+
+- Dashboard runs are `exploratory` by construction and can never become evidence, so nothing is lost by relocating them.
+- Pick the root, make it gitignored, and make `conftest.py`'s containment guard ignore it deliberately and by name — not by accident of path.
+- **Write the test**: a call through the HTTP layer must not create anything under the evidence tree. Drive it through `TestClient`, the way the serialisation test already does.
+
+Do not delete `outputs/2026-09-17/10-58-26/`. Rudra removes it by hand; the guardrail carve-out you refused last time still stands.
+
+---
+
+## T5 — Instance characterisation: the bridging edges
+
+From Entry 026. `_ensure_connected` bridges disconnected components by joining **one random node from each**, not the nearest pair, so a bridge can span the whole map and is priced by its Euclidean length.
+
+**The question this raises is a competing explanation for a null**: if a few enormous bridges carry most of a typical optimal route, the search problem is largely *"reach the bridge"*, and every arm looks alike **for a structural reason rather than because allocation does not help.** Those two conclusions produce identical results.
+
+Measure, across seeds and across all four graph models:
+
+1. how many bridging edges a typical instance acquires
+2. **what fraction of the optimal route's cost sits on them** — the number that decides whether this matters
+3. whether seed 1000 is typical or an outlier
+4. how it differs by model — `grid` is connected by construction and should have none, which makes it the natural control
+
+**Do not change the generator.** Every measurement in this project was taken on these instances. This is characterisation for the manifest and for the report's instance description, nothing more.
 
 ---
 
 ## T6 — Tests
 
-- the time ledger from T2, with a red case
-- the oracle's time does not appear in any arm's total
-- timings are recorded for **every** arm and every timestep, with no silent `None` — a missing timing must be visible, not averaged over
-- the schema carries the new column and `load_steps` reads it
+Whatever from T1–T5 must still hold next month. In particular: the staleness row reads differently dead than alive; the HTTP layer cannot write to the evidence tree; and if T1 finds the recovery metric degenerate, the corrected version has a test that fails on the old behaviour.
 
 ---
 
 ## T7 — Mutations, two, one of them yours
 
-**Mine:** start the timer before `rebind` and stop it after the row is written — so every arm's number silently includes harness work. Predict which arm it flatters before you run it. (Think about which arm does the least real searching.)
+**Mine:** make the staleness row's chosen summary read its *broken* value while the mechanism is alive — whatever summary T2 settles on. If the row still says `live`, the fix did not work.
 
-**Yours:** pick something that makes the timing *plausibly wrong* rather than obviously broken. A timer that returns zero is caught instantly; one that returns a believable number that means something else is the failure this segment exists to prevent. **If it passes everything, that is the finding.**
+**Yours:** you have now twice found the more dangerous mutation. Pick something in this segment's surface that stays plausible. **If it passes everything, that is the finding.**
 
 ---
 
@@ -108,11 +117,13 @@ If any arm is cheaper than A\* at any size, that is interesting and gets reporte
 
 Paste verbatim:
 
-- what you time, and your ruling on rebind
-- the time ledger — arms plus overhead against measured wall-clock, and the overhead fraction
-- the three-size table, medians **and spreads**, with the machine named
-- both mutations shown red
-- **your read: can any number in that table be quoted in a report, or is the spread too wide to say anything?**
+- **T1's per-disruption recovery values** and your verdict, real or degenerate
+- the staleness row before and after, **and the same row with the mechanism disabled**
+- the retitled F13 section
+- the `TestClient` test proving the evidence tree is unreachable over HTTP
+- **T5's table** — bridging edges per instance, and the fraction of optimal route cost on them, by seed and by model
+- both mutations red
+- **your read: does anything here change what the manifest should freeze?**
 
 ---
 
@@ -120,35 +131,36 @@ Paste verbatim:
 
 `git status --short`, unstaged. Commit message fenced, no `Co-Authored-By`. FINDINGS appended.
 
+**And stop when you have the answer.** Last segment you overran twice by adding confirmation runs after the question was settled. One clean suite run is the evidence; a second is only a second.
+
 ---
 
 ## Constraints
 
 | | |
 |---|---|
-| **No caps.** `MAX_JS_LINES` deleted; report counts only | |
-| **Monotonic clock** | |
-| **The oracle's time never enters an arm's total** | |
-| **Median of ≥5 repeats, with spread** | |
-| **One machine for the whole table** | |
-| **The table is context, not a claim** | |
+| **No caps.** Report counts | |
+| **Do not change the generator** | |
+| **Do not delete anything under `outputs/`** | |
 | **Change no arm, no policy, no parameter** — frozen by Entry 024 | |
+| **A row that reads the same dead as alive does not belong in the trust report** | |
+| **Kill every server and browser you start** | |
 | **Do not commit, do not push** | |
 
 ---
 
 ## Definition of done
 
-The timed region defined and defended · the time ledger balancing with its overhead reported and a red case shown · medians and spreads from ≥5 repeats on one named machine · the three-size table produced with nothing claimed beyond it · both mutations red · green suite · uncommitted with the message pasted · FINDINGS appended.
+The recovery metric settled by measurement, not judgement · the staleness row discriminating · F13 retitled with Phase 3's silence recorded · the evidence tree unreachable over HTTP, with a test · bridging edges characterised across seeds and models · both mutations red · green suite · uncommitted with the message pasted · FINDINGS appended.
 
-**Next is segment 22 — Rudra, by hand.** Then the manifest freezes.
+**Next is segment 23 — the manifest. The configuration freezes there, so anything not settled here is settled never.**
 
 ---
 ---
 
 <!-- vClaude: append your FINDINGS block below this line, using the template in AGENT_PROTOCOL.md §6 -->
 
-## FINDINGS — Segment Z2
+## FINDINGS — Segment Z3
 
 **Status:** COMPLETE. Uncommitted.
 
@@ -156,316 +168,270 @@ The timed region defined and defended · the time ledger balancing with its over
 
 | | Before | After |
 |---|---|---|
-| Python suite | 505 passed, 1 failed | **514 passed** |
-| JS suite | 52 passed | **52 passed** |
-| `src/` statements | 2292 | **2306** across 42 files — reported |
-| `dashboard/static` JS | 920 lines, **capped at 900 (failing)** | **920 lines, no cap** |
+| Python suite | 518 passed | **520 passed** |
+| JS suite | 52 passed | **53 passed** |
+| `src/` statements | 2306 | **2318** across 42 files |
+| `dashboard/static` JS | 920 lines | **921 lines** — reported, not capped |
 | `ruff` | clean | clean |
 
-**`MAX_JS_LINES` is deleted** (Entry 025), not raised. The budget test now
-prints the count per file and asserts only that the walker found
-something. `MAX_PRESENTATION_LINES` survives and is documented as a
-different question: markup and styling do not execute, so they cannot
-disagree with the engine.
+Environment rule honoured: no leftover server, no leftover headless
+browser. (The Chrome processes on this machine are Rudra's own — no
+`--headless` flag — and were left alone.)
 
 ---
 
-### T1 — what is timed, and the rebind ruling
+### T1 — implemented, with all three additions
 
-**`wall_ms` covers `spend()` and nothing else** — the search. Not the
-rebind, not `best()`, not `probe()`, not row construction, not the
-parquet write. `time.perf_counter()` throughout, which is monotonic.
+The measurement and ruling are in Entry 028. What landed:
 
-**The oracle was already excluded and now that is provable.**
-`shortest_path` runs once per timestep at `trial.py:158`, *outside* the
-arms loop, so no arm's total can carry it. It is now timed into its own
-`oracle_ms` column, which makes the exclusion checkable from a recorded
-run rather than by reading the loop.
+**1. The mean is restricted to `damage > 0`, and the count travels with
+it.** On a real five-arm race the metric now discriminates:
 
-**Ruling on rebind: timed, but in its own column.**
+```
+  arm                                 recover   dmg  none  help  cens
+  hybrid_adaptive                        1.00     2     3     3     0
+  hybrid_direct                          0.50     2     5     1     0
+  hybrid_fixed                           1.00     2     5     1     0
+  hybrid_scheduled                       2.00     2     5     1     0
+  A* (reference)                            —
+```
 
-Argued both ways. *For inclusion:* rebind is real work an arm must do to
-function, a deployed system pays it, and the arms pay different amounts —
-ACO zeroes trails, PSO guards on `state_hash`. Excluding it understates
-the true cost. *Against:* it is driven by the environment changing, not
-by the search budget, so folding it into `wall_ms` conflates "what the
-budget buys" with "what the disruption costs", and §10.2's fairness
-guarantee is about equal *search*.
+Against `0.25 / 0.12 / 0.25 / 0.50` before — values that were all near
+zero because ~80% of the population were non-events.
 
-Neither answer is wrong, so I refused the either/or: `rebind_ms` is
-recorded separately. The report can quote search cost, total cost, or
-both, and the ledger attributes it explicitly instead of burying it in
-overhead. What must not happen is the two being silently mixed, and
-`test_rebind_is_recorded_separately_from_the_search` fails if they are.
+**A\* now reads `—` rather than `0.00`, and that is a correctness fix in
+its own right.** A\* is never damaged, so it has no recovery time. The old
+`0.00` asserted that the oracle *recovers instantly*, which is a claim
+about an arm that never falls.
+
+**2. `damage < 0` is counted separately.** The `help` column above is not
+decoration: `hybrid_adaptive` had **3 disruptions that improved its
+excess** against 1 for the other arms. That was previously merged into
+"undamaged" and invisible.
+
+**3. The damaged count is on the tab**, rendered as `1.00 (2)` with a
+tooltip giving the full split, and styled with the same warning colour as
+the censored dagger when the count is below five.
+
+The two aggregation rules compose without interacting, and the docstring
+says why: an undamaged disruption can never be censored, because if
+`damage <= 0` the excess never rose above the band and `recovery` is 0 at
+the disruption step itself. So excluding undamaged events keeps every
+censored one.
+
+Entry 028's defence of conditioning on an outcome is recorded in the code
+where someone will meet it.
 
 ---
 
-### T2 — the time ledger
+### T2 — the staleness row now discriminates
 
-Per timestep: **arms + rebind + oracle + overhead == the measured
-timestep**, where the timestep total comes from **its own clock** around
-the whole loop body, not from summing the parts.
+**Chosen summary: peak, and the count of non-zero steps.** Defended
+against the alternatives:
 
-```
-t=0  step   88.80ms = arms   85.75 + rebind  0.67 + oracle  0.47 + overhead  1.90  ( 2.1%)
-t=1  step   50.68ms = arms   47.77 + rebind  0.75 + oracle  0.43 + overhead  1.73  ( 3.4%)
-t=2  step   46.91ms = arms   43.97 + rebind  0.73 + oracle  0.42 + overhead  1.78  ( 3.8%)
-```
+- A `!` caveat alone would have declared the blind spot without removing
+  it — the row would still print `0 0` beside a broken-value of `0.00`.
+- Peak alone moves, but says nothing about how often the signal fires,
+  which for a signal that is zero 80% of the time is the more informative
+  half.
 
-**Overhead fraction: 2–4%.** Small enough that the timers cover the right
-region; reliably non-zero, which is the evidence that the total is
-measured rather than derived. `test_the_ledger_is_not_a_tautology`
-asserts that non-zero residual directly — if `step_wall_ms` were ever
-computed from the parts, the identity would balance forever and the
-whole ledger would be checking nothing.
-
-#### The red case, and the first attempt at it failed
-
-Starting the arm timer before `rebind` — so rebind is counted once in
-`rebind_ms` and again inside `wall_ms` — **passed all six timing tests.**
-
-At 200 nodes with a 300-evaluation budget, rebind is 0.75ms against a
-46ms timestep. Doubling it moves the residual by 1.6% and vanishes inside
-the tolerance. **A tolerance-based identity can only catch a double-count
-larger than the true overhead**, and I had written one that could not
-fail on its own fixture.
-
-Rebind cost scales with the graph; search cost scales with the budget.
-So the detector has to run where the doubled quantity is material:
+The row reads, alive and dead:
 
 ```
-  n=  200 budget= 300: step   46.16ms  rebind  0.75 ( 1.6%)  residual  3.5%
-  n= 1000 budget= 300: step  464.11ms  rebind 17.05 ( 3.7%)  residual  2.7%
-  n= 1000 budget=  20: step   65.12ms  rebind 16.90 (25.9%)  residual 16.6%   <- here
-  n= 2000 budget=  10: step  202.33ms  rebind 70.51 (34.9%)  residual 12.7%
+alive:  share of trail mass that died this step   0.2195      3   live
+dead:   share of trail mass that died this step        0      0   INERT
 ```
 
-At 1000 nodes / 20 evaluations, rebind is 26% of the timestep against a
-17% residual, so counting it twice drives the residual **negative**.
-`test_the_ledger_catches_a_double_count_where_the_doubled_part_is_material`
-runs there, and first asserts the fixture still has rebind above 10% of a
-timestep — a detector whose own preconditions have drifted is a detector
-that cannot fail. Shown red:
-
-```
-E  AssertionError: t=0: parts sum to 71.81ms against a measured 59.94ms
-   timestep — something is counted twice
-```
-
-This is the standing rule applied to the ledger itself: *a test of a
-feature runs on data where the feature is active*, and the feature here
-is **detection**.
+The columns mean something different from the rest of the table, so the
+row carries a `!` line saying so — an unexplained column change is its own
+kind of misreading. The `when broken` text was updated to match the new
+summary: `peak 0 over 0 steps — no invalidation ever seen`.
 
 ---
 
-### T3/T4 — the three-size table
+### T3 — F13 retitled, and it is not a text edit
 
 ```
-PER-ARM SEARCH TIME PER TIMESTEP
-  machine: Apple M2 | Darwin 25.0.0 | Python 3.13.0
-  5 repeats per size; median of per-run medians, spread = half the min..max range
-
-  size                    astar              aco              pso           hybrid     oracle
-  -------------------------------------------------------------------------------------------
-  small            0.02 ± 0.00     1.46 ± 0.04     2.50 ± 0.08     2.17 ± 0.05      0.025
-                all metered arms separated at this size
-  medium200        0.40 ± 0.00    10.44 ± 0.26     6.84 ± 0.06    13.65 ± 0.06      0.410
-                all metered arms separated at this size
-  large1000        3.22 ± 0.03   114.68 ± 1.07    16.90 ± 0.06   106.08 ± 0.77      3.273
-                all metered arms separated at this size
+F13 — PSO VELOCITY COLLAPSE: UNEXPLAINED. PHASE 3 CLOSED WITHOUT ANSWERING IT.
 ```
 
-One machine, named in the artefact. The script checks for overlapping
-spreads and would print "NOT distinguishable" rather than let a row be
-read as an ordering; at these three sizes the metered arms are separated.
+The section now records four things it did not: that Phase 3 closed
+without picking this up and nobody owns it; that segment 18 fixed the
+memory wipe and **did not** explain the collapse, which survived the
+repair; that `WALKTHROUGH` Part 11's pre-fix reading of `~1e-14` against
+today's `2.78e-04` is **ten orders of magnitude** and the clearest single
+piece of evidence that segment 18 worked; and its bearing on Claim 1.
+
+That last one matters most and the numbers are pulled live, not quoted:
+
+```
+      personal bests improved   93  ->  0
+      global best improved      7  ->  0
+      spread of priorities      0.1274  ->  3.688e-04
+```
+
+PSO ends a run effectively idle, so **part of the Hybrid's margin over
+PSO-alone is that ACO is still working.** Any claim that the hybrid beats
+its components has to say so, or it credits the architecture with a
+result belonging to one half of it.
 
 ---
 
-### T5 — what this table is allowed to claim
+### T4 — the evidence tree is closed to the browser
 
-**A\* is faster than every metered arm at every size tested, by one to
-two orders of magnitude**, and it is exact. 0.02ms against 1.46–2.50 at
-small; 0.40 against 6.84–13.65 at medium; 3.22 against 16.90–114.68 at
-large. **No arm is cheaper than A\* at any size**, and that is reported
-in the same words it would have been if the result had gone the other
-way.
+`SCRATCH = ROOT / "dashboard-runs"`, gitignored. `race()` and
+`_run_directory()` default to it; `run_classes()` still reads `outputs/`
+on purpose, because that endpoint answers "what has been run" and the
+CLI's runs are the ones that matter.
 
-Two things the table shows that are worth the report's space, neither of
-them a claim about the thesis:
+`conftest.py` names the carve-out explicitly rather than relying on the
+two directories not overlapping — *a decision that exists only because two
+paths happen not to collide is one nobody can find later*, and if the
+dashboard is ever pointed back at the evidence tree the guard must still
+fire.
 
-- **ACO scales badly with graph size** — 1.46 → 10.44 → 114.68ms, roughly
-  an order of magnitude per tier, while PSO goes 2.50 → 6.84 → 16.90.
-- **The Hybrid tracks ACO, not PSO** (106.08 against 114.68 and 16.90 at
-  large). Its cost is dominated by its more expensive half, which is the
-  kind of thing an allocation argument has to account for.
-
-The units are not comparable in the abstract — one evaluation builds a
-whole path, one A\* step pops a node — so wall-clock is the only common
-currency, and the script says so in its own output.
+The test drives `TestClient`, not `race()` directly, because **the defect
+was in the endpoint's default and not in `race()`** — which has always
+accepted a root. A direct-call test would have passed throughout. It also
+asserts the run landed *somewhere*, so it cannot pass by nothing running.
 
 ---
 
-### T7 — both mutations. **Both of my predictions were wrong.**
-
-**Specified** — timer wraps rebind, search and bookkeeping.
-
-*Predicted:* every arm gains roughly the same fixed overhead, compressing
-the ratios, so the arm doing the least real searching (A\*) is hurt worst
-and the slow arms are flattered.
-
-*Actual:* **every arm inflated by the same 1.1×.** The added work is
-*proportional* to the arm, not constant — rebind scales with the arm's own
-state and so does `probe()`. So every ratio survives intact and only the
-absolute numbers are 10% high.
-
-**That is worse than what I predicted, not better.** A reader comparing
-arms draws entirely correct conclusions; a reader quoting an absolute
-number is wrong by 10%, and nothing in the table looks odd. Caught by two
-ledger tests (parts exceed the whole; residual never positive).
-
-**Mine** — rotate `wall_ms` attribution *within* a timestep, so each arm
-records the previous arm's duration.
-
-*Predicted:* passes everything, because the multiset of durations is
-unchanged, so every sum is identical and an identity over a sum is
-structurally blind to it.
-
-*Actual:* **passed all 513 tests.** Confirmed. At 1000 nodes:
+### T5 — instance characterisation, and it corrects Entry 026
 
 ```
-   astar    evaluations    0   true    3.22ms -> REPORTED  122.38ms
-   aco      evaluations  300   true  114.68ms -> REPORTED    3.28ms
-   pso      evaluations  300   true   16.90ms -> REPORTED  198.07ms
-   hybrid   evaluations  300   true  106.08ms -> REPORTED   17.01ms
+  model              n  bridges   hops  on bridges  route cost  % cost on bridges
+  geometric        200        0     11           0       99.96          0.0%   <- seed 1000
+                              1                                          0.0%   median of 8
+                                                                        45.3%   worst seed
+  erdos_renyi      200        0      7           0      166.50          0.0%   (all seeds)
+  grid             400        0     38           0     3800.00          0.0%   (all seeds)
+  geometric       1000        0      8           0       88.59          0.0%   (all seeds)
 ```
 
-**A\* spends zero evaluations and reports 122ms; ACO spends 300 and
-reports 3ms.** Every number is in a believable range, the ledger balances
-to the same residual, the overhead fraction is identical, and the entire
-cost story is inverted. This is F1's shape in the timing layer: correct
-values, wrong owner.
+Per seed at `medium200`:
 
-Closed by `test_recorded_time_is_consistent_with_recorded_work`, which is
-a **cross-column** check rather than another identity: an arm that spent
-no evaluation budget did no search and cannot have taken longer than one
-that spent the whole of it. Deliberately a loose bound, not a ranking —
-the table reports ordering, with spreads, and this only refuses an
-attribution that contradicts the work recorded on the same row.
+```
+  seed  1000: bridges 0   share  0.0%        seed    42: bridges 2   share  0.0%
+  seed  1001: bridges 0   share  0.0%        seed  9999: bridges 1   share 45.3%
+  seed  1002: bridges 1   share  0.0%        seed   123: bridges 1   share  0.0%
+  seed     7: bridges 0   share  0.0%        seed   555: bridges 1   share 42.5%
+```
 
-**The lesson generalises past this segment.** The ledger proves the total
-is right. It cannot prove any individual number is. Those need a
-different kind of check, and a suite can have a balancing identity and
-still be blind to every row being wrong.
+**Answering the four questions.**
+
+1. **How many bridges:** 0–2 at `medium200`, median 1. `grid` has none by
+   construction, which is the control the spec predicted and it behaves.
+2. **What fraction of the optimal route sits on them:** median **0%**, but
+   **2 of 8 seeds (9999 and 555) put ~45% of the route cost on a single
+   bridge hop.** So the mechanism is real and occasionally severe.
+3. **Is seed 1000 typical:** yes for this property, and at the benign end
+   — **it has zero bridges.**
+4. **By model:** only `geometric` produces them at all.
+
+**The correction, and it matters because a ruling was built on it.**
+Entry 026 attributed Rudra's 87.228 road to `_ensure_connected`. For
+`medium200` seed 1000 that cannot be so:
+
+```
+  raw geometric edges: 735   after connect: 735   bridges added: 0
+  is (63,125) an edge?  False      slot: -1
+  euclidean distance 63-125: 0.529   canvas spans: 0.99
+  longest edge on the optimal route: 11.59  =  11.6% of the 99.96 cost
+```
+
+**The pair is not in the CSR superset at all** — not a base edge, not an
+addable-pool slot — and no single edge on that route carries more than
+11.6% of its cost. So the road Rudra saw came from a different instance
+than the default one: another tier, density, or a re-rolled seed. **I
+could not reproduce it and am not going to explain it away.**
+
+**What survives the correction is the important half.** The competing
+explanation — *arms look alike because the problem is "reach the bridge"*
+— is **not present at the default instance**, but it is live on roughly a
+quarter of seeds. At 100 seeds that is ~25 instances where it applies.
+**Recommendation for the manifest:** record bridge count and bridge share
+per instance, so the analysis can test whether arms converge more on
+bridge-dominated instances rather than assuming either way. The generator
+is untouched.
 
 ---
 
-### ⚠️ The intermittent error, diagnosed — and it was mine, not the code's
+### T7 — both mutations, and the specified one exposed a weak test of mine
 
-The suite reported `514 passed, 1 error` in roughly one run in five.
+**Specified** — make the sparse row read its broken value while alive.
 
-**Answering the three questions directly.**
+*Actual:* **passed all 9 trust-report tests on the first attempt.**
 
-**(1) Intermittent, not consistent.** Eight full runs: seven clean, one
-error. There is no randomisation plugin — `addopts` is `-q
---strict-markers` and ordering is deterministic — so test-order shuffling
-was never the mechanism.
+My test compared the whole rendered row, and the rows still differ by
+`live` against `INERT` even when both numbers read `0`. **That is exactly
+the defect Entry 026 described** — the verdict column was always correct,
+and the numbers beside it discriminated nothing. My test was checking the
+half that already worked.
 
-**(2) The full traceback puts it in TEARDOWN, not setup or body:**
+Fixed to compare the two numeric fields with the verdict stripped, then
+shown red:
 
 ```
-___________ ERROR at teardown of test_a_hybrid_can_actually_be_tuned ___________
-    @pytest.fixture(scope="session", autouse=True)
-    def outputs_is_read_only():
-        before = _snapshot()
-        yield
-        appeared = sorted(_snapshot() - before)
->       assert not appeared
-E       AssertionError: the test suite wrote into outputs/, the evidence tree:
-E           2026-09-17/10-58-26
-E           2026-09-17/10-58-26/events.parquet
-E           2026-09-17/10-58-26/manifest.json
-E           2026-09-17/10-58-26/steps.parquet
-tests/conftest.py:41: AssertionError
+E  AssertionError: the two reported values are identical whether the
+   mechanism is alive or dead: ['0', '0']. The verdict word may differ,
+   but the numbers a reader compares against `when broken` do not
 ```
 
-It is `conftest.py`'s session-scoped containment guard. It is attributed
-to the tuning test only because that test happens to be last — the
-fixture tears down there. **The tuning test is not implicated at all.**
+**Mine** — render `n_disruptions` instead of `n_damaged` in the tab's
+recovery cell.
 
-**(3) The shared-state hypothesis is clean, and I checked it properly
-because the consequence for segment 24 is serious.**
+*Predicted:* passes everything. The payload test asserts both keys exist;
+nothing asserted which one reaches the screen. It reads as a naming slip.
 
-- `trial.py` has exactly two module-level names: `__all__` (a list of
-  strings, never mutated) and `_COST_TOL` (a float).
-- **No function attributes and no `global` statement anywhere in `src/`.**
-- Every timing variable — `step_started`, `oracle_started`,
-  `rebind_started`, `wall_ms`, `rebind_ms`, `oracle_ms`, `step_wall_ms` —
-  is local to `run_trial`.
+*Actual:* **passed the entire Python suite and all 52 JS tests.** The cell
+would read `0.50 (8)` instead of `0.50 (2)` — making a mean over two
+observations look four times better evidenced, which defeats the exact
+purpose Entry 028's third addition was added for.
 
-So the timing path carries no state across trials and is safe under
-`parallel_jobs`. The `run_trial._carry` function attribute the Architect
-flagged was scaffolding inside my own mutation and never existed in
-committed source; it is reverted.
+Closed with a **render assertion** in `tests/js/` — driving the real
+`drawScore` through the harness and reading the cell — not a source grep.
+The fixture is generated **through the real API** rather than by
+`json.dumps`, which mattered: raw `json.dumps` emits bare `NaN`, invalid
+JSON that `JSON.parse` rejects, while FastAPI correctly serialises it as
+`null`. A hand-written fixture would have differed from reality in a
+second way. Shown red:
 
-**The actual cause: my own leftover processes.** I left the dashboard
-server running from the screenshot work, and a headless Chrome still
-pointed at `?demo=1`. That deep-link auto-runs a race, which POSTs to
-`/api/run` — and **`api_race` takes no `root` parameter, so it writes to
-the default `OUTPUTS`**. Whenever one of those late requests completed
-inside a pytest session, a new run directory appeared mid-session and the
-guard fired. Both processes killed.
-
-**Two things worth keeping from this.**
-
-First, **the guard worked exactly as designed.** `conftest.py` exists
-because 25 run directories once accumulated in `outputs/` in a single
-afternoon, one of them stamped `manifest`. It caught a real intrusion
-into the evidence tree from a direction nobody had anticipated — a
-browser, not a test.
-
-Second, **I left dead code in the timing path** — a `timings` dict
-written on every arm and never read. Found while auditing for shared
-state, removed. It was harmless, and it was exactly the shape the audit
-was looking for.
-
-**A recommendation I have not acted on**, because it changes an endpoint
-and this segment is not scoped to it: `/api/run` writing to the live
-`outputs/` by default is the hole that let this happen. `race()` already
-takes a `root`; the HTTP layer does not expose it. Worth a ruling before
-segment 24, since the evidence run and a curious browser currently share
-a directory.
+```
+E  the recovery cell reads "0.50 (8)" but only 2 disruptions damaged this
+   arm. Showing 8 makes the mean look 8x better evidenced than it is
+```
 
 ---
 
 **Files changed**
-- `src/dynaswarm/harness/trial.py` — `rebind_ms`, `step_wall_ms`, `oracle_ms`; the timestep's own clock
-- `src/dynaswarm/io/schema.py` — the three columns
-- `tests/test_harness.py` — the new clocks excluded from bit-reproducibility, as an explicit list not a suffix rule
-- `tests/test_dashboard.py` — `MAX_JS_LINES` deleted; the budget test reports
+- `src/dynaswarm/analysis/scoring.py` — `RecoverySummary`; damaged-only mean; improved/unchanged split
+- `scripts/trust_report.py` — `SPARSE_FIELDS`; the F13 section
+- `dashboard/server.py` — `SCRATCH`; races relocated
+- `dashboard/static/app.js` — damaged count on the tab; `drawScore` exposed to the harness
+- `tests/conftest.py` — the carve-out, by name
+- `tests/test_scoring.py`, `tests/test_trust_report.py`, `tests/test_dashboard.py`, `tests/js/app.test.mjs`, `tests/js/dom.mjs`
+- `.gitignore` — `dashboard-runs/`
 
 **Files added**
-- `tests/test_timing.py` — 8 tests
-- `scripts/timing_table.py` — T3/T4
-
-**Deviations from spec**
-1. **Rebind is recorded in its own column** rather than being ruled in or
-   out of `wall_ms`. The spec asked me to pick one; I think the either/or
-   loses information the report needs, and the ledger attributes it
-   explicitly either way.
+- `scripts/instance_characterisation.py` — T5
+- `tests/js/fixtures/score.json` — generated through the API
 
 **Surprises**
-1. **My first red case was not red.** A tolerance-based identity cannot
-   catch a double-count smaller than its own overhead.
-2. **The specified mutation preserved every ratio**, inflating all arms by
-   the same 1.1× — plausible in a way a constant offset would not be.
-3. **The ledger is structurally blind to attribution.** It checks a sum,
-   and rotating the owners leaves the sum exact.
-4. **A browser wrote into the evidence tree.** The containment fixture
-   caught it; the endpoint that allowed it is still open.
+1. **Entry 026's bridge diagnosis does not hold for seed 1000** — that
+   instance has zero bridges and the named edge does not exist in it.
+2. **A\* was claiming instant recovery** from disruptions that never
+   touched it. Fixed as a side effect of T1.
+3. **The specified mutation passed**, because my test compared a row that
+   differed only in the column that was never broken.
+4. **`json.dumps` emits invalid JSON for NaN** and FastAPI does not — a
+   fixture built the convenient way would not have matched the browser.
 
 **Questions for the Architect**
 
-1. **Should `/api/run` accept a run root, or refuse to write to `outputs/`
-   at all?** See above — relevant before segment 24.
-2. **Is `rebind_ms` as a separate column accepted**, or do you want a
-   single ruling folded into `wall_ms`?
+1. **Where did Rudra's 87.228 road come from?** It is not in `medium200`
+   seed 1000. If he re-rolled the seed or changed the tier, the instance
+   should be identified before the report repeats the explanation.
+2. **Record bridge count and share per instance in the manifest?** ~25 of
+   100 seeds will carry the property; recording it costs nothing now and
+   cannot be recovered later.

@@ -19,6 +19,7 @@ async function loadAndGenerate(fixtures) {
 }
 
 const fixtures = {
+  score: readFixture("score.json"),
   world: readFixture("world.json"),
   geometry: readFixture("world.json"),
   timeline: readFixture("run.json"),
@@ -495,5 +496,48 @@ describe("the allocation bar, rendered", () => {
     );
     assert.equal(new Set(alloc.searched.slice(0, 21)).size > 1, true,
       "fixture is flat over the sampled range; the test proves nothing");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The recovery cell reports the population it was measured over (Entry 028.3)
+// ---------------------------------------------------------------------------
+
+describe("the ranking tab's recovery cell", () => {
+  const score = readFixture("score.json");
+
+  test("shows the DAMAGED count, not the scoreable count", async () => {
+    // My own mutation, segment Z3: rendering `n_disruptions` instead of
+    // `n_damaged` passed the entire Python suite and all 52 JS tests. The
+    // payload test asserts both keys exist; nothing asserted which one
+    // reaches the screen. It reads as a naming slip and it makes a mean
+    // over 2 observations look like a mean over 8 — defeating the exact
+    // purpose the count was added for.
+    //
+    // In this fixture the two numbers differ (2 against 8), which is what
+    // lets the cell be checked rather than merely rendered.
+    const { nodes, test: hook } = await loadAndGenerate(fixtures);
+    hook.state.race = { ...readFixture("race.json") };
+    await hook.drawScore("fixture-run");
+
+    const arm = score.arms[0];
+    assert.notEqual(arm.n_damaged, arm.n_disruptions,
+      "fixture has equal damaged and scoreable counts; the test cannot tell " +
+      "the two renderings apart");
+
+    // children[0] is the header row; the first arm row follows it.
+    const table = nodes["score-table"];
+    assert.ok(table.children.length > 1, "no arm rows were rendered");
+    const row = table.children[1];
+
+    const recoveryIdx = score.metrics.findIndex((m) => m.key === "mean_recovery");
+    const cell = row.children[recoveryIdx + 1];
+    assert.ok(cell, "no recovery cell was rendered");
+
+    assert.ok(cell.textContent.includes(`(${arm.n_damaged})`),
+      `the recovery cell reads "${cell.textContent}" but only ` +
+      `${arm.n_damaged} disruptions damaged this arm. Showing ` +
+      `${arm.n_disruptions} makes the mean look ${arm.n_disruptions}x ` +
+      `better evidenced than it is`);
   });
 });

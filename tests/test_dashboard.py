@@ -1584,3 +1584,52 @@ def test_the_ranking_page_renders_the_evidence_line_before_the_table():
         f"a single-seed exploratory ranking describes itself as {line!r} — "
         f"a low-n table would render with no visible warning"
     )
+
+
+def test_the_http_layer_cannot_write_into_the_evidence_tree():
+    """Entry 027's ruling, driven through real routing.
+
+    A leftover browser on `?demo=1` wrote four real run directories into
+    `outputs/` during segment Z2, because `api_race` took no root and fell
+    back to the evidence tree. The session guard caught it after the fact;
+    this refuses it at the door.
+
+    Driven through `TestClient` rather than by calling `race()` directly,
+    because the defect was in the **endpoint's** default, not in `race()`
+    — which has always accepted a root. A direct-call test would have
+    passed throughout.
+    """
+    pytest.importorskip("dashboard.server")
+    testclient = pytest.importorskip("fastapi.testclient")
+    from dashboard.server import OUTPUTS, SCRATCH, app
+
+    def snapshot():
+        return set(OUTPUTS.rglob("*")) if OUTPUTS.exists() else set()
+
+    before = snapshot()
+    with testclient.TestClient(app) as client:
+        response = client.post(
+            "/api/run",
+            json={
+                "arms": ["astar", "aco"],
+                "evaluations": 60,
+                "graph": {"model": "geometric", "n_nodes": 60, "density": 0.08},
+                "scenario": {"events_per_step": 0.3, "timesteps": 3},
+            },
+        )
+    assert response.status_code == 200, response.text
+
+    appeared = sorted(str(p) for p in snapshot() - before)
+    assert not appeared, (
+        "a race started over HTTP wrote into the evidence tree:\n  "
+        + "\n  ".join(appeared[:10])
+    )
+
+    # And it must actually have written somewhere, or this passes because
+    # nothing ran at all.
+    started = response.json()
+    assert SCRATCH.exists(), "the scratch root was never created"
+    assert any(SCRATCH.glob(f"*/{started['run_id']}")), (
+        f"run {started['run_id']} is not under the scratch root either; the "
+        f"test proves nothing about where races land"
+    )
