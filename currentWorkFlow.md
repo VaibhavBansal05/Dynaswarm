@@ -617,3 +617,210 @@ small difference.
 - `scripts/dry_run.py` — all four scenarios
 - `tests/test_manifest.py` — three tests
 - `MANIFEST.json` — regenerated, 800 trials
+
+---
+
+## FINDINGS — Segment 23, ADDENDUM 2: 150 seeds, P5, primary tier (Entry 031)
+
+**Status:** COMPLETE. Uncommitted. **The evidence run has NOT been started.**
+
+| | Before | After |
+|---|---|---|
+| Python suite | 532 | **536 passed** |
+| JS suite | 53 | **53** |
+| `src/` statements | 2318 | **2318 — still untouched** |
+
+```
+seeds      1000..1149 (150, listed)
+grid       9 comparisons x 4 scenarios = 36 cells
+trials     150 seeds x 4 scenarios x 2 tiers = 1200
+primary    large1000, conditional; fallback medium200
+runtime    59.9 min + 393.0 min = 7.5 h serial   ~57 min at 8 jobs
+```
+
+---
+
+### (1) and (2) — 150 seeds, and P5
+
+Both adopted as ruled. P5 sits in precedence order:
+`P1 → P2 → P3a → P3b → P4 → P5 → S1 → S2a → S2b`.
+
+`test_p5_completes_the_controlled_hybrid_set` asserts the six pairs among
+the four controlled hybrids are **exhaustive** — it enumerates
+`combinations()` and compares, so it fails if a pair is ever missing
+rather than checking P5 by name.
+
+**P5 is live at `calm`, confirmed.** But the cell has **7 of 9 live, not
+1** — a small correction to the ruling's rationale, and it strengthens
+the design rather than weakening it:
+
+```
+aco_fraction at CALM (no events at all):
+  hybrid_fixed        distinct  1   0.500 -> 0.500
+  hybrid_adaptive     distinct  1   0.500 -> 0.500     <- identical to fixed, P1 drops out
+  hybrid_scheduled    distinct 20   0.500 -> 0.617     <- sweeps on the clock
+  hybrid_direct       distinct  7   0.500 -> 0.800     <- climbs and holds
+```
+
+`hybrid_direct` does not sit at 0.5 with nothing happening. Its rule is
+`0.5 + A x (0.5 − recency)`, and at `recency = 0` that is **0.8** — it
+buys ACO, which is the principled response when nothing has invalidated
+the trails. It takes seven steps to get there only because the governor
+rate-limits it.
+
+So at `calm` only **P1 and P4** are degenerate; P2, P3a, P3b, P5 and S1
+all test something. The negative control is therefore richer than
+described: it verifies a positive prediction — *the direct arm should go
+maximally ACO-heavy when nothing breaks* — as well as the absence of an
+effect in the sensing arms.
+
+---
+
+### (3) — the primary tier, and **the condition does not cleanly hold**
+
+The condition was never measured at 1000 nodes. It is now, over 10
+arm-trials per cell:
+
+```
+  large1000  moderate   0.40 damaged disruptions per arm-trial
+  large1000  severe     0.20
+  medium200  moderate   2.10
+  medium200  severe     1.30
+```
+
+**Not degenerate — about 5x thinner.** At 150 seeds that projects to
+roughly **30–60 damaged events per arm per scenario at `large1000`
+against 195–315 at `medium200`.**
+
+The reason is the same fact that makes `large1000` attractive: at 1000
+nodes the graph is richly connected — **zero bridging edges on all 150
+instances** — so a 25-road break rarely touches the optimal route enough
+to raise excess. **The property that removes the confound is the property
+that starves the recovery metric.** They are not independent, and the
+report should say so rather than presenting `large1000` as strictly
+better.
+
+**Three of four metrics are unaffected.** Mean excess, % at optimum and
+worst excess are computed from every recorded step and cannot degenerate.
+Only `mean steps to recover` is thin.
+
+**Recorded in the manifest as an executable condition, not prose:**
+
+```python
+PRIMARY_TIER = "large1000"
+FALLBACK_TIER = "medium200"
+MIN_DAMAGED_FOR_RECOVERY = 30          # floor on evidence, not on passing
+primary_tier_holds(damaged_by_cell)    # decides after the run, by this rule
+```
+
+The threshold is **30, the low end of what `large1000` is projected to
+deliver** — set as a floor on evidence rather than tuned so the tier
+passes. If the real run lands under it, the metric genuinely has too
+little behind it and `medium200` becomes primary with that as the stated
+reason. `test_the_primary_tier_falls_back_when_recovery_cannot_be_supported`
+drives both sides of the threshold, because **a pre-registered fallback
+that cannot fire is decoration.**
+
+**My read, since the ruling asked for the measurement and not a
+decision:** the condition is met for computability and is marginal for
+strength. I would report `large1000` as primary for the three
+step-derived metrics and **report recovery from `medium200`**, saying
+plainly that the tier free of the confound is also the tier with too few
+damaging events to measure recovery well. That is a real limitation and
+stating it is stronger than picking one tier and hoping nobody asks.
+
+---
+
+### (4) — `understandingTests.md`, audited against the manifest
+
+**It describes P5 and nine comparisons already** — written ahead of the
+spec and correct on the parts that were settled. Seven places now
+misdescribe the manifest. **I have changed nothing in it**; they are
+listed so you can decide which side moves.
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 58 | "seed — varies, **100 per cell**" | **150** |
+| 62 | "difficulty already varies across **100 seeds**" | 150 |
+| 167 | "takes the **100** per-seed differences" | 150 |
+| 180–188 | the whole **"Why 100 seeds"** table | 150; at 2.132/√150 the uncertainty is **0.174**, effect-to-uncertainty **4.5x** |
+| 213 | "**40 of 100** `medium200` instances" | **63 of 150** (max share 0.742) |
+| 224 | "40% of `medium200` instances" | **42%** — unchanged as a proportion |
+
+**And one that is substantive rather than arithmetic:**
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 169 | "Holm correction, applied once across **all nine comparisons**" | Holm runs across **every tested cell of the 9 x 4 grid** — up to 36, not 9 |
+
+Nine is the per-scenario count. §4 of the same document says the
+disruption preset is "reported separately, never pooled", so a reader can
+reasonably take "nine comparisons" to mean the family is nine — which
+**understates the correction fourfold** and would make the quoted power
+figures optimistic. This is the one I would fix first, and it is also the
+one where you might prefer to move the *manifest* instead: four families
+of nine, threshold 0.05/9 = 0.0056, is a defensible reading of "never
+pooled". One constant either way, and it must be settled before the run.
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 60 | "graph size — **reported separately**. Tests whether the finding generalises" | `large1000` is **primary**; `medium200` is the instrument-verified tier reported alongside |
+
+Not wrong so much as superseded by ruling (3), and it changes the role
+the reader is told each tier plays.
+
+**Correct and needing no change:** the pairing argument (§5), the metric
+set and its exclusions (§7), Cliff's delta and its thresholds, the P3
+selection-on-outcome explanation, the 10-arm count, and the bridging
+confound as a competing explanation.
+
+---
+
+### Runtime, at 150 seeds
+
+```
+  medium200     600 trials     59.9 min serial   ~ 7.5 min at 8 jobs
+  large1000     600 trials    393.0 min serial   ~49.1 min at 8 jobs
+  BOTH        1,200 trials    452.9 min (7.5 h)  ~56.6 min at 8 jobs
+```
+
+Per-scenario cost was re-measured and is flat to within 10%, so the
+150-seed figures scale the measured means rather than assuming them. The
+checkpoint stays at every 10 trials with an abort at 2x the per-trial
+cost.
+
+---
+
+### The grid, re-verified
+
+```
+  grid: 36 cells   tested: 34   (Holm across all tested cells, once)
+  all 9 comparisons x 4 scenarios paired on identical optima: True
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial
+    calm/P4: arms identical on every trial
+
+  VERDICT
+    grid 36 cells: 34 tested, 2 identical-arm, 0 not computable
+    produced NaN: none
+```
+
+---
+
+### Open, and all four want your word before the run
+
+1. **The Holm family: 36 across the grid, or 9 within each scenario?**
+   I have implemented the conservative reading and the 150 seeds pay for
+   it. `understandingTests.md` currently describes the other one.
+2. **Recovery at `large1000` is 5x thinner.** Primary for all four
+   metrics, or primary for three with recovery reported from `medium200`?
+3. **Nine arms or ten** — still open from the first findings.
+4. **Seven corrections to `understandingTests.md`** — I have not touched
+   it; say which side moves.
+
+**Files changed (addendum 2)**
+- `scripts/manifest.py` — 150 seeds, primary-tier condition and fallback
+- `scripts/preregistration.py` — P5
+- `tests/test_manifest.py` — four tests
+- `MANIFEST.json` — regenerated, 1,200 trials

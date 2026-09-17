@@ -14,7 +14,7 @@ from scripts import manifest as m
 #: Everything a rerun needs. A field missing from here is a field nobody
 #: notices is missing until the rerun does not match.
 REQUIRED_TOP = {"arms", "seeds", "scenarios", "budget_evaluations",
-                "run_class", "provenance", "runs"}
+                "run_class", "provenance", "runs", "primary_tier"}
 REQUIRED_PROVENANCE = {"commit", "branch", "dirty", "python", "platform",
                        "numpy", "parallel_jobs"}
 REQUIRED_INSTANCE = {"seed", "n_nodes", "n_edges", "density", "optimum_t0",
@@ -307,3 +307,107 @@ def test_identical_arms_are_reported_not_dropped():
         "the Holm denominator still counts a cell that was never tested"
     )
     assert not np.isnan([r["p_value"] for r in report["results"]]).any()
+
+
+def test_the_primary_tier_is_pre_registered_with_its_condition_and_fallback(small):
+    """Entry 031. Which tier carries the claims, decided before the run.
+
+    `large1000` is primary because it has zero bridging edges on every
+    instance and is free of the confound affecting 40% of `medium200`.
+    But that is **conditional**: a tier can only be primary if all four
+    metrics are computable on it, and the binding one is
+    `mean steps to recover`, which had never been measured at 1000 nodes.
+
+    Recording the condition *and* the fallback now is what stops a switch
+    of emphasis after the results are seen from looking like a choice.
+    """
+    primary = small["primary_tier"]
+    assert primary["tier"] == "large1000"
+    assert primary["fallback"] == "medium200"
+    assert primary["tier"] != primary["fallback"]
+    assert primary["condition"], "no condition recorded, so nothing is conditional"
+    assert primary["why"], "no reason recorded"
+    assert primary["measured_damaged_per_arm_trial"], (
+        "the condition names a measurement that is not recorded beside it"
+    )
+
+
+def test_the_primary_tier_falls_back_when_recovery_cannot_be_supported():
+    """The fallback must actually fire, and say why.
+
+    A pre-registered fallback that cannot trigger is decoration. Driven
+    through the real decision function with counts on both sides of the
+    threshold.
+    """
+    ok = m.primary_tier_holds({
+        ("large1000", "moderate"): m.MIN_DAMAGED_FOR_RECOVERY + 10,
+        ("large1000", "severe"): m.MIN_DAMAGED_FOR_RECOVERY,
+    })
+    assert ok["primary"] == "large1000" and ok["condition_held"]
+
+    short = m.primary_tier_holds({
+        ("large1000", "moderate"): m.MIN_DAMAGED_FOR_RECOVERY + 10,
+        ("large1000", "severe"): m.MIN_DAMAGED_FOR_RECOVERY - 1,
+    })
+    assert short["primary"] == "medium200"
+    assert short["condition_held"] is False
+    assert "large1000/severe" in short["short_cells"]
+    assert "recovery metric" in short["reason"], (
+        "the fallback fired without recording why, so it would read as an "
+        "unexplained change of emphasis"
+    )
+
+
+def test_p5_completes_the_controlled_hybrid_set():
+    """Entry 031. All six pairs among the four controlled hybrids.
+
+    Exhaustive within the family means nothing is selected and nothing can
+    be asked for that is not already there — the strongest answer to "why
+    did you not also compare X against Y".
+    """
+    from itertools import combinations
+
+    from scripts.preregistration import PLANNED
+
+    controlled = {"hybrid_fixed", "hybrid_adaptive", "hybrid_scheduled",
+                  "hybrid_direct"}
+    planned_pairs = {
+        frozenset((p.arm_a, p.arm_b))
+        for p in PLANNED
+        if {p.arm_a, p.arm_b} <= controlled
+    }
+    every_pair = {frozenset(c) for c in combinations(sorted(controlled), 2)}
+    assert planned_pairs == every_pair, (
+        f"missing pairs: {[sorted(p) for p in every_pair - planned_pairs]}"
+    )
+    assert any(p.key == "P5" for p in PLANNED)
+
+
+def test_p5_is_live_in_the_calm_cell():
+    """P5 asks a real question where the sensing arms have none.
+
+    At `calm` the adaptive arm is identical to its frozen twin, so P1
+    drops out. The scheduled arm still sweeps on its timetable, so P5 asks
+    whether blind movement **costs** anything when there is nothing to
+    respond to — which is exactly what a negative control should be able
+    to answer.
+    """
+    from dynaswarm.harness.trial import run_trial
+
+    arms = ["hybrid_fixed", "hybrid_scheduled", "hybrid_direct"]
+    cfg = m.run_config("medium200", m.SEEDS, scenario="calm")
+    cfg.scenario.timesteps = 20
+    rows = list(run_trial(cfg, 0, arms).steps)
+
+    def splits(arm):
+        return {dict(r.probe)["aco_fraction"] for r in rows if r.arm == arm}
+
+    assert len(splits("hybrid_fixed")) == 1, "the frozen arm moved at calm"
+    assert len(splits("hybrid_scheduled")) > 1, (
+        "the scheduled arm did not move at calm, so P5 has nothing to compare "
+        "and the calm cell loses its only movement-versus-stillness test"
+    )
+    # And the direct arm settles ACO-heavy rather than staying at 0.5 —
+    # with nothing invalidating the trails, buying ACO is the principled
+    # response, and it makes P2/P3b/S1 live here too.
+    assert max(splits("hybrid_direct")) > 0.5

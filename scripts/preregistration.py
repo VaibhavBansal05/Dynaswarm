@@ -71,6 +71,17 @@ PLANNED: tuple[Planned, ...] = (
             "does sensing beat moving blindly"),
     Planned("P4", "aco_adaptive", "aco_fixed",
             "Claim 2 — does adapting rho help"),
+    # **P5 completes the Claim 3 set.** With P1, P2, P3a, P3b and S1 it
+    # makes all six pairs among the four controlled hybrids, so nothing is
+    # selected and nothing can be asked for that is not already here.
+    #
+    # It is also the ONLY live comparison in the calm cell. The scheduled
+    # arm sweeps on a timetable and moves whether or not anything happens,
+    # so at calm — where the sensing arms are identical to their twins and
+    # drop out — P5 still asks a real question: does blind movement COST
+    # anything when there is nothing to respond to?
+    Planned("P5", "hybrid_scheduled", "hybrid_fixed",
+            "does any movement help, independent of sensing"),
     Planned("S1", "hybrid_direct", "hybrid_adaptive",
             "does response shape matter"),
     Planned("S2a", "hybrid", "aco", "Claim 1 — hybrid against its components"),

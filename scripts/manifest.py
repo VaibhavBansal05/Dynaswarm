@@ -38,9 +38,16 @@ ARMS = [
     "aco_fixed", "aco_adaptive",
 ]
 
-#: 100 seeds, listed. Entry 024 pre-registered ">=100"; Entry 028's power
-#: calculation put 80% power at 58 and 90% at 78, so 100 clears both.
-SEEDS = list(range(1000, 1100))
+#: **150 seeds, listed.** Raised from 100 in Entry 031, and the reason is
+#: the multiplicity correction rather than the effect size.
+#:
+#: Holm runs across every tested cell of the 9 x 4 grid, so the strictest
+#: threshold is 0.05/36 rather than 0.05/9. That costs power, and the
+#: answer taken was to **spend compute rather than argue the
+#: denominator**: from the pilot's paired SD of 2.132pp against an
+#: observed 0.787pp effect, 100 seeds left roughly 75% power under the
+#: grid-wide correction and 150 restores it to about 90%.
+SEEDS = list(range(1000, 1150))
 
 #: **Four scenarios, frozen by Entry 030.** The rates are the project's
 #: own presets (`model.js`: static 0.0, low 0.1, moderate 0.3, high 0.8);
@@ -160,6 +167,78 @@ def characterise(tier: str, seed: int) -> Instance:
     )
 
 
+#: **The primary tier, pre-registered with its condition and fallback.**
+#:
+#: `large1000` is the basis for all claims, because it has **zero bridging
+#: edges on every instance** and is therefore free of the confound that
+#: affects 40% of `medium200` instances. `medium200` is reported alongside
+#: as the instrument-verified tier — everything in this project was
+#: calibrated there.
+#:
+#: **Conditional, and the condition is measured not assumed.** A tier can
+#: only be primary if all four pre-registered metrics are computable on
+#: it. Three are computed from every recorded step and cannot degenerate.
+#: The fourth, `mean steps to recover`, is computed only over disruptions
+#: that actually damaged the arm — and that count had never been measured
+#: at 1000 nodes.
+#:
+#: Measured in segment 23 over 10 arm-trials per cell:
+#:
+#:     large1000   moderate  0.40 damaged per arm-trial
+#:     large1000   severe    0.20
+#:     medium200   moderate  2.10
+#:     medium200   severe    1.30
+#:
+#: **Not degenerate — about 5x thinner.** At 150 seeds that is roughly
+#: 30-60 damaged events per arm per scenario against 195-315 at
+#: `medium200`. Computable, and a materially weaker basis for that one
+#: metric.
+PRIMARY_TIER = "large1000"
+FALLBACK_TIER = "medium200"
+
+#: Minimum damaged disruptions per arm per scenario for the recovery
+#: metric to be reported at a tier at all. Below this the metric is not
+#: reported for that tier and the report says why — it is not quietly
+#: averaged over whatever happened to be there.
+#:
+#: Set at 30, which is the lower end of what `large1000` is projected to
+#: deliver at 150 seeds. **Chosen as a floor on evidence, not to make a
+#: tier pass**: the projection is 30-60, so if the real run lands under 30
+#: the metric genuinely has too little behind it and the fallback applies.
+MIN_DAMAGED_FOR_RECOVERY = 30
+
+
+def primary_tier_holds(damaged_by_cell: dict[tuple[str, str], int]) -> dict:
+    """Decide the primary tier from the run's own data, by the rule above.
+
+    Args:
+        damaged_by_cell: ``{(tier, scenario): total damaged disruptions}``.
+
+    Returns:
+        The tier that carries the claims, whether the condition held, and
+        the reason — so a fallback is reported as a finding rather than
+        appearing as an unexplained change of emphasis.
+    """
+    cells = {k: v for k, v in damaged_by_cell.items() if k[0] == PRIMARY_TIER}
+    short = {k: v for k, v in cells.items() if v < MIN_DAMAGED_FOR_RECOVERY}
+    held = bool(cells) and not short
+    return {
+        "primary": PRIMARY_TIER if held else FALLBACK_TIER,
+        "condition_held": held,
+        "threshold": MIN_DAMAGED_FOR_RECOVERY,
+        "short_cells": {f"{t}/{s}": v for (t, s), v in sorted(short.items())},
+        "reason": (
+            f"{PRIMARY_TIER} is primary: free of the bridging confound and all "
+            f"four metrics computable"
+            if held
+            else f"{PRIMARY_TIER} could not support the recovery metric "
+                 f"({sorted(short.values())} damaged events against a floor of "
+                 f"{MIN_DAMAGED_FOR_RECOVERY}); {FALLBACK_TIER} is primary and "
+                 f"this is the reason"
+        ),
+    }
+
+
 def run_config(tier: str, seeds: list[int], scenario: str = "moderate",
                run_class: str = "manifest") -> Config:
     """The exact configuration a run executes under.
@@ -227,6 +306,26 @@ def build(tiers: tuple[str, ...] = ("medium200", "large1000"),
         "scenarios": {n: scenario_cfg(n) for n in SCENARIOS},
         "budget_evaluations": BUDGET,
         "run_class": "manifest",
+        "primary_tier": {
+            "tier": PRIMARY_TIER,
+            "fallback": FALLBACK_TIER,
+            "why": (
+                "large1000 has zero bridging edges on every instance and is "
+                "free of the confound affecting 40% of medium200 instances; "
+                "medium200 is the instrument-verified tier and is reported "
+                "alongside"
+            ),
+            "condition": (
+                "all four metrics computable; the binding one is at least "
+                f"{MIN_DAMAGED_FOR_RECOVERY} damaged disruptions per arm per "
+                "scenario for mean-steps-to-recover"
+            ),
+            "measured_damaged_per_arm_trial": {
+                "large1000/moderate": 0.40, "large1000/severe": 0.20,
+                "medium200/moderate": 2.10, "medium200/severe": 1.30,
+            },
+            "decided_after_the_run_by": "manifest.primary_tier_holds()",
+        },
         "provenance": provenance(),
         "runs": {
             tier: {
