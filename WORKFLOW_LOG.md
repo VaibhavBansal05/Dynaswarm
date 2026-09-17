@@ -2698,3 +2698,72 @@ This project has now hit that twice in one metric: censored cases silently dropp
 Z3's T2 through T5 remain: the staleness row, the F13 retitle, the `/api/run` scratch root, and the bridging-edge characterisation. T1's implementation now joins them.
 
 ---
+
+---
+
+## Entry 029 — Segment Z3 complete, and it corrects Entry 026
+
+**17 Sept 2026.** 520 Python (from 514), 53 JS (from 52), `src/` 2318, ruff clean. Uncommitted.
+
+### **My bridging-road explanation was wrong. Entry 026 is corrected here.**
+
+Entry 026 stated confidently that the long road Rudra clicked came from `_ensure_connected` bridging disconnected components at random.
+
+**At `medium200` seed 1000 there are zero bridging edges** — 735 raw edges, 735 after connecting. And road **63–125 is not in the CSR superset at all**: not a base edge, not an addable-pool slot. The two nodes sit 0.529 apart on a canvas spanning 0.99.
+
+So it came from a different instance — another tier, density, or a re-rolled seed. vClaude could not reproduce it and, correctly, **did not explain it away.**
+
+**The error is mine and it is a familiar one.** I read `_ensure_connected`, found a mechanism that *could* produce a long edge, and wrote it up as the cause without checking it applied to the instance in question. That is exactly the failure this project keeps catching in other people's comments and docstrings — a plausible story standing in for a verified one — and I wrote it into the log two entries ago.
+
+Rudra had the seed box working for the first time that session and was moving between presets. The road is almost certainly real and from a world neither of us recorded.
+
+**But the half that matters survives, and it is the half I cared about.** Bridging is **absent at the default instance and live on 2 of 8 seeds**, where **a single bridge hop carries ~45% of the optimal route.** At 100 seeds that is roughly 25 instances where the competing explanation applies.
+
+**Approved, and it goes into the manifest:** record bridge count and bridge share **per instance**. It costs nothing now and cannot be recovered afterwards — once the run is done, an instance property nobody recorded is gone. And it converts a hand-waved worry into a column the report can condition on: *if the arms are indistinguishable, is that also true on the 75 instances with no dominant bridge?*
+
+### T1 — implemented, and it discriminates
+
+```
+before:  0.25 / 0.12 / 0.25 / 0.50
+after:   1.00 / 0.50 / 1.00 / 2.00
+```
+
+**A\* now reads `—` rather than `0.00`.** vClaude flagged this itself and it is the better catch: `0.00` asserted the oracle recovers instantly, which is a claim about an arm that never falls. An undefined value printed as zero is the same defect as a non-event averaged in as zero — one entry lower down.
+
+**And the `damage < 0` count paid immediately.** `hybrid_adaptive` had **3** disruptions that *improved* its excess against **1** for the other arms — previously invisible inside "undamaged". Three observations, so it means little; but it is a real asymmetry that did not exist as a number an hour ago, and it is now available to the 100-seed run.
+
+### Both mutations, and both are instructive
+
+**The specified one passed all 9 trust-report tests first time** — and exposed a weak test of vClaude's own. It compared **whole rendered rows**, and those differ by `live` vs `INERT` even when both numbers read `0`. So the assertion was passing on the column that was never broken.
+
+**Standing rule, new:** *a test that compares a composite cannot tell you which part changed.* It fires on any difference, which feels thorough and means it can pass while the part you care about is wrong. Assert the field, not the line.
+
+**vClaude's own mutation passed the entire suite:** render `n_disruptions` where `n_damaged` belongs. The cell would read `0.50 (8)` for a mean over **2** observations.
+
+That is worse than a wrong mean. **The count exists precisely to tell the reader the sample is small, and the mutation makes it overstate the sample by 4×** — the guard against over-reading becomes the thing producing it. Closed with a render assertion driving the real `drawScore`.
+
+One detail worth keeping: the fixture had to be generated **through the API**, because raw `json.dumps` emits bare `NaN` — invalid JSON that `JSON.parse` rejects — while FastAPI writes `null`. A hand-built fixture would have tested a format the browser never receives.
+
+### Ruling on run size: **both, with `medium200` as primary**
+
+Rudra's instinct is to run the largest tier so nothing needs re-running for the report. Right goal, and I want to qualify how it is done.
+
+**Everything in this project was calibrated at `medium200`** — the `sigma` derivation, the recovery metric's damaged-event counts, the bridging characterisation, every trust-report reading, the sweep, the whole verification pass. Making `large1000` the primary evidence would mean the instrument was verified at one size and the evidence taken at another, with nobody having checked that the metric behaves the same way there. The recovery metric alone rests on 3–4 damaged events per run at `medium200`; at `large1000` that number is simply unknown.
+
+So the manifest declares:
+
+| | |
+|---|---|
+| **Primary evidence** | `medium200`, ~30 min — the size everything was verified at |
+| **Scale check** | `large1000`, ~4.5 hours single-threaded or ~1 hour with `parallel_jobs` |
+| **Both reported.** Neither is dropped for being unflattering. | |
+
+Under two hours of compute for the pair, and it gets Rudra what he asked for — everything in hand — without taking the evidence on an uncalibrated instrument. `parallel_jobs` is safe: Z2 established the timing path holds no shared state.
+
+### Close
+
+Z3 closed four instruments that read plausibly and said nothing, and corrected a fifth statement — mine — that read plausibly and was not checked.
+
+**The code is finished.** Next is **segment 23, the manifest**: freeze the configuration, record what each instance is, and make the run reproducible. Then it runs.
+
+---
