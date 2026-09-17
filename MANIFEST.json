@@ -113,16 +113,36 @@
     1098,
     1099
   ],
-  "scenario": {
-    "name": "moderate",
-    "events_per_step": 0.3,
-    "cluster_size": 25,
-    "timesteps": 60
+  "scenarios": {
+    "calm": {
+      "name": "calm",
+      "cluster_size": 25,
+      "timesteps": 60,
+      "events_per_step": 0.0
+    },
+    "light": {
+      "name": "light",
+      "cluster_size": 25,
+      "timesteps": 60,
+      "events_per_step": 0.1
+    },
+    "moderate": {
+      "name": "moderate",
+      "cluster_size": 25,
+      "timesteps": 60,
+      "events_per_step": 0.3
+    },
+    "severe": {
+      "name": "severe",
+      "cluster_size": 25,
+      "timesteps": 60,
+      "events_per_step": 0.8
+    }
   },
   "budget_evaluations": 300,
   "run_class": "manifest",
   "provenance": {
-    "commit": "32a8cf05e8476722b0a33aa47867d6ad90ba7a6c",
+    "commit": "1baa63f4ac379b2fd989e813e66b5a30d83eb769",
     "branch": "main",
     "dirty": true,
     "reproducible_from_commit": false,
@@ -139,7 +159,12 @@
         "n_nodes": 200,
         "density": 0.04
       },
-      "command": "./.venv/bin/python -m dynaswarm.cli run --tier medium200 --manifest scripts/manifest.py",
+      "commands": [
+        "./.venv/bin/python -m dynaswarm.cli run --tier medium200 --scenario calm --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier medium200 --scenario light --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier medium200 --scenario moderate --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier medium200 --scenario severe --manifest scripts/manifest.py"
+      ],
       "instances": [
         {
           "seed": 1000,
@@ -1249,7 +1274,12 @@
         "n_nodes": 1000,
         "density": 0.04
       },
-      "command": "./.venv/bin/python -m dynaswarm.cli run --tier large1000 --manifest scripts/manifest.py",
+      "commands": [
+        "./.venv/bin/python -m dynaswarm.cli run --tier large1000 --scenario calm --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier large1000 --scenario light --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier large1000 --scenario moderate --manifest scripts/manifest.py",
+        "./.venv/bin/python -m dynaswarm.cli run --tier large1000 --scenario severe --manifest scripts/manifest.py"
+      ],
       "instances": [
         {
           "seed": 1000,

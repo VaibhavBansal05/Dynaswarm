@@ -13,7 +13,7 @@ from scripts import manifest as m
 
 #: Everything a rerun needs. A field missing from here is a field nobody
 #: notices is missing until the rerun does not match.
-REQUIRED_TOP = {"arms", "seeds", "scenario", "budget_evaluations",
+REQUIRED_TOP = {"arms", "seeds", "scenarios", "budget_evaluations",
                 "run_class", "provenance", "runs"}
 REQUIRED_PROVENANCE = {"commit", "branch", "dirty", "python", "platform",
                        "numpy", "parallel_jobs"}
@@ -34,7 +34,11 @@ def test_the_manifest_carries_every_field_a_rerun_needs(small):
         f"missing provenance: {REQUIRED_PROVENANCE - set(small['provenance'])}"
     )
     for tier, run in small["runs"].items():
-        assert "graph" in run and "command" in run, f"{tier} has no command"
+        assert "graph" in run and "commands" in run, f"{tier} has no commands"
+        assert len(run["commands"]) == len(small["scenarios"]), (
+            f"{tier} lists {len(run['commands'])} commands for "
+            f"{len(small['scenarios'])} scenarios"
+        )
         assert run["instances"], f"{tier} recorded no instances"
         for inst in run["instances"]:
             assert set(inst) >= REQUIRED_INSTANCE, (
@@ -201,3 +205,105 @@ def test_the_provenance_tells_the_truth_about_the_working_tree():
         "has to notice"
     )
     assert prov["commit"], "no commit hash recorded at all"
+
+
+def test_the_four_scenarios_are_frozen_and_differ_only_in_event_rate(small):
+    """Entry 030. Four scenarios, and only one thing varying between them.
+
+    `calm` is the negative control and `light -> moderate -> severe` is
+    the dose-response. Both claims depend on the scenarios being identical
+    in every respect except disruption frequency — if `cluster_size` or
+    `timesteps` also moved, a difference between scenarios would have two
+    possible causes and the dose-response would mean nothing.
+    """
+    scenarios = small["scenarios"]
+    assert set(scenarios) == {"calm", "light", "moderate", "severe"}
+
+    rates = {n: s["events_per_step"] for n, s in scenarios.items()}
+    assert rates == {"calm": 0.0, "light": 0.1, "moderate": 0.3, "severe": 0.8}
+    assert rates["calm"] == 0.0, "the negative control has disruptions"
+    assert rates["light"] < rates["moderate"] < rates["severe"], (
+        "the dose-response ordering is not monotone in the event rate"
+    )
+
+    varying = {
+        key
+        for key in ("cluster_size", "timesteps")
+        if len({s[key] for s in scenarios.values()}) > 1
+    }
+    assert not varying, (
+        f"{varying} differs between scenarios, so a difference between them "
+        f"has more than one possible cause"
+    )
+
+
+def test_the_calm_scenario_makes_the_sensing_arms_identical_to_their_twins():
+    """**The negative control, asserted rather than assumed.**
+
+    With no disruptions, recency never fires, so a recency-driven arm must
+    not move — making it byte-identical to its frozen twin. Measured: at
+    `calm` the adaptive hybrid takes **one** distinct split and adaptive
+    rho takes **one** distinct value; at `moderate` they take 14 and 19.
+
+    If this ever fails, a sensing arm is moving with nothing to sense,
+    which means it is responding to something other than disruption and
+    every positive result it produces is suspect.
+    """
+    from dynaswarm.harness.trial import run_trial
+
+    arms = ["hybrid_fixed", "hybrid_adaptive", "aco_fixed", "aco_adaptive"]
+    cfg = m.run_config("medium200", m.SEEDS, scenario="calm")
+    cfg.scenario.timesteps = 20
+    rows = list(run_trial(cfg, 0, arms).steps)
+
+    assert sum(r.num_events for r in rows if r.arm == "hybrid_fixed") == 0, (
+        "the calm scenario produced disruptions; it is not a negative control"
+    )
+    fractions = {dict(r.probe)["aco_fraction"] for r in rows
+                 if r.arm == "hybrid_adaptive"}
+    assert len(fractions) == 1, (
+        f"the adaptive hybrid took {len(fractions)} splits with nothing to "
+        f"sense: {sorted(fractions)}"
+    )
+    rho = {dict(r.params)["rho"] for r in rows if r.arm == "aco_adaptive"}
+    assert len(rho) == 1, f"adaptive rho moved without disruptions: {sorted(rho)}"
+
+
+def test_identical_arms_are_reported_not_dropped():
+    """A degenerate comparison must shrink the Holm denominator, visibly.
+
+    At `calm` the sensing arms are identical to their twins, so Wilcoxon
+    has no differences to rank. That is the control **succeeding**, and it
+    must be reported as such rather than silently skipped — a family that
+    quietly shrinks is a correction applied to the wrong denominator, and
+    a cell that vanishes looks like one that was never planned.
+    """
+    import numpy as np
+    import pandas as pd
+    from scripts.preregistration import run_preregistered
+
+    rows = []
+    for arm in ("hybrid_adaptive", "hybrid_fixed"):
+        for trial in range(4):
+            for t in range(12):
+                rows.append({
+                    "run_id": "x", "scenario": "calm", "signal_kind": "",
+                    "controller_kind": "", "arm": arm, "trial": trial,
+                    "timestep": t, "excess": 0.10, "num_events": 0,
+                    "optimum": 1.0, "best_cost": 1.1, "path_valid": True,
+                    "evaluations_spent": 60, "seed": 1000 + trial,
+                    "run_class": "exploratory", "wall_ms": 1.0,
+                })
+    report = run_preregistered(pd.DataFrame(rows))
+
+    keys = {d["key"] for d in report["degenerate"]}
+    assert "P1" in keys, (
+        f"identical arms were not reported as degenerate: {report['degenerate']}"
+    )
+    assert not any(r["key"] == "P1" for r in report["results"]), (
+        "a comparison with nothing to rank produced a test result"
+    )
+    assert report["family_size"] < report["grid_size"], (
+        "the Holm denominator still counts a cell that was never tested"
+    )
+    assert not np.isnan([r["p_value"] for r in report["results"]]).any()

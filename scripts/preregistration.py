@@ -25,7 +25,8 @@ import pandas as pd
 from dynaswarm.analysis.load import per_trial_excess
 from dynaswarm.analysis.stats import Comparison, holm_correct, paired_compare
 
-__all__ = ["PLANNED", "Planned", "run_preregistered", "format_results"]
+__all__ = ["PLANNED", "Planned", "run_preregistered", "format_results",
+           "dose_response"]
 
 
 @dataclass(frozen=True)
@@ -100,40 +101,73 @@ def _paired(trials: pd.DataFrame, arm_a: str, arm_b: str, metric: str):
 
 
 def run_preregistered(frame: pd.DataFrame, metric: str = METRIC) -> dict:
-    """Execute the whole family and Holm-correct it as one.
+    """Execute the whole family, across every scenario, and correct once.
+
+    **The family is every test performed, not every test per scenario.**
+    Entry 030 froze four scenarios, so the grid is 8 comparisons x 4
+    scenarios = 32 tests. Holm is applied across all of them in a single
+    correction: running the same eight hypotheses four times and reporting
+    whichever cells came out significant is multiplicity, whatever the
+    scenarios are called.
+
+    The strictest Holm threshold is therefore 0.05/32 = 0.0016. That is
+    conservative, and the dose-response claim does **not** depend on it —
+    that claim is read off the *effect sizes* trending across light ->
+    moderate -> severe, which is descriptive and needs no correction. A
+    pattern that scales with disruption rate is stronger evidence than a
+    single cell clearing a threshold, because a spurious effect has no
+    reason to scale with the thing it depends on.
 
     Args:
         frame: Step rows, as `load_steps` returns them.
         metric: The per-trial column compared.
 
     Returns:
-        ``{"results": [...], "missing": [...], "n_pairs": int}``. A
-        comparison whose arms are absent is reported in ``missing`` and
-        **not** silently skipped — a family that quietly shrinks is a
-        correction applied to the wrong number of tests.
+        ``{"results": [...], "missing": [...], "degenerate": [...]}``.
+        A comparison whose arms are absent, or whose paired differences
+        are all zero, is reported rather than dropped — a family that
+        quietly shrinks is a correction applied to the wrong denominator.
     """
     trials = per_trial_excess(frame)
-    present = set(trials["arm"].unique())
+    scenarios = sorted(trials["scenario"].unique()) if "scenario" in trials else [""]
 
     comparisons: list[Comparison] = []
-    planned: list[Planned] = []
+    context: list[tuple[str, Planned]] = []
     missing: list[dict] = []
+    degenerate: list[dict] = []
 
-    for plan in PLANNED:
-        absent = [a for a in (plan.arm_a, plan.arm_b) if a not in present]
-        if absent:
-            missing.append({"key": plan.key, "absent": absent})
-            continue
-        a, b, shared = _paired(trials, plan.arm_a, plan.arm_b, metric)
-        if len(shared) < 2:
-            missing.append({"key": plan.key, "absent": ["too few paired trials"]})
-            continue
-        comparisons.append(paired_compare(a, b, label=plan.key))
-        planned.append(plan)
+    for scenario in scenarios:
+        here = trials[trials["scenario"] == scenario] if scenario else trials
+        present = set(here["arm"].unique())
+
+        for plan in PLANNED:
+            absent = [a for a in (plan.arm_a, plan.arm_b) if a not in present]
+            if absent:
+                missing.append({"scenario": scenario, "key": plan.key,
+                                "absent": absent})
+                continue
+            a, b, shared = _paired(here, plan.arm_a, plan.arm_b, metric)
+            if len(shared) < 2:
+                missing.append({"scenario": scenario, "key": plan.key,
+                                "absent": ["fewer than two paired trials"]})
+                continue
+            # Two arms that behaved identically give Wilcoxon nothing to
+            # rank. That is not an error and must not be silently dropped:
+            # at `calm` a recency-driven arm SHOULD be identical to the
+            # frozen one, and "no difference at all" is the negative
+            # control succeeding, not a missing measurement.
+            if np.allclose(a, b):
+                degenerate.append({"scenario": scenario, "key": plan.key,
+                                   "n_pairs": len(shared),
+                                   "note": "arms identical on every trial"})
+                continue
+            comparisons.append(paired_compare(a, b, label=f"{scenario}/{plan.key}"))
+            context.append((scenario, plan))
 
     corrected = holm_correct(comparisons)
     results = [
         {
+            "scenario": scenario,
             "key": p.key,
             "arm_a": p.arm_a,
             "arm_b": p.arm_b,
@@ -148,35 +182,77 @@ def run_preregistered(frame: pd.DataFrame, metric: str = METRIC) -> dict:
             "effect_label": c.effect_label,
             "significant": c.significant,
         }
-        for p, c in zip(planned, corrected, strict=True)
+        for (scenario, p), c in zip(context, corrected, strict=True)
     ]
     return {
         "metric": metric,
+        "scenarios": list(scenarios),
         "results": results,
         "missing": missing,
+        "degenerate": degenerate,
         "family_size": len(comparisons),
+        "grid_size": len(scenarios) * len(PLANNED),
     }
 
 
 def format_results(report: dict) -> str:
-    """The family as a table, with every column a reader needs."""
+    """The grid as a table, with every column a reader needs."""
     lines = [
-        f"  metric: {report['metric']}   family size: {report['family_size']}"
-        f"   (Holm across all of them, not within each)",
+        f"  metric: {report['metric']}   scenarios: {report['scenarios']}",
+        f"  grid: {report['grid_size']} cells   tested: {report['family_size']}"
+        f"   (Holm across all tested cells, once)",
         "",
-        f"  {'':<5}{'comparison':<38}{'n':>4}{'mean A':>10}{'mean B':>10}"
-        f"{'delta':>10}{'p':>9}{'p adj':>9}{'effect':>9}  sig",
-        "  " + "-" * 108,
+        f"  {'scenario':<10}{'':<5}{'comparison':<36}{'n':>4}{'delta':>10}"
+        f"{'p':>9}{'p adj':>9}{'effect':>9}  sig",
+        "  " + "-" * 96,
     ]
     for r in report["results"]:
         lines.append(
-            f"  {r['key']:<5}{r['arm_a'] + ' vs ' + r['arm_b']:<38}"
-            f"{r['n_pairs']:>4}{r['mean_a']:>10.4f}{r['mean_b']:>10.4f}"
-            f"{r['delta']:>+10.4f}{r['p_value']:>9.4f}{r['p_adjusted']:>9.4f}"
-            f"{r['effect']:>+9.3f}  {'YES' if r['significant'] else 'no'}"
+            f"  {r['scenario']:<10}{r['key']:<5}"
+            f"{r['arm_a'] + ' vs ' + r['arm_b']:<36}"
+            f"{r['n_pairs']:>4}{r['delta']:>+10.4f}{r['p_value']:>9.4f}"
+            f"{r['p_adjusted']:>9.4f}{r['effect']:>+9.3f}"
+            f"  {'YES' if r['significant'] else 'no'}"
         )
+    if report["degenerate"]:
+        lines += ["", "  IDENTICAL ARMS (no difference to rank — not an error):"]
+        for d in report["degenerate"]:
+            lines.append(f"    {d['scenario']}/{d['key']}: {d['note']} "
+                         f"({d['n_pairs']} pairs)")
     if report["missing"]:
         lines += ["", "  NOT COMPUTABLE:"]
         for m in report["missing"]:
-            lines.append(f"    {m['key']}: {m['absent']}")
+            lines.append(f"    {m['scenario']}/{m['key']}: {m['absent']}")
+    return "\n".join(lines)
+
+
+def dose_response(report: dict) -> str:
+    """Effect size across light -> moderate -> severe, per comparison.
+
+    **Read off effect sizes, not p-values, and deliberately uncorrected.**
+    This is the descriptive pattern the four-scenario design exists to
+    produce: if a margin grows with disruption rate it is evidence a
+    spurious result has no reason to produce, and it does not depend on
+    any cell clearing a threshold.
+    """
+    order = [s for s in ("light", "moderate", "severe") if s in report["scenarios"]]
+    if len(order) < 2:
+        return "  (needs at least two of light/moderate/severe)"
+
+    by_key: dict[str, dict[str, float]] = {}
+    for r in report["results"]:
+        by_key.setdefault(r["key"], {})[r["scenario"]] = r["effect"]
+
+    lines = [f"  {'comparison':<6}" + "".join(f"{s:>12}" for s in order)
+             + "   monotone?"]
+    lines.append("  " + "-" * (6 + 12 * len(order) + 12))
+    for key in sorted(by_key):
+        row = by_key[key]
+        vals = [row.get(s) for s in order]
+        cells = "".join("         —  " if v is None else f"{v:>+12.3f}" for v in vals)
+        known = [v for v in vals if v is not None]
+        mono = (len(known) == len(vals)
+                and (all(x <= y for x, y in zip(known, known[1:], strict=False))
+                     or all(x >= y for x, y in zip(known, known[1:], strict=False))))
+        lines.append(f"  {key:<6}{cells}   {'yes' if mono else 'no'}")
     return "\n".join(lines)

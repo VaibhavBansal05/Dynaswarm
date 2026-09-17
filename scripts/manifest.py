@@ -42,9 +42,34 @@ ARMS = [
 #: calculation put 80% power at 58 and 90% at 78, so 100 clears both.
 SEEDS = list(range(1000, 1100))
 
-#: The scenario, unchanged since Phase 0 and frozen by Entry 024.
-SCENARIO = {"name": "moderate", "events_per_step": 0.3, "cluster_size": 25,
-            "timesteps": 60}
+#: **Four scenarios, frozen by Entry 030.** The rates are the project's
+#: own presets (`model.js`: static 0.0, low 0.1, moderate 0.3, high 0.8);
+#: only the display names differ, and the mapping is recorded here so
+#: nobody reads these as invented numbers.
+#:
+#: The set exists to buy two claims a single scenario cannot produce:
+#:
+#: * **`calm` is the negative control.** With no disruptions, recency
+#:   never fires and a recency-driven arm must not move. An effect here
+#:   would mean the mechanism adds noise rather than responds to damage.
+#: * **`light` -> `moderate` -> `severe` is the dose-response.** If the
+#:   adaptive margin grows with disruption rate, that is far stronger
+#:   than one significant difference: a spurious effect has no reason to
+#:   scale with the thing it is supposed to depend on.
+SCENARIOS = {
+    "calm":     {"events_per_step": 0.0},   # preset `static`
+    "light":    {"events_per_step": 0.1},   # preset `low`
+    "moderate": {"events_per_step": 0.3},   # preset `moderate`
+    "severe":   {"events_per_step": 0.8},   # preset `high`
+}
+
+#: Shared by all four. Only the event rate varies, so a difference between
+#: scenarios is attributable to disruption frequency and nothing else.
+SCENARIO_COMMON = {"cluster_size": 25, "timesteps": 60}
+
+
+def scenario_cfg(name: str) -> dict:
+    return {"name": name, **SCENARIO_COMMON, **SCENARIOS[name]}
 
 #: Evaluations per arm per timestep. The `sigma` derivation in segment X
 #: is a function of this number, so it cannot move without invalidating it.
@@ -135,7 +160,8 @@ def characterise(tier: str, seed: int) -> Instance:
     )
 
 
-def run_config(tier: str, seeds: list[int], run_class: str = "manifest") -> Config:
+def run_config(tier: str, seeds: list[int], scenario: str = "moderate",
+               run_class: str = "manifest") -> Config:
     """The exact configuration a run executes under.
 
     One function, used by the manifest, the dry run and segment 24, so
@@ -147,7 +173,7 @@ def run_config(tier: str, seeds: list[int], run_class: str = "manifest") -> Conf
         run_class=run_class,
         graph=GraphCfg(model=spec["model"], n_nodes=spec["n_nodes"],
                        density=spec["density"]),
-        scenario=ScenarioCfg(**SCENARIO),
+        scenario=ScenarioCfg(**scenario_cfg(scenario)),
         experiment=ExperimentCfg(
             arms=list(ARMS), n_trials=len(seeds), eval_seeds=list(seeds),
             parallel_jobs=PARALLEL_JOBS,
@@ -198,17 +224,18 @@ def build(tiers: tuple[str, ...] = ("medium200", "large1000"),
     return {
         "arms": list(ARMS),
         "seeds": list(seeds),
-        "scenario": dict(SCENARIO),
+        "scenarios": {n: scenario_cfg(n) for n in SCENARIOS},
         "budget_evaluations": BUDGET,
         "run_class": "manifest",
         "provenance": provenance(),
         "runs": {
             tier: {
                 "graph": dict(TIERS[tier]),
-                "command": (
-                    "./.venv/bin/python -m dynaswarm.cli "
-                    f"run --tier {tier} --manifest scripts/manifest.py"
-                ),
+                "commands": [
+                    "./.venv/bin/python -m dynaswarm.cli run "
+                    f"--tier {tier} --scenario {s} --manifest scripts/manifest.py"
+                    for s in SCENARIOS
+                ],
                 "instances": [asdict(characterise(tier, s)) for s in seeds],
             }
             for tier in tiers
@@ -220,7 +247,12 @@ def build(tiers: tuple[str, ...] = ("medium200", "large1000"),
 #: on the machine named in `provenance()`. **Measured, not derived from
 #: segment Z2's table**, which timed four arms and would have to be scaled
 #: by an arm mix rather than a count.
-TRIAL_SECONDS = {"medium200": 5.58, "large1000": 37.34}
+#: Mean across the four scenarios, not one of them: measured at
+#: 5.73-6.21s (medium200) and 38.2-40.3s (large1000), so the spread is
+#: under 10% and a single-scenario figure would have been fine — but
+#: measuring it is what establishes that, and assuming it is how a four-
+#: scenario run comes in four times over a one-scenario estimate.
+TRIAL_SECONDS = {"medium200": 5.99, "large1000": 39.3}
 
 #: Report an updated estimate this often during the run. **A four-hour run
 #: that is secretly a twelve-hour run must be caught in the first ten
@@ -229,12 +261,22 @@ TRIAL_SECONDS = {"medium200": 5.58, "large1000": 37.34}
 CHECKPOINT_EVERY = 10
 
 
-def runtime_estimate(tier: str, n_trials: int = len(SEEDS)) -> dict:
+#: Cost scales with how much searching happens, and a calm scenario has
+#: no disruptions to recover from — but every arm still spends its full
+#: budget every timestep, so the per-trial cost is essentially flat across
+#: scenarios. Measured rather than assumed; see `measure_scenarios()`.
+SCENARIO_COST_FACTOR = dict.fromkeys(SCENARIOS, 1.0)
+
+
+def runtime_estimate(tier: str, n_trials: int = len(SEEDS),
+                     scenarios: tuple[str, ...] | None = None) -> dict:
     """What the run should cost, and when to stop believing it."""
+    scenarios = tuple(SCENARIOS) if scenarios is None else scenarios
     per_trial = TRIAL_SECONDS[tier]
-    serial = per_trial * n_trials
+    serial = sum(per_trial * SCENARIO_COST_FACTOR[s] for s in scenarios) * n_trials
     return {
         "tier": tier,
+        "scenarios": list(scenarios),
         "trials": n_trials,
         "seconds_per_trial": per_trial,
         "serial_minutes": serial / 60,
@@ -246,6 +288,7 @@ def runtime_estimate(tier: str, n_trials: int = len(SEEDS)) -> dict:
         "parallel_minutes_optimistic": serial / 60 / PARALLEL_JOBS,
         "checkpoint_every": CHECKPOINT_EVERY,
         "abort_if_per_trial_exceeds": per_trial * 2.0,
+        "runs": len(scenarios) * n_trials,
     }
 
 

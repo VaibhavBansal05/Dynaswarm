@@ -2767,3 +2767,106 @@ Z3 closed four instruments that read plausibly and said nothing, and corrected a
 **The code is finished.** Next is **segment 23, the manifest**: freeze the configuration, record what each instance is, and make the run reproducible. Then it runs.
 
 ---
+
+---
+
+## Entry 030 — Segment 23: a property recorded wrongly would have been frozen as fact
+
+**17 Sept 2026.** 529 Python (from 520), 53 JS, `src/` unchanged at 2318 — everything added lives in `scripts/` and `tests/`, which is correct for a segment that adds no capability. Uncommitted. **The evidence run has not started.**
+
+### The catch, and it is the most consequential of the project
+
+vClaude's own instance-characterisation code replayed the model call on a **fresh RNG stream** instead of continuing the one `build()` uses. The bridging step consumes draws the model call has already taken, so a fresh stream picks **different bridge endpoints**.
+
+Bridge *counts* were unaffected — so every summary looked right. Only route *membership* was wrong, and it was wrong silently:
+
+```
+before:  bridge share 0.0000 on all 100 seeds
+after:   mean 0.1876, max 0.6733, 40 instances above 10%
+```
+
+Caught by cross-checking against Segment Z3's independent measurement on the two seeds where Z3 had found ~45%.
+
+**Entry 029 ruled this property must be recorded because it cannot be recovered afterwards. vClaude drew the consequence I had not: recorded *wrongly* is worse than not recorded at all.** It would have frozen *"no instance has a dominant bridge"* into the manifest, and nothing downstream could ever have contradicted it — every later analysis would have read the same zero and agreed with it.
+
+**Standing rule, new:** *a property that is recorded once and never re-derivable must be cross-checked against an independent measurement before it is frozen.* The usual protection — recompute and compare — is unavailable by construction, so the cross-check has to be built deliberately or it does not exist.
+
+### What the true distribution changes, and one thing it hands us for free
+
+**The confound is bigger than the eight-seed sample suggested.** 40 of 100 instances above 10% bridge share, **37 above 25%** — not the ~25% Z3's small sample implied.
+
+And then this, which is better than anything I designed:
+
+**`large1000` has zero bridges on every instance.**
+
+So the scale check is now an **unplanned control for the confound.** If the arms are indistinguishable at both tiers — one where 40% of instances have a dominant bridge, one with none at all — then *"they only look alike because the problem is reach-the-bridge"* is answered **with data instead of argument.**
+
+That is a genuinely strong piece of experimental design, and it fell out of a measurement rather than a plan. It goes in the report as a control, not as a footnote.
+
+### Ruling on Holm — **approved, across the family**
+
+`compare_arms` corrects within its own call, so eight separate calls would be **eight families of one**: looking corrected and correcting nothing.
+
+That is a real defect and vClaude was right to flag rather than absorb it. Holm applies across all comparisons in the pre-registered family, once.
+
+### Ruling on P3 — **approved, split. And the bug was mine.**
+
+I wrote P3 into Entry 024 as *"best sensing arm vs `hybrid_scheduled`"*.
+
+**That selects on the outcome.** You cannot look at two arms, pick whichever did better, and then test it — you have effectively taken two shots and reported one, and the inflation cannot be corrected afterwards because **the selection leaves no trace in the p-value.**
+
+I introduced a selection-on-outcome bug into a pre-registration whose entire purpose is to prevent exactly that. vClaude caught it and split it into **P3a** (`hybrid_adaptive` vs `hybrid_scheduled`) and **P3b** (`hybrid_direct` vs `hybrid_scheduled`), both pre-registered, both in the family.
+
+More conservative, same intent. The family denominator moves **6 → 8**, so Holm's strictest threshold becomes 0.05/8 = **0.00625**. That is the price of the correction and it is worth paying: a result that clears it is one nobody can question the arithmetic of.
+
+### **AMENDMENT to the pre-registration (Entry 024), 17 Sept 2026 — second amendment**
+
+Before the run, before any result exists.
+
+> **P3 is replaced by P3a and P3b.** P3 as originally written — "best sensing arm vs `hybrid_scheduled`" — selects on the outcome and is withdrawn. P3a compares `hybrid_adaptive` vs `hybrid_scheduled`; P3b compares `hybrid_direct` vs `hybrid_scheduled`. Both are pre-registered and both enter the Holm family. **The family is 8 comparisons and Holm is applied across all of them in a single correction**, not within each call. Reason: selection on an outcome inflates the false-positive rate and cannot be corrected after the fact. Error introduced by the Architect in Entry 024; found by vClaude during the segment 23 dry run.
+
+### The mutation: **a field cannot verify itself**
+
+vClaude reported `provenance.dirty` as `False`. **It passed the entire suite**, because the completeness test asserted the key was *present*, not that it was *true*.
+
+The manifest would have named a commit hash and declared the working tree clean **while uncommitted work was running** — and every reproducibility claim in the report would have rested on it.
+
+Closed by calling `git` independently.
+
+**Standing rule, new:** *a provenance field cannot be verified by reading the provenance.* It must be checked against the thing it claims to describe, by a path that does not pass through the record itself.
+
+### Runtime — my estimate was too pessimistic, measured on the real thing
+
+vClaude measured a **full ten-arm trial** rather than scaling Z2's four-arm table:
+
+| | Single-threaded |
+|---|---|
+| `medium200`, 100 seeds | **9.3 min** |
+| `large1000`, 100 seeds | **62 min** |
+| both | **~71 min** |
+
+Against Entry 029's ~5 hours. My number came from scaling a four-arm table and was wrong by roughly 4×. **There is now no argument for trimming either run.**
+
+### ⚠️ **One gap, and it must be closed before the run**
+
+**The frozen manifest specifies a single scenario — `moderate`.**
+
+Rudra and I settled on **four** (`calm`, `light`, `moderate`, `severe`) after Z3 handed back, and I did not get that into the spec before vClaude started. That is on me.
+
+It matters because the single most valuable free claim in this experiment is the one a single scenario cannot produce:
+
+> **Does the benefit grow as disruptions get more frequent?**
+
+light → moderate → severe. If the adaptive arm's margin *increases* with disruption rate, that is a **dose-response relationship** — far stronger evidence than one significant difference, because a spurious effect has no reason to scale with the thing it is supposed to depend on. And `calm` is the negative control: the effect **should** be absent there, and demonstrating that is evidence the mechanism does what it claims rather than adding noise.
+
+At the measured runtime this costs **37 min + ~4 hr single-threaded**, or roughly **an hour and a half with `parallel_jobs`.** For four times the claims.
+
+**Ruled: four scenarios. The manifest is amended before it is committed.**
+
+### Close
+
+Segment 23 found that the one property this project decided it could not afford to lose was being recorded wrongly, and that the Architect had written a selection bug into the pre-registration meant to prevent selection bugs. Both before a single evidence row was produced.
+
+Next: amend the manifest to four scenarios, Rudra commits, then **segment 24 runs it**.
+
+---

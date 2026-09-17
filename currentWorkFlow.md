@@ -441,3 +441,179 @@ is where the risk actually was.
 3. **Should the report condition on `bridge_share`** as a planned
    analysis, or record it and only use it if challenged? The data
    supports either; pre-registering it is stronger.
+
+---
+
+## FINDINGS — Segment 23, ADDENDUM: re-frozen to four scenarios (Entry 030)
+
+**Status:** COMPLETE. Uncommitted. **The evidence run has NOT been started.**
+
+Both rulings adopted: Holm across the family in a single correction, and
+P3 split into P3a/P3b. The manifest is re-frozen to four scenarios.
+
+### Surfaces
+
+| | Before addendum | After |
+|---|---|---|
+| Python suite | 529 passed | **532 passed** |
+| JS suite | 53 | **53** |
+| `src/` statements | 2318 | **2318 — still untouched** |
+
+---
+
+### The re-frozen configuration
+
+```
+scenarios  calm 0.0 · light 0.1 · moderate 0.3 · severe 0.8   events per step
+           cluster_size 25, 60 timesteps — IDENTICAL across all four
+seeds      1000..1099, listed
+arms       all ten
+tiers      medium200 (primary) · large1000 (scale check + bridging control)
+total      100 seeds x 4 scenarios x 2 tiers = 800 trials
+```
+
+The rates are the project's own presets from `model.js` — `static 0.0,
+low 0.1, moderate 0.3, high 0.8` — under Entry 030's display names. The
+mapping is recorded in the manifest so nobody reads them as invented.
+
+**Only the event rate varies.** `cluster_size` and `timesteps` are held
+identical, and a test asserts it: if either also moved, a difference
+between scenarios would have two possible causes and the dose-response
+claim would mean nothing.
+
+---
+
+### The dry run over all four — and it found the thing worth finding
+
+```
+  grid: 32 cells   tested: 30   (Holm across all tested cells, once)
+  all 8 comparisons x 4 scenarios paired on identical optima: True
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial (3 pairs)
+    calm/P4: arms identical on every trial (3 pairs)
+
+  VERDICT
+    grid 32 cells: 30 tested, 2 identical-arm, 0 not computable
+    produced NaN: none
+```
+
+**At `calm`, P1 and P4 are not merely non-significant — they are
+mathematically undefined.** `hybrid_adaptive` is byte-identical to
+`hybrid_fixed`, and `aco_adaptive` to `aco_fixed`, on every trial. Fed to
+Wilcoxon that is a vector of zero differences: nothing to rank.
+
+Verified as the control working rather than a defect:
+
+```
+  calm       events    0   recency distinct 1   aco_fraction distinct 1   rho distinct 1
+  moderate   events  150   recency distinct 6   aco_fraction distinct 14  rho distinct 19
+```
+
+With nothing to sense, a recency-driven arm does not move. **That is the
+negative control succeeding in the strongest possible form** — not a small
+effect, an identical one.
+
+**Had this not been caught here it would have surfaced four hours into the
+run**, as a NaN or an exception from `scipy` in the middle of the grid.
+Handled explicitly: degenerate cells are reported, excluded from the Holm
+denominator (30, not 32), and named in the output. A cell that vanished
+silently would look like one nobody planned, and it would have inflated
+the correction against 32 tests when only 30 were performed.
+
+**Three tests pin it**: the scenarios differ only in rate; `calm` makes
+the sensing arms identical to their twins; and identical arms are
+reported rather than dropped.
+
+---
+
+### The Holm family with four scenarios — a decision I had to make
+
+Entry 030 fixed the family at 8 *for one scenario*. Four scenarios make
+the grid 32, and that needed a choice I am flagging rather than burying.
+
+**Holm is applied across every tested cell, once — 30 here, up to 32 in
+the real run.** Running the same eight hypotheses in four scenarios and
+reporting whichever cells came out significant is multiplicity whatever
+the scenarios are called. The strictest threshold becomes 0.05/32 =
+**0.0016**.
+
+That is conservative, and **the dose-response claim does not depend on
+it.** That claim is read off *effect sizes* trending across light →
+moderate → severe, which is descriptive and needs no correction:
+
+```
+  DOSE-RESPONSE (effect size, uncorrected and descriptive)
+  comparison       light    moderate      severe   monotone?
+  P1          -0.222      -0.333      +0.222   no
+  P2          -0.556      -0.556      +0.222   yes
+  P4          +0.000      -0.111      -0.556   yes
+  S2a         -0.778      -1.000      -0.778   no
+```
+
+Those numbers are from 3 seeds and mean nothing yet — the point is that
+the column exists and computes. **A pattern that scales with disruption
+rate is stronger evidence than a single cell clearing a threshold**,
+because a spurious effect has no reason to scale with the thing it is
+supposed to depend on.
+
+**If you would rather Holm ran within each scenario** (four families of
+8, threshold 0.05/8 = 0.00625), say so before the run — it is one
+constant, and it is a different claim about what the family is.
+
+---
+
+### Runtime, re-measured per scenario
+
+Measured rather than assumed, because assuming flat cost is how a
+four-scenario run comes in four times over a one-scenario estimate:
+
+```
+  medium200:  calm 6.21s · light 5.73s · moderate 5.86s · severe 6.14s
+  large1000:  calm 38.21s · severe 40.33s
+```
+
+Under 10% spread, so a single figure would have been fine — **but
+measuring it is what establishes that.** Means taken across scenarios:
+5.99s and 39.3s.
+
+```
+  medium200   4 scenarios x 100 seeds =  400 trials    39.9 min serial   ~ 5.0 min at 8 jobs
+  large1000   4 scenarios x 100 seeds =  400 trials   262.0 min serial   ~32.7 min at 8 jobs
+  BOTH TIERS                                          301.9 min (5.0 h)  ~37.7 min at 8 jobs
+```
+
+Consistent with Entry 030's estimate of ~37 min + ~4 hr. The checkpoint
+stays at every 10 trials with an abort threshold at 2× the measured
+per-trial cost.
+
+---
+
+### Is there anything the pre-registration asks for that this manifest cannot deliver?
+
+**No. Everything in the grid computes, and the two that don't are the
+control working.** Three things still want your word, none blocking:
+
+1. **The Holm family: 32 across the grid, or 8 within each scenario?**
+   I chose the conservative reading. It is one constant either way.
+2. **Nine arms or ten** — still open from the main findings.
+3. **`large1000` at four scenarios is 4.4 hours single-threaded.** It fits,
+   and it is the bridging control, so I have not trimmed it. If the time
+   budget bites, dropping `large1000`'s `calm` and `light` would halve it
+   while keeping the control and the severe end — but that is a
+   pre-registration change and yours to make, not mine.
+
+**What the addendum changed about my confidence:** the single-scenario
+manifest would have run cleanly and produced a result. It would also have
+had no negative control, and the first time anyone asked "does the effect
+vanish when there is nothing to respond to?" the answer would have been
+unavailable. The four-scenario design answers it, and the dry run shows
+the answer is already visible in the mechanism — identical arms, not a
+small difference.
+
+**Files changed (addendum)**
+- `scripts/manifest.py` — four scenarios, per-scenario runtime, commands per scenario
+- `scripts/preregistration.py` — per-scenario grid, one Holm family, degenerate handling, `dose_response`
+- `scripts/dry_run.py` — all four scenarios
+- `tests/test_manifest.py` — three tests
+- `MANIFEST.json` — regenerated, 800 trials
