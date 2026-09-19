@@ -1,0 +1,678 @@
+## FINDINGS — Segment 23
+
+**Status:** COMPLETE. Uncommitted. **The evidence run has NOT been started.**
+
+### T0 — both surfaces
+
+| | Before | After |
+|---|---|---|
+| Python suite | 520 passed | **529 passed** |
+| JS suite | 53 passed | **53 passed** |
+| `src/` statements | 2318 | **2318 — unchanged** |
+| `ruff` | clean | clean |
+
+`src/` is untouched. Everything this segment added is in `scripts/` and
+`tests/`, which is what "the code is finished" should mean.
+
+---
+
+### T1 — the frozen configuration
+
+```
+arms      astar, aco, pso, hybrid, hybrid_fixed, hybrid_adaptive,
+          hybrid_scheduled, hybrid_direct, aco_fixed, aco_adaptive
+seeds     1000..1099, listed individually in MANIFEST.json
+scenario  moderate · events_per_step 0.3 · cluster_size 25 · 60 timesteps
+budget    300 evaluations per arm per timestep
+class     manifest
+jobs      parallel_jobs = 8
+primary   medium200  (geometric, 200 nodes, density 0.04)
+scale     large1000  (geometric, 1000 nodes, density 0.04)
+```
+
+**The spec says "all nine" and its own list names ten.** I ran all ten.
+The list is the fact and the count is the slip, but flagging rather than
+silently resolving it: if nine was meant, one arm has to be named and the
+pre-registration adjusted, because `aco_fixed`/`aco_adaptive` are P4's
+whole basis and each hybrid variant kills a specific objection.
+
+`parallel_jobs = 8` is recorded in the manifest because **wall-clock from
+a parallel run is not comparable to segment Z2's single-threaded table**,
+and a report that mixes them is comparing two machines.
+
+---
+
+### T2 — instance characterisation, and **it caught a bug that would have been frozen in**
+
+Recorded per seed: `n_nodes`, `n_edges`, `density`, `optimum_t0`,
+`route_hops`, `bridges`, `bridge_hops`, `bridge_share`.
+
+```
+medium200: 100 instances
+   bridges:      min 0  median 1  max 5     instances with >=1: 57
+   bridge share: median 0.0000  mean 0.1876  max 0.6733
+   share >10%: 40    >25%: 37
+   optimum t=0:  median 141.74  range 99.96..268.88   unreachable 0
+
+large1000: 100 instances
+   bridges:      0 on every instance
+   bridge share: 0.0000 everywhere
+   optimum t=0:  median 115.93  range 79.05..149.61   unreachable 0
+```
+
+**This is a bigger effect than Z3's eight-seed sample showed.** Z3
+estimated ~25% of instances affected; across the actual 100 manifest
+seeds it is **40 with more than a tenth of the optimal route on a
+bridging edge, and 37 above a quarter, peaking at 67%.**
+
+**And `large1000` has no bridges at all** — at 1000 nodes the geometric
+graph is connected without help. That makes the scale check do a second
+job nobody planned: it is a **natural control for the bridging
+confound**. If the arms are indistinguishable at `medium200` *and* at
+`large1000`, "they only look alike because the problem is reach-the-
+bridge" is answered by the data rather than argued with.
+
+#### The bug
+
+`characterise` replays the model call to recover which edges
+`_ensure_connected` invented. I wrote it with a **fresh** `stream(seed,
+"graph")` for the bridging call instead of continuing the one the model
+call was using — which is what `build()` does.
+
+It looks equivalent. It is not: the bridging step consumes draws the
+model call has already taken, so a fresh stream **picks different bridge
+endpoints**.
+
+**The bridge count is unaffected** — the same components need the same
+number of bridges — so every summary I printed looked reasonable. The
+only thing that broke was the membership test against the real route, and
+it broke silently:
+
+```
+before fix:  bridge share 0.0000 on all 100 seeds, max 0.0000
+after fix:   mean 0.1876, max 0.6733, 40 instances above 10%
+```
+
+It was caught by cross-checking the refactored function against segment
+Z3's original on the seeds where Z3 had measured a non-zero share — 9999
+and 555, both ~45%, both reading 0.0 under the bug.
+
+**This is the single most valuable thing in the segment.** Entry 029
+ruled this property must be recorded because *an instance property nobody
+records is gone*. A property recorded **wrongly** is worse: it would have
+been frozen into the manifest as "no instance has a dominant bridge", the
+confound would have looked dismissed, and nothing downstream could have
+contradicted it. Pinned by
+`test_bridge_share_is_measured_on_the_world_that_was_built`, which asserts
+the two known seeds and says what a 0.0 means.
+
+---
+
+### T3 — the pre-flight, and it is what the spec said it would be
+
+**8 of 8 pre-registered comparisons produced a value.** Three seeds, 12
+timesteps, 60 evaluations, all ten arms, whole analysis end to end.
+
+```
+  PAIRING — every comparison's arms must see identical worlds
+    all 8 comparisons paired on identical optima: True
+
+       comparison                               n    mean A    mean B     delta        p    p adj   effect  sig
+  P1   hybrid_adaptive vs hybrid_fixed          3    0.3084    0.3358   -0.0274   0.2500   1.0000   -0.333  no
+  P2   hybrid_direct vs hybrid_fixed            3    0.2557    0.3358   -0.0801   0.2500   1.0000   -0.556  no
+  P3a  hybrid_adaptive vs hybrid_scheduled      3    0.3084    0.2765   +0.0319   0.7500   1.0000   +0.333  no
+  P3b  hybrid_direct vs hybrid_scheduled        3    0.2557    0.2765   -0.0208   1.0000   1.0000   +0.000  no
+  P4   aco_adaptive vs aco_fixed                3    0.5580    0.5702   -0.0121   0.7500   1.0000   -0.111  no
+  S1   hybrid_direct vs hybrid_adaptive         3    0.2557    0.3084   -0.0527   0.2500   1.0000   -0.556  no
+  S2a  hybrid vs aco                            3    0.2803    0.4801   -0.1997   0.2500   1.0000   -1.000  no
+  S2b  hybrid vs pso                            3    0.2803    0.1552   +0.1251   0.2500   1.0000   +0.778  no
+
+  VERDICT
+    8 of 8 pre-registered comparisons produced a value
+    ranking produced 9 ranked arms + reference astar
+```
+
+Nothing is significant, and nothing can be: Wilcoxon at n=3 floors at
+p=0.25, and Holm across eight pushes everything to 1.0. **That is correct
+for a dry run** — it proves computability without being able to produce a
+result, which is the right property for a pre-flight to have.
+
+**Two structural findings, both reported rather than absorbed.**
+
+**1. Holm must be applied across the family, not inside each comparison.**
+`stats.compare_arms` corrects *within* its own call. Calling it once per
+comparison would produce eight separate families of one — no correction
+at all, while looking corrected. The analysis therefore uses
+`paired_compare` and `holm_correct` directly.
+
+**2. P3 as pre-registered selects on the outcome.** Entry 024 says "best
+sensing arm vs `hybrid_scheduled`" — which picks an arm by looking at the
+results and then tests the winner. That inflates the false-positive rate
+the same way multiple testing does, and it **cannot be corrected
+afterwards**, because the selection leaves no trace in the p-value.
+
+I split it into **P3a and P3b**: both sensing arms tested against the
+open-loop control, both in the Holm family. Strictly more conservative,
+same intent, and the family is 8 rather than 6. **Flagging rather than
+doing it quietly, because it changes the correction denominator** — if
+you prefer a single pre-specified arm for P3, name it before the run and
+the family drops back to 7.
+
+---
+
+### T4 — reproducibility by a stranger
+
+```
+T4 — BIT-FOR-BIT REPRODUCTION OF ONE MANIFEST TRIAL
+  tier medium200, trial 0, seed 1000, 10 arms
+  rows compared: 120
+  IDENTICAL — every recorded field except the clocks
+  clocks differ between runs: True
+  event rows identical: True  (100 events)
+```
+
+The clocks-differ line is not decoration: if the timing columns were
+*also* identical, "except the clocks" would be excusing nothing and the
+comparison would be weaker than it reads.
+
+`MANIFEST.json` is 58,730 bytes and carries all 100 seeds individually,
+both tiers' instances, the command, and provenance.
+
+---
+
+### T5 — runtime, measured
+
+**Measured on one full manifest trial — ten arms, 60 timesteps — not
+scaled from Z2's four-arm table**, which would need an arm-mix
+assumption rather than a count.
+
+```
+  medium200      5.58 s/trial  x100  =   9.3 min serial   ~1.2 min at 8 jobs (optimistic)
+  large1000     37.34 s/trial  x100  =  62.2 min serial   ~7.8 min at 8 jobs (optimistic)
+```
+
+**Both runs together are about 71 minutes single-threaded.** That is well
+under Entry 029's estimate of ~30 min plus ~4.5 hours, so there is no
+argument anywhere for trimming either run.
+
+The parallel figures are labelled optimistic deliberately: joblib has
+process overhead and these trials are memory-bandwidth bound, so linear
+speedup is a bound and quoting it as the estimate is how a run comes in
+"late" against a number that was never achievable.
+
+**Knowing early if it is wrong:** `runtime_estimate()` returns
+`checkpoint_every = 10` trials and `abort_if_per_trial_exceeds` at **2x
+the measured per-trial cost** — 11.2s and 74.7s. At `medium200` the first
+checkpoint lands within a minute; at `large1000` within seven.
+
+---
+
+### T7 — my mutation: **report `provenance.dirty` as `False`**
+
+*Predicted:* passes everything. The completeness test asserts the key is
+*present*; nothing asserts it is *true*.
+
+*Actual:* **passed the entire suite.**
+
+The manifest would then name a commit and declare the tree clean while
+uncommitted work was running. A stranger checks out that commit, gets
+different code, and **every other field still reads correct** — the seeds
+are listed, the command is there, the instances are characterised. It is
+exactly this segment's named failure mode: a document that reads like a
+specification and pins nothing.
+
+Closed by `test_the_provenance_tells_the_truth_about_the_working_tree`,
+which calls `git` independently rather than trusting the value the
+manifest computed — **a field cannot verify itself**. Shown red:
+
+```
+E  AssertionError: the manifest reports dirty=False and the tree is dirty=True.
+   A provenance field that does not match reality is worse than an absent one
+   — it is read as a guarantee
+```
+
+I also added `reproducible_from_commit` and a plain-English `warning`,
+because a boolean a reader has to notice is not the same as a sentence
+telling them. **The manifest currently reports `dirty: true`** — correctly,
+since this work is uncommitted. It becomes clean when you commit, and the
+evidence run should not start before then.
+
+---
+
+### Is there anything the pre-registration asks for that this manifest cannot deliver?
+
+**No — everything computes. Four things need your decision, none of them
+blocking.**
+
+1. **Nine arms or ten.** The spec's prose and its list disagree. I ran ten.
+2. **P3's selection-on-outcome.** Split into P3a/P3b, family size 8 not 6.
+   If you want a single pre-specified arm, name it before the run.
+3. **`large1000` is a bridging control**, unplanned and free. Worth saying
+   in the report, because it converts the strongest competing explanation
+   for a null into something the data answers.
+4. **Recovery at `large1000` is unmeasured.** Entry 029 flagged that the
+   metric rests on 3–4 damaged events per run at `medium200` and that the
+   number at `large1000` is unknown. It still is — the manifest records
+   what is needed to compute it, but nobody has checked it behaves there.
+   It is a scale check, `medium200` is primary, and the damaged count now
+   travels with the value, so it will be visible rather than silent.
+
+**One thing I want on the record.** The bridging bug in T2 was mine, it
+was caught by cross-checking against the previous segment's
+implementation, and had I not done that it would have frozen a false
+zero into the document this whole segment exists to make trustworthy.
+The dry run found nothing wrong with the analysis; the characterisation
+is where the risk actually was.
+
+---
+
+**Files added**
+- `scripts/manifest.py` — the frozen configuration, instance characterisation, runtime estimate
+- `scripts/preregistration.py` — the family as code, Holm across all of it
+- `scripts/dry_run.py` — T3
+- `scripts/reproduce_one.py` — T4
+- `tests/test_manifest.py` — 9 tests
+- `MANIFEST.json` — the artefact
+
+**Files changed** — none in `src/`.
+
+**Surprises**
+1. **The bridging confound is much larger than Z3's sample suggested** —
+   40 of 100 instances, not ~25%.
+2. **`large1000` has no bridges at all**, making the scale check a
+   control for the confound.
+3. **A fresh RNG stream that "looks equivalent"** silently changed which
+   edges were identified while leaving every count intact.
+4. **Both runs cost ~71 minutes total**, not the ~5 hours estimated.
+
+**Questions for the Architect**
+
+1. **Nine arms or ten?**
+2. **P3: two tests or one pre-specified arm?** It changes the Holm
+   denominator and must be fixed before the run.
+3. **Should the report condition on `bridge_share`** as a planned
+   analysis, or record it and only use it if challenged? The data
+   supports either; pre-registering it is stronger.
+
+---
+
+## FINDINGS — Segment 23, ADDENDUM: re-frozen to four scenarios (Entry 030)
+
+**Status:** COMPLETE. Uncommitted. **The evidence run has NOT been started.**
+
+Both rulings adopted: Holm across the family in a single correction, and
+P3 split into P3a/P3b. The manifest is re-frozen to four scenarios.
+
+### Surfaces
+
+| | Before addendum | After |
+|---|---|---|
+| Python suite | 529 passed | **532 passed** |
+| JS suite | 53 | **53** |
+| `src/` statements | 2318 | **2318 — still untouched** |
+
+---
+
+### The re-frozen configuration
+
+```
+scenarios  calm 0.0 · light 0.1 · moderate 0.3 · severe 0.8   events per step
+           cluster_size 25, 60 timesteps — IDENTICAL across all four
+seeds      1000..1099, listed
+arms       all ten
+tiers      medium200 (primary) · large1000 (scale check + bridging control)
+total      100 seeds x 4 scenarios x 2 tiers = 800 trials
+```
+
+The rates are the project's own presets from `model.js` — `static 0.0,
+low 0.1, moderate 0.3, high 0.8` — under Entry 030's display names. The
+mapping is recorded in the manifest so nobody reads them as invented.
+
+**Only the event rate varies.** `cluster_size` and `timesteps` are held
+identical, and a test asserts it: if either also moved, a difference
+between scenarios would have two possible causes and the dose-response
+claim would mean nothing.
+
+---
+
+### The dry run over all four — and it found the thing worth finding
+
+```
+  grid: 32 cells   tested: 30   (Holm across all tested cells, once)
+  all 8 comparisons x 4 scenarios paired on identical optima: True
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial (3 pairs)
+    calm/P4: arms identical on every trial (3 pairs)
+
+  VERDICT
+    grid 32 cells: 30 tested, 2 identical-arm, 0 not computable
+    produced NaN: none
+```
+
+**At `calm`, P1 and P4 are not merely non-significant — they are
+mathematically undefined.** `hybrid_adaptive` is byte-identical to
+`hybrid_fixed`, and `aco_adaptive` to `aco_fixed`, on every trial. Fed to
+Wilcoxon that is a vector of zero differences: nothing to rank.
+
+Verified as the control working rather than a defect:
+
+```
+  calm       events    0   recency distinct 1   aco_fraction distinct 1   rho distinct 1
+  moderate   events  150   recency distinct 6   aco_fraction distinct 14  rho distinct 19
+```
+
+With nothing to sense, a recency-driven arm does not move. **That is the
+negative control succeeding in the strongest possible form** — not a small
+effect, an identical one.
+
+**Had this not been caught here it would have surfaced four hours into the
+run**, as a NaN or an exception from `scipy` in the middle of the grid.
+Handled explicitly: degenerate cells are reported, excluded from the Holm
+denominator (30, not 32), and named in the output. A cell that vanished
+silently would look like one nobody planned, and it would have inflated
+the correction against 32 tests when only 30 were performed.
+
+**Three tests pin it**: the scenarios differ only in rate; `calm` makes
+the sensing arms identical to their twins; and identical arms are
+reported rather than dropped.
+
+---
+
+### The Holm family with four scenarios — a decision I had to make
+
+Entry 030 fixed the family at 8 *for one scenario*. Four scenarios make
+the grid 32, and that needed a choice I am flagging rather than burying.
+
+**Holm is applied across every tested cell, once — 30 here, up to 32 in
+the real run.** Running the same eight hypotheses in four scenarios and
+reporting whichever cells came out significant is multiplicity whatever
+the scenarios are called. The strictest threshold becomes 0.05/32 =
+**0.0016**.
+
+That is conservative, and **the dose-response claim does not depend on
+it.** That claim is read off *effect sizes* trending across light →
+moderate → severe, which is descriptive and needs no correction:
+
+```
+  DOSE-RESPONSE (effect size, uncorrected and descriptive)
+  comparison       light    moderate      severe   monotone?
+  P1          -0.222      -0.333      +0.222   no
+  P2          -0.556      -0.556      +0.222   yes
+  P4          +0.000      -0.111      -0.556   yes
+  S2a         -0.778      -1.000      -0.778   no
+```
+
+Those numbers are from 3 seeds and mean nothing yet — the point is that
+the column exists and computes. **A pattern that scales with disruption
+rate is stronger evidence than a single cell clearing a threshold**,
+because a spurious effect has no reason to scale with the thing it is
+supposed to depend on.
+
+**If you would rather Holm ran within each scenario** (four families of
+8, threshold 0.05/8 = 0.00625), say so before the run — it is one
+constant, and it is a different claim about what the family is.
+
+---
+
+### Runtime, re-measured per scenario
+
+Measured rather than assumed, because assuming flat cost is how a
+four-scenario run comes in four times over a one-scenario estimate:
+
+```
+  medium200:  calm 6.21s · light 5.73s · moderate 5.86s · severe 6.14s
+  large1000:  calm 38.21s · severe 40.33s
+```
+
+Under 10% spread, so a single figure would have been fine — **but
+measuring it is what establishes that.** Means taken across scenarios:
+5.99s and 39.3s.
+
+```
+  medium200   4 scenarios x 100 seeds =  400 trials    39.9 min serial   ~ 5.0 min at 8 jobs
+  large1000   4 scenarios x 100 seeds =  400 trials   262.0 min serial   ~32.7 min at 8 jobs
+  BOTH TIERS                                          301.9 min (5.0 h)  ~37.7 min at 8 jobs
+```
+
+Consistent with Entry 030's estimate of ~37 min + ~4 hr. The checkpoint
+stays at every 10 trials with an abort threshold at 2× the measured
+per-trial cost.
+
+---
+
+### Is there anything the pre-registration asks for that this manifest cannot deliver?
+
+**No. Everything in the grid computes, and the two that don't are the
+control working.** Three things still want your word, none blocking:
+
+1. **The Holm family: 32 across the grid, or 8 within each scenario?**
+   I chose the conservative reading. It is one constant either way.
+2. **Nine arms or ten** — still open from the main findings.
+3. **`large1000` at four scenarios is 4.4 hours single-threaded.** It fits,
+   and it is the bridging control, so I have not trimmed it. If the time
+   budget bites, dropping `large1000`'s `calm` and `light` would halve it
+   while keeping the control and the severe end — but that is a
+   pre-registration change and yours to make, not mine.
+
+**What the addendum changed about my confidence:** the single-scenario
+manifest would have run cleanly and produced a result. It would also have
+had no negative control, and the first time anyone asked "does the effect
+vanish when there is nothing to respond to?" the answer would have been
+unavailable. The four-scenario design answers it, and the dry run shows
+the answer is already visible in the mechanism — identical arms, not a
+small difference.
+
+**Files changed (addendum)**
+- `scripts/manifest.py` — four scenarios, per-scenario runtime, commands per scenario
+- `scripts/preregistration.py` — per-scenario grid, one Holm family, degenerate handling, `dose_response`
+- `scripts/dry_run.py` — all four scenarios
+- `tests/test_manifest.py` — three tests
+- `MANIFEST.json` — regenerated, 800 trials
+
+---
+
+## FINDINGS — Segment 23, ADDENDUM 2: 150 seeds, P5, primary tier (Entry 031)
+
+**Status:** COMPLETE. Uncommitted. **The evidence run has NOT been started.**
+
+| | Before | After |
+|---|---|---|
+| Python suite | 532 | **536 passed** |
+| JS suite | 53 | **53** |
+| `src/` statements | 2318 | **2318 — still untouched** |
+
+```
+seeds      1000..1149 (150, listed)
+grid       9 comparisons x 4 scenarios = 36 cells
+trials     150 seeds x 4 scenarios x 2 tiers = 1200
+primary    large1000, conditional; fallback medium200
+runtime    59.9 min + 393.0 min = 7.5 h serial   ~57 min at 8 jobs
+```
+
+---
+
+### (1) and (2) — 150 seeds, and P5
+
+Both adopted as ruled. P5 sits in precedence order:
+`P1 → P2 → P3a → P3b → P4 → P5 → S1 → S2a → S2b`.
+
+`test_p5_completes_the_controlled_hybrid_set` asserts the six pairs among
+the four controlled hybrids are **exhaustive** — it enumerates
+`combinations()` and compares, so it fails if a pair is ever missing
+rather than checking P5 by name.
+
+**P5 is live at `calm`, confirmed.** But the cell has **7 of 9 live, not
+1** — a small correction to the ruling's rationale, and it strengthens
+the design rather than weakening it:
+
+```
+aco_fraction at CALM (no events at all):
+  hybrid_fixed        distinct  1   0.500 -> 0.500
+  hybrid_adaptive     distinct  1   0.500 -> 0.500     <- identical to fixed, P1 drops out
+  hybrid_scheduled    distinct 20   0.500 -> 0.617     <- sweeps on the clock
+  hybrid_direct       distinct  7   0.500 -> 0.800     <- climbs and holds
+```
+
+`hybrid_direct` does not sit at 0.5 with nothing happening. Its rule is
+`0.5 + A x (0.5 − recency)`, and at `recency = 0` that is **0.8** — it
+buys ACO, which is the principled response when nothing has invalidated
+the trails. It takes seven steps to get there only because the governor
+rate-limits it.
+
+So at `calm` only **P1 and P4** are degenerate; P2, P3a, P3b, P5 and S1
+all test something. The negative control is therefore richer than
+described: it verifies a positive prediction — *the direct arm should go
+maximally ACO-heavy when nothing breaks* — as well as the absence of an
+effect in the sensing arms.
+
+---
+
+### (3) — the primary tier, and **the condition does not cleanly hold**
+
+The condition was never measured at 1000 nodes. It is now, over 10
+arm-trials per cell:
+
+```
+  large1000  moderate   0.40 damaged disruptions per arm-trial
+  large1000  severe     0.20
+  medium200  moderate   2.10
+  medium200  severe     1.30
+```
+
+**Not degenerate — about 5x thinner.** At 150 seeds that projects to
+roughly **30–60 damaged events per arm per scenario at `large1000`
+against 195–315 at `medium200`.**
+
+The reason is the same fact that makes `large1000` attractive: at 1000
+nodes the graph is richly connected — **zero bridging edges on all 150
+instances** — so a 25-road break rarely touches the optimal route enough
+to raise excess. **The property that removes the confound is the property
+that starves the recovery metric.** They are not independent, and the
+report should say so rather than presenting `large1000` as strictly
+better.
+
+**Three of four metrics are unaffected.** Mean excess, % at optimum and
+worst excess are computed from every recorded step and cannot degenerate.
+Only `mean steps to recover` is thin.
+
+**Recorded in the manifest as an executable condition, not prose:**
+
+```python
+PRIMARY_TIER = "large1000"
+FALLBACK_TIER = "medium200"
+MIN_DAMAGED_FOR_RECOVERY = 30          # floor on evidence, not on passing
+primary_tier_holds(damaged_by_cell)    # decides after the run, by this rule
+```
+
+The threshold is **30, the low end of what `large1000` is projected to
+deliver** — set as a floor on evidence rather than tuned so the tier
+passes. If the real run lands under it, the metric genuinely has too
+little behind it and `medium200` becomes primary with that as the stated
+reason. `test_the_primary_tier_falls_back_when_recovery_cannot_be_supported`
+drives both sides of the threshold, because **a pre-registered fallback
+that cannot fire is decoration.**
+
+**My read, since the ruling asked for the measurement and not a
+decision:** the condition is met for computability and is marginal for
+strength. I would report `large1000` as primary for the three
+step-derived metrics and **report recovery from `medium200`**, saying
+plainly that the tier free of the confound is also the tier with too few
+damaging events to measure recovery well. That is a real limitation and
+stating it is stronger than picking one tier and hoping nobody asks.
+
+---
+
+### (4) — `understandingTests.md`, audited against the manifest
+
+**It describes P5 and nine comparisons already** — written ahead of the
+spec and correct on the parts that were settled. Seven places now
+misdescribe the manifest. **I have changed nothing in it**; they are
+listed so you can decide which side moves.
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 58 | "seed — varies, **100 per cell**" | **150** |
+| 62 | "difficulty already varies across **100 seeds**" | 150 |
+| 167 | "takes the **100** per-seed differences" | 150 |
+| 180–188 | the whole **"Why 100 seeds"** table | 150; at 2.132/√150 the uncertainty is **0.174**, effect-to-uncertainty **4.5x** |
+| 213 | "**40 of 100** `medium200` instances" | **63 of 150** (max share 0.742) |
+| 224 | "40% of `medium200` instances" | **42%** — unchanged as a proportion |
+
+**And one that is substantive rather than arithmetic:**
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 169 | "Holm correction, applied once across **all nine comparisons**" | Holm runs across **every tested cell of the 9 x 4 grid** — up to 36, not 9 |
+
+Nine is the per-scenario count. §4 of the same document says the
+disruption preset is "reported separately, never pooled", so a reader can
+reasonably take "nine comparisons" to mean the family is nine — which
+**understates the correction fourfold** and would make the quoted power
+figures optimistic. This is the one I would fix first, and it is also the
+one where you might prefer to move the *manifest* instead: four families
+of nine, threshold 0.05/9 = 0.0056, is a defensible reading of "never
+pooled". One constant either way, and it must be settled before the run.
+
+| Line | Says | Manifest now |
+|---|---|---|
+| 60 | "graph size — **reported separately**. Tests whether the finding generalises" | `large1000` is **primary**; `medium200` is the instrument-verified tier reported alongside |
+
+Not wrong so much as superseded by ruling (3), and it changes the role
+the reader is told each tier plays.
+
+**Correct and needing no change:** the pairing argument (§5), the metric
+set and its exclusions (§7), Cliff's delta and its thresholds, the P3
+selection-on-outcome explanation, the 10-arm count, and the bridging
+confound as a competing explanation.
+
+---
+
+### Runtime, at 150 seeds
+
+```
+  medium200     600 trials     59.9 min serial   ~ 7.5 min at 8 jobs
+  large1000     600 trials    393.0 min serial   ~49.1 min at 8 jobs
+  BOTH        1,200 trials    452.9 min (7.5 h)  ~56.6 min at 8 jobs
+```
+
+Per-scenario cost was re-measured and is flat to within 10%, so the
+150-seed figures scale the measured means rather than assuming them. The
+checkpoint stays at every 10 trials with an abort at 2x the per-trial
+cost.
+
+---
+
+### The grid, re-verified
+
+```
+  grid: 36 cells   tested: 34   (Holm across all tested cells, once)
+  all 9 comparisons x 4 scenarios paired on identical optima: True
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial
+    calm/P4: arms identical on every trial
+
+  VERDICT
+    grid 36 cells: 34 tested, 2 identical-arm, 0 not computable
+    produced NaN: none
+```
+
+---
+
+### Open, and all four want your word before the run
+
+1. **The Holm family: 36 across the grid, or 9 within each scenario?**
+   I have implemented the conservative reading and the 150 seeds pay for
+   it. `understandingTests.md` currently describes the other one.
+2. **Recovery at `large1000` is 5x thinner.** Primary for all four
+   metrics, or primary for three with recovery reported from `medium200`?
+3. **Nine arms or ten** — still open from the first findings.
+4. **Seven corrections to `understandingTests.md`** — I have not touched
+   it; say which side moves.
+
+**Files changed (addendum 2)**
+- `scripts/manifest.py` — 150 seeds, primary-tier condition and fallback
+- `scripts/preregistration.py` — P5
+- `tests/test_manifest.py` — four tests
+- `MANIFEST.json` — regenerated, 1,200 trials

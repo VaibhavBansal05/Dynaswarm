@@ -2934,3 +2934,193 @@ Segment 23 is complete. The manifest is frozen, the pre-registration has three d
 **Rudra commits — that is the gate, and it turns `dirty` false. Then segment 24 runs.**
 
 ---
+
+---
+
+## Entry 032 — The evidence run. Two claims land, the third is a null, and the null is explained.
+
+**19 Sept 2026.** Run `outputs/2026-09-19/18-43-05`, commit `b4d3d28`, `dirty: false`. 1,200 trials — 150 seeds × 4 scenarios × 10 arms × 2 tiers. 720,000 step rows across 24 chunks. `medium200` 24.3 min, `large1000` 191.8 min, 216 min total at 8 jobs.
+
+**My runtime projection of 57 min was wrong by ~4×.** Recorded as a miss. It affects the timing table and nothing else — the results are deterministic given the seed.
+
+### The five pre-run verifications, all passed
+
+1. **24 chunks + `provenance.json`.** vClaude's first check flagged all 24 as partial, having assumed 3 files per chunk where `ResultWriter` writes 2. Re-verified by row count instead: 30,000 rows per chunk, 720,000 total = 50 × 10 × 60 × 24. **Counting the artefact was wrong; counting the content was right** — the same distinction as Z2's balancing identity.
+2. **`n_pairs` = 150 in every one of the 34 non-degenerate cells, both tiers.** No seeds dropped.
+3. **34 of 36 tested, 2 degenerate, and they are exactly `calm/P1` and `calm/P4`** — the sensing arms byte-identical to their twins with nothing to sense. The predicted degenerate pair, and only that pair.
+4. **Delta sign correct**, cross-checked on two cells in opposite directions. And no cell pools scenarios — every cell reads n = 150, not 600.
+5. **`provenance.json` clean at `b4d3d28`.**
+
+### Ruling 1 — the `calm` floor. **vClaude is right. The check is wrong and it is my error, repeated.**
+
+`primary_tier_holds()` returned `medium200` because `large1000/calm` has 0 damaged disruptions, below `MIN_DAMAGED_FOR_RECOVERY = 30`.
+
+**Zero is the designed outcome there.** `calm` has no disruptions by construction, so nothing can be damaged; `medium200/calm` is also 0. The floor fired on the negative control rather than on any evidence about `large1000`.
+
+This is the same error Entry 028 corrected inside the recovery metric itself — an aggregation that never asked who belonged in the population. I wrote this check three segments after establishing that rule and made the identical mistake.
+
+**Ruled: the floor is computed over scenarios with a nonzero event rate. `calm` is excluded by definition, not by choice.**
+
+Two things stated so this is not outcome-shopping, because amending a condition after seeing its answer is exactly what I got wrong on P3:
+
+- The error is identifiable **without reference to the result**. *A floor on evidence applies where evidence is possible* is a statement about the check, not about what the check returned.
+- **It changes no headline.** Entry 031 already pinned recovery to `medium200` on independent grounds, with `large1000`'s recovery reported alongside carrying its own n. Nothing material moves either way.
+
+### Ruling 2 — `light` at `large1000` does not carry recovery. **The floor does not move.**
+
+Excluding `calm`, damaged disruptions total:
+
+```
+large1000   light 117    moderate  318   severe  429
+medium200   light 828    moderate 2382   severe 2617
+```
+
+Per arm at `large1000`: **11.7 / 31.8 / 42.9** against a floor of 30.
+
+`moderate` and `severe` clear it. **`light` fails and is reported with its n, carrying no claim.** `MIN_DAMAGED_FOR_RECOVERY` stays at 30 — it was set before the run at the low end of the projection, and lowering it now to admit `light` would be tuning a number to pass, which is the one thing this entire apparatus exists to prevent.
+
+My segment-23 projection of 30–60 per arm was right for `moderate` and `severe` and optimistic for `light`. Recorded.
+
+### The results, as computed
+
+**Claim 1 — supported, and it is the strongest result in the project.** `hybrid` vs `aco` significant in all four scenarios at `large1000`, δ ≈ −0.99, p_adj = 8e-25. `hybrid` vs `pso` significant in all four at both tiers. The hybrid beats each of its own components, at every disruption rate, at both problem sizes.
+
+**Claim 2 — reproduced.** P4 (`aco_adaptive` vs `aco_fixed`) is not significant in any of the 8 cells at either tier. Adapting ρ does not help. **The premise Claim 3 rests on survives** — which matters, because Claim 3 was only ever interesting if parameter adaptation had already been shown to fail.
+
+**Claim 3 — a null, and at `severe` a directional signal against the thesis.**
+
+| comparison | result |
+|---|---|
+| P1 `adaptive` vs `fixed` | never significant; delta positive in 7 of 8 cells — adaptive nominally worse |
+| P2 `direct` vs `fixed` | significant once, `large1000/light`, δ = −0.097, negligible |
+| P5 `scheduled` vs `fixed` | never significant — blind movement neither helps nor costs |
+| P3a `adaptive` vs `scheduled` | **significant at `large1000/severe`, δ = +0.100, against the thesis** |
+| P3b `direct` vs `scheduled` | **significant at `large1000/severe`, δ = +0.080, against the thesis** |
+
+The pre-registered decision rule read: *a sensing arm beats fixed but not scheduled → what helped was varying the split, not sensing when to.* **Neither sensing arm beats fixed, and at `severe` both lose to `scheduled`.** The open-loop control beats both closed-loop arms.
+
+### The dose-response runs backwards, and that is the most informative number in the run
+
+P3a's effect is monotone increasing across disruption rate:
+
+```
+light +0.063    moderate +0.082    severe +0.100
+```
+
+**The sensing disadvantage grows with the thing it is supposed to depend on.** A spurious effect has no reason to scale; this one scales, in the direction against the thesis.
+
+### The mechanism, and the line where measurement stops
+
+Segment 19 recorded that `RecencySignal` is **binary** — 1.0 if `n_events > 0`, 0.0 otherwise. Nine roads destroyed and twenty-five produce the identical reading. The magnitude is discarded before any policy sees it, and **no policy shape can recover information the signal already threw away.**
+
+That finding is dated and in this log from before the run. What follows is my reading of the result against it, and it is not a measurement:
+
+> If the signal is binary, then as the disruption rate rises it saturates — at `severe` something is almost always broken, so the reading is pinned near 1.0 and the sensing arms are steering on a constant. `hybrid_scheduled` at least moves on a known schedule. **A sensing arm with a saturated sensor is strictly worse than an honest open-loop controller**, and the gap should widen exactly as the rate rises. That is what +0.063 → +0.082 → +0.100 shows.
+
+**The mechanism predates the run; the directional prediction is post-hoc.** It enters the report as an explanation consistent with a previously recorded finding, never as a confirmed prediction. The experiment that would test it is a magnitude-carrying signal — `n_events` or damaged-cost rather than a boolean — rerun on the same seeds. That is outside this project's scope and belongs in the future-work section as a specific, costed proposal rather than a gesture.
+
+### Significance is not magnitude, and the report must say so
+
+P3a and P3b clear Holm at α ≈ 0.0015 with δ = 0.100 and 0.080 — **negligible** on the same scale where Claim 1 scored 0.99. That is 150 paired seeds resolving a real but tiny effect. The report states *reliably detectable, practically negligible* and never lets a p-value stand in for a magnitude.
+
+### What this project actually produced
+
+Not the result the thesis hoped for. **A better-evidenced one.** Two claims supported under a pre-registration with a 34-cell Holm correction, a third returning a null that is explained at the level of the line of code that causes it, with a dose-response consistent with that explanation. A null with a mechanism is worth more than a positive result without one, and this one arrives with its own negative control, its own scale check, and an instance-level characterisation that lets a reader condition on the confound rather than argue about it.
+
+### Close
+
+Nothing is committed. Segment 25 writes the report.
+
+**Before it does: `DPO_Minor_project-main/paper/paper.tex` and `docs/presentation.md` are deleted.** They hold fabricated numbers — A\* = 142.3, "18.3% improvement", t = −6.82 — and a repository that contains both invented results and real ones is one grep away from being indistinguishable from a fraud. That deletion is a precondition of segment 25, not a task alongside it.
+
+---
+
+---
+
+## Entry 033 — I ruled on Entry 032 without reading the analysis. Four things were in it that weren't in the report.
+
+**19 Sept 2026.** Entry 032 was written from vClaude's chat summary. **I did not open `analysis.txt` before ruling.** The protocol says the Architect verifies by reading the files, and I signed off on a 34-cell result from a prose description of it. That is the same shortcut as Entry 026's bridging explanation — a plausible account standing in for a checked one — and I took it on the most consequential artefact in the project.
+
+`findings/segment-23.md` and `findings/segment-24.md` are now archived. **Segment 24 had no FINDINGS block in `currentWorkFlow.md` at all** — vClaude reported in chat only, and the file would have lost the segment entirely. Standing correction below.
+
+Reading the file produced four items.
+
+### 1. **Claim 1 is weaker than Entry 032 states, and the weakness is at the tier everything was calibrated on**
+
+Entry 032 says Claim 1 is *"supported, overwhelmingly."* That is true at `large1000` and it is not true at `medium200`.
+
+```
+hybrid vs aco (S2a), medium200
+  calm       delta +0.0036   p_adj 1.0000   <- POSITIVE. nominally favours aco
+  light      delta -0.0057   p_adj 0.1061   no
+  moderate   delta -0.0100   p_adj 0.4178   no
+  severe     delta -0.0201   p_adj 0.0000   YES
+```
+
+**One of four, and the calm cell points the other way.** At `large1000` the same comparison is significant in all four with δ ≈ −0.99.
+
+`hybrid vs pso` (S2b) *is* significant in all four at both tiers. So the defensible statement is narrower than the one I wrote:
+
+> **The hybrid reliably beats PSO everywhere. It reliably beats ACO only at the larger problem size, and at 200 nodes only under severe disruption.**
+
+vClaude's phrasing — *"significant in all four scenarios at `large1000`"* — was accurate. **I generalised it and the generalisation is mine.** Entry 032's Claim 1 paragraph is superseded by this one.
+
+This is not a small correction. `medium200` is where the sigma derivation, the recovery metric, the bridging characterisation, the trust report and the entire verification pass were done. A claim that holds at the unverified size and fails at the verified one is a finding in its own right, and the report leads with it rather than burying it.
+
+### 2. **`delta` and `effect` disagree in sign in at least four cells, and the sign check did not test that case**
+
+```
+medium200 calm   S2a   delta +0.0036   effect -0.107
+medium200 light  P2    delta -0.0004   effect +0.022
+medium200 light  P3b   delta +0.0012   effect -0.009
+medium200 severe P1    delta +0.0025   effect -0.000
+```
+
+A paired mean difference and a rank-based effect size can genuinely disagree when the distribution is heavily right-skewed, and `medium200` worst-excess values of 236–892% against means of 4–20% are exactly that shape: a handful of catastrophic trials drag the mean one way while the majority of seeds rank the other.
+
+**That is an explanation, not a verification.** Pre-run check (4) confirmed the sign on `large1000/severe` P3a, where the two agree — so the check passed without ever exercising the case that could break it. **A test that only covers the cells where two measures agree cannot tell you the disagreeing ones are correct.** Same shape as Z3's composite-row assertion: it fires on the column that was never broken.
+
+**Ruled: the disagreement is resolved before the report quotes either number.** If it is skew, it is demonstrated on the raw paired differences for one of those cells and stated in the report as a property of the metric. If it is not skew, it is a bug in one of the two computations and everything downstream of it is suspect.
+
+### 3. **`% of steps at optimum` is degenerate at `large1000`, so Entry 031's ruling cannot stand as written**
+
+```
+large1000    0.0% for every arm at calm, light and moderate (two cells at 0.1–0.6%)
+medium200    12.2% – 32.3%
+```
+
+At 1000 nodes essentially no arm ever lands exactly on the true optimum within the budget. Entry 031 named `large1000` primary for mean excess, **% at optimum**, and worst excess. The middle one carries no information there — a metric that reads 0.0 for all nine arms cannot rank them.
+
+**Ruled, amending Entry 031:** `large1000` remains primary for **mean excess and worst excess**. **% at optimum is reported from `medium200`**, for the same reason recovery is: it is the tier where the quantity exists. `large1000`'s value is still printed, at 0.0, because a metric reading zero everywhere is itself a finding about the problem size and suppressing it would hide that.
+
+**This is the third metric in this project whose population had to be corrected after the fact** — non-events in recovery (Entry 028), `calm` in the floor (Entry 032), and now optimum-hits at 1000 nodes. The pattern is consistent enough to be a rule: *before a metric is declared primary at a tier, check that it takes more than one value there.* Recorded as standing.
+
+### 4. **The Pareto message at `calm` asserts something the data contradicts by a factor of five**
+
+Both `calm` cells print:
+
+> *"no arm is at least as good as another on every metric. The ordering above is an artefact of averaging ranks — on this run the arms are not distinguishable."*
+
+At `large1000/calm`, `hybrid_direct` reads 2.44% mean excess, 0.0% at optimum, 11.56% worst. `aco` reads 13.33%, 0.0%, 164.23%. Better on two metrics, tied on the third. **That is domination, and the line says the arms are not distinguishable.**
+
+The likely cause is that recovery is undefined at `calm` — correctly, Z3's fix — and the Pareto comparison treats an undefined metric as incomparable rather than as absent from the comparison. If so, the fix is to compute Pareto over the metrics that exist and say which ones those were.
+
+What makes this worth an entry rather than a bug report: **the sentence is not a missing value, it is a claim.** *"The arms are not distinguishable"* is the single most consequential sentence this project could print, because it is the null. Printing it automatically, from a code path that reached it by mishandling an undefined column, in the one scenario designed as a negative control, is how a null gets manufactured rather than found.
+
+**Ruled: fixed and re-run before any report quotes a Pareto result.** And the fix carries a test that drives the undefined-recovery branch, because a branch nothing exercises is where this started.
+
+### Standing corrections, both new
+
+*A segment's FINDINGS block goes into `currentWorkFlow.md` before it is reported in chat.* Segment 24 existed only as a chat message. Had the session ended there, the run that took 216 minutes would have had no record in the repository beyond `analysis.txt`.
+
+*The Architect reads the artefact before ruling on it.* Entry 032 ruled on a 34-cell grid from a prose summary. Three of the four items above are visible in the first eighty lines of the file.
+
+### What this does and does not change
+
+**It does not change the null.** Claim 3 is still a null — items 1 through 4 touch Claim 1's scope, a metric's sign, a metric's tier, and a Pareto message. Nothing in them moves P1, P2, P3a, P3b or P5.
+
+**It does change what gets claimed about Claim 1**, and it puts two computations under suspicion until resolved.
+
+Nothing is committed. Next segment is the outstanding analysis — **not the report.** The report waits on the professor.
+
+---
