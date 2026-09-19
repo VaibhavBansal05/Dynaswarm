@@ -2870,3 +2870,67 @@ Segment 23 found that the one property this project decided it could not afford 
 Next: amend the manifest to four scenarios, Rudra commits, then **segment 24 runs it**.
 
 ---
+
+---
+
+## Entry 031 — Segment 23 closed. Two rulings, and the tier's strength is its weakness.
+
+**19 Sept 2026.** 536 passed, 53 JS, `src/` untouched at 2318. **The run has not started.** 1,200 trials, 7.5 h serial, ~57 min at 8 jobs.
+
+### P5 is live at `calm`, and I had the reason wrong
+
+I predicted one live comparison in that cell. **There are seven of nine.**
+
+```
+hybrid_fixed       distinct  1   0.500 -> 0.500
+hybrid_adaptive    distinct  1   0.500 -> 0.500    <- identical, P1 drops out
+hybrid_scheduled   distinct 20   0.500 -> 0.617
+hybrid_direct      distinct  7   0.500 -> 0.800    <- climbs and holds
+```
+
+**`hybrid_direct` does not sit at 0.5 with nothing happening.** Its rule at `recency = 0` returns **0.8** — buying ACO, which is the principled response when nothing has invalidated the trails.
+
+So the negative control does more than demonstrate an absence: **it verifies a positive prediction.** With no disruption the direct arm should favour ACO, and it does. Only P1 and P4 degenerate. That is a stronger control than the one I designed.
+
+### Ruling 1 — Holm stays grid-wide. The document moves, not the manifest.
+
+vClaude found that `understandingTests.md` line 169 said *"Holm applied once across all nine comparisons"* while the code corrects across every tested cell of the 9 × 4 grid — up to 36, of which **34 are tested.** It offered to move either.
+
+**The code is right and the document was wrong.** Running the same nine hypotheses in four conditions and reporting the significant ones is multiplicity whatever the conditions are called. Nine is the per-scenario count, and a reader taking it as the family would understate the correction fourfold.
+
+At 150 seeds this costs nothing: α = 0.05/34 ≈ **0.0015**, and 150 seeds still gives ~90% power at the measured effect. **That is exactly what the seed increase was for** — spend compute, don't argue the denominator. At 100 it would have been a real trade and I would have had to choose.
+
+`understandingTests.md` is corrected: line 169 rewritten, and the six arithmetic drifts (100 → 150, "40 of 100" → 63 of 150, 42%) fixed. vClaude changed nothing in it, correctly — it is the Architect's document.
+
+### Ruling 2 — the primary tier: **`large1000` for three metrics, `medium200` for recovery, and the tension stated in the report**
+
+This is the one that did not come back clean, and vClaude's framing of it is the most important sentence in the segment:
+
+> **The property that removes the confound is the property that starves the recovery metric.**
+
+Measured for the first time at 1000 nodes: **0.40 damaged disruptions per arm-trial at moderate, 0.20 at severe, against 2.10 at `medium200`** — about 5× thinner.
+
+The cause is structural. At 1000 nodes the graph is richly connected — zero bridging edges on all 150 instances — so a 25-road break rarely touches the optimal route. **The same connectivity that makes `large1000` free of the bridge confound makes it nearly free of damage to recover from.** They are not independent properties and `large1000` cannot be presented as strictly better.
+
+**Ruled, adopting vClaude's read with one addition:**
+
+1. **`large1000` is primary for the three step-derived metrics** — mean excess, % at optimum, worst excess. Those are computed from every timestep and are unaffected.
+2. **Recovery is reported from `medium200`**, where it rests on ~2.10 damaged events per arm-trial instead of 0.40.
+3. **Addition: `large1000`'s recovery is still reported, with its own n and its interval, not suppressed.** The reader sees both, and the difference in precision is visible rather than hidden by a choice I made for them. Suppressing a metric because it is imprecise looks like selection; showing it with its uncertainty is the honest version.
+4. **The tension goes in the report as a finding about the problem domain, not a footnote.** *Richly connected graphs are simultaneously fairer to test on and harder to measure recovery on.* That is a genuine structural observation and no one designed it.
+
+`MIN_DAMAGED_FOR_RECOVERY = 30` is set at the low end of the projection — **a floor on evidence rather than a number tuned to pass** — with `primary_tier_holds()` deciding after the run and a test driving both branches. vClaude's reasoning for the test is right and worth recording: *a fallback that cannot fire is decoration.*
+
+### The remaining risk, named
+
+At 0.40 damaged disruptions per arm-trial, **most `large1000` seeds will have zero damaged disruptions**, so recovery is undefined for those seeds and they drop out of the pairing. The usable pair count for that one metric at that tier could fall well below the 150 the other three enjoy.
+
+That is why recovery comes from `medium200`. It is computable at `large1000` and it is **underpowered there**, and those are different words that must not be blurred in the report.
+
+### Close
+
+Segment 23 is complete. The manifest is frozen, the pre-registration has three dated amendments, the dry run covers every cell, and one trial reproduces bit-for-bit.
+
+**Rudra commits — that is the gate, and it turns `dirty` false. Then segment 24 runs.**
+
+---

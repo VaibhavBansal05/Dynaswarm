@@ -55,11 +55,11 @@ The question is: *given that a metaheuristic is being used, does adapting its al
 
 | Knob | Setting | Why |
 |---|---|---|
-| **seed** | **varies** — 100 per cell | The only axis averaged over. Each seed is another sample of the same question |
+| **seed** | **varies** — 150 per cell | The only axis averaged over. Each seed is another sample of the same question |
 | **disruption preset** | **varies** — calm, light, moderate, severe | Reported separately, never pooled. The effect is *supposed* to depend on disruption, so averaging calm into severe would dilute the very thing being measured |
 | **graph size** | **varies** — medium200, large1000 | Reported separately. Tests whether the finding generalises |
 | graph model | geometric, fixed | Varying it adds cells without adding a question |
-| density | default, fixed | A difficulty dial, not a question. Difficulty already varies across 100 seeds and the size jump |
+| density | default, fixed | A difficulty dial, not a question. Difficulty already varies across 150 seeds and the size jump |
 | **search budget** | **300, fixed** | The allocation step size `A = 0.006` was **derived from** this budget — the floor constraint is `1/budget`. Change the budget and the derivation is void, and a win could not be attributed to allocation rather than budget |
 | six event probabilities | fixed | These *are* the scenario — the presets differ in exactly these values |
 | roads per break, duration | set by preset | Same |
@@ -71,7 +71,7 @@ The question is: *given that a metaheuristic is being used, does adapting its al
 
 Worlds differ enormously in difficulty. One seed's optimum is 99.96, another's is 110.45. Some break more roads; some have nastier geometry.
 
-If each arm's results were averaged across 100 worlds and the averages compared, **most of what you would be measuring is world difficulty, not arm quality.**
+If each arm's results were averaged across 150 worlds and the averages compared, **most of what you would be measuring is world difficulty, not arm quality.**
 
 So every comparison is done **seed by seed**. For each world, subtract one arm's result from the other's. Because both arms ran the *same* world from the *same* random numbers, the world's difficulty appears in both numbers and cancels.
 
@@ -164,9 +164,9 @@ Four metrics per arm per seed. Each one must pass a single test: *can you say in
 
 ## 8 · The statistics, in plain terms
 
-**Wilcoxon signed-rank, paired.** Takes the 100 per-seed differences and asks how unlikely that pattern would be if neither arm were better. Uses ranks rather than raw values, so one freak world cannot dominate.
+**Wilcoxon signed-rank, paired.** Takes the 150 per-seed differences and asks how unlikely that pattern would be if neither arm were better. Uses ranks rather than raw values, so one freak world cannot dominate.
 
-**Holm correction, applied once across all nine comparisons.** Nine comparisons means nine chances to get lucky, so each must clear a higher bar. Correcting *within* each comparison instead would produce nine families of one — looking corrected and correcting nothing.
+**Holm correction, applied once across every tested cell of the grid.** The family is not nine — it is nine comparisons × four scenarios = **36 cells, of which 34 are tested** (two are identical-arm by design at `calm`). Running the same nine hypotheses in four conditions and reporting the significant ones is multiplicity whatever the conditions are called, so the correction spans all of them in a single pass. Correcting *within* each comparison instead would produce families of one — looking corrected and correcting nothing.
 
 **Cliff's delta, reported beside every p-value.** A p-value says *this is probably not chance*. Cliff's delta says *and here is whether it matters*. With enough trials almost anything becomes statistically significant; a result that is significant and negligible is a true finding about a difference nobody would care about, and saying so is stronger than hiding it.
 
@@ -177,15 +177,15 @@ Four metrics per arm per seed. Each one must pass a single test: *can you say in
 | < 0.474 | medium |
 | ≥ 0.474 | large |
 
-**Why 100 seeds.** The pilot measured an effect of 0.787 against a paired spread of 2.132. The uncertainty in an average shrinks as the square root of the sample, so:
+**Why 150 seeds.** The pilot measured an effect of 0.787 against a paired spread of 2.132. The uncertainty in an average shrinks as the square root of the sample, so:
 
 | Seeds | Uncertainty in the average | Effect vs its own uncertainty |
 |---|---|---|
 | 6 | 2.132/√6 = 0.87 | **smaller than its own uncertainty — invisible** |
 | 58 | 0.28 | 2.8× — 80% power |
-| 100 | **0.213** | **3.7× — comfortable** |
+| 150 | **0.174** | **4.5× — comfortable** |
 
-At six seeds the test could not have returned a result whatever the data said. At 100 it can.
+At six seeds the test could not have returned a result whatever the data said. At 150 it can, **and 150 is what makes the strict grid-wide correction affordable** — at 100 the same correction would have left the study underpowered.
 
 ---
 
@@ -210,7 +210,7 @@ Fixed before the run, so that no result can be re-interpreted after the fact.
 | | |
 |---|---|
 | **Dose-response** | Does the benefit grow from light → moderate → severe? A spurious effect has no reason to scale with the thing it supposedly depends on, so this is far stronger evidence than a single significant difference |
-| **Robustness to the bridge confound** | 40 of 100 `medium200` instances have a "bridging" road carrying over 10% of the optimal route. Split the seeds by that share and re-test |
+| **Robustness to the bridge confound** | 63 of 150 `medium200` instances (42%) have a "bridging" road carrying over 10% of the optimal route. Split the seeds by that share and re-test |
 | **Wall-clock efficiency** | One ACO evaluation costs ~7× more time than one PSO evaluation. The thesis arm shifts toward PSO, so it is systematically cheaper at an identical evaluation budget — measurable, ~5% |
 | **Recovery vs steady-state** | Does an arm help by recovering faster, or by being better during calm? Different mechanisms |
 | **Scale** | Does any of it hold at 1000 nodes? |
@@ -221,7 +221,8 @@ Fixed before the run, so that no result can be re-interpreted after the fact.
 
 | | |
 |---|---|
-| **The bridge confound** | On 40% of `medium200` instances one road carries much of the route, so the problem is partly *"reach the bridge"* and arms may look alike for structural reasons. **`large1000` has zero bridges on every instance**, which makes the scale check an unplanned control: indistinguishable arms at both tiers answers the objection with data |
+| **The bridge confound** | On 42% of `medium200` instances (63 of 150) one road carries much of the route, so the problem is partly *"reach the bridge"* and arms may look alike for structural reasons. **`large1000` has zero bridges on every instance**, which makes the scale check an unplanned control: indistinguishable arms at both tiers answers the objection with data |
+| **`large1000`'s strength and its weakness have the same cause** | The rich connectivity that gives it zero bridging edges also means a 25-road break rarely touches the optimal route — **0.20–0.40 damaged disruptions per arm-trial against 2.10 at `medium200`, about 5× thinner.** The property that removes the confound is the property that starves the recovery metric. They are not independent, and `large1000` cannot be presented as strictly better without saying so |
 | **Recency is binary** | The signal reads 1.0 if anything broke. Nine roads and twenty-five produce the same number, so **no policy shape can recover a magnitude the signal discarded** |
 | **The governor clamps the direct arm** | On 78% of steps. The three constraints on its amplitude are mutually unsatisfiable — a finding about the rate limiter, not the policy |
 | **PSO ends runs idle** | Personal bests improved 93 → 0, swarm spread collapsed. Part of the hybrid's margin over PSO alone is simply that ACO is still working |
