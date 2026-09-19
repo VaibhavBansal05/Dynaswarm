@@ -36,6 +36,7 @@ __all__ = [
     "censored_recovery",
     "RecoverySummary",
     "mean_ranks",
+    "comparable_metrics",
     "pareto_dominance",
     "score_run",
     "REFERENCE_ARM",
@@ -98,7 +99,8 @@ def _evidence_line(n_seeds: int, run_classes: list[str], ok: bool) -> str:
     )
 
 
-def _pareto_line(arms: list[dict], display: dict[str, str]) -> str:
+def _pareto_line(arms: list[dict], display: dict[str, str],
+                 over: list[str] | None = None) -> str:
     """Pareto in words. The sentence a null needs and a mean rank cannot make.
 
     A mean rank always yields an ordering, even from pure noise. "No arm
@@ -112,15 +114,20 @@ def _pareto_line(arms: list[dict], display: dict[str, str]) -> str:
         for a in arms
         if a["dominates"]
     ]
+    scope = (
+        ""
+        if over is None or len(over) == len(METRICS)
+        else f" (over the {len(over)} metrics defined here: {', '.join(over)})"
+    )
     if not claims:
         return (
-            "Pareto: no arm is at least as good as another on every metric. "
-            "The ordering above is an artefact of averaging ranks \u2014 on "
-            "this run the arms are not distinguishable."
+            f"Pareto{scope}: no arm is at least as good as another on every "
+            f"metric. The ordering above is an artefact of averaging ranks "
+            f"\u2014 on this run the arms are not distinguishable."
         )
     return (
-        f"Pareto: {'; '.join(claims)}. Any ordering above not listed here is "
-        f"an artefact of averaging ranks across metrics that disagree."
+        f"Pareto{scope}: {'; '.join(claims)}. Any ordering above not listed "
+        f"here is an artefact of averaging ranks across metrics that disagree."
     )
 
 
@@ -327,13 +334,9 @@ def pareto_dominance(metrics: dict[str, dict[str, float]]) -> dict[str, list[str
     in order to be legible.
     """
     def better_or_equal(a: float, b: float, lower: bool) -> bool:
-        if np.isnan(a) or np.isnan(b):
-            return False
         return a <= b if lower else a >= b
 
     def strictly_better(a: float, b: float, lower: bool) -> bool:
-        if np.isnan(a) or np.isnan(b):
-            return False
         return a < b if lower else a > b
 
     out: dict[str, list[str]] = {a: [] for a in metrics}
@@ -341,15 +344,47 @@ def pareto_dominance(metrics: dict[str, dict[str, float]]) -> dict[str, list[str
         for b, mb in metrics.items():
             if a == b:
                 continue
-            all_ge = all(
-                better_or_equal(ma[k], mb[k], lower) for k, _, lower, _f in METRICS
-            )
-            any_gt = any(
-                strictly_better(ma[k], mb[k], lower) for k, _, lower, _f in METRICS
-            )
+            # **Compare over the metrics that EXIST for this pair.**
+            #
+            # Previously a NaN on either side returned False from both
+            # helpers, so `all_ge` failed and no arm could dominate any
+            # other. At `calm` recovery is undefined for every arm — no
+            # disruptions, so nothing to recover from — and the result was
+            # that the tab printed "the arms are not distinguishable" in
+            # the one scenario built as a negative control, while
+            # `hybrid_direct` sat at 2.44% mean excess against `aco` at
+            # 13.33%.
+            #
+            # An undefined metric is **absent**, not incomparable. Treating
+            # it as incomparable reached the null automatically from a
+            # code path that mishandled an empty column, which is how a
+            # null gets manufactured rather than found.
+            usable = [
+                (k, lower)
+                for k, _, lower, _f in METRICS
+                if not np.isnan(ma[k]) and not np.isnan(mb[k])
+            ]
+            if not usable:
+                continue
+            all_ge = all(better_or_equal(ma[k], mb[k], lo) for k, lo in usable)
+            any_gt = any(strictly_better(ma[k], mb[k], lo) for k, lo in usable)
             if all_ge and any_gt:
                 out[a].append(b)
     return out
+
+
+def comparable_metrics(metrics: dict[str, dict[str, float]]) -> list[str]:
+    """Which metrics are defined for every arm, so Pareto can say so.
+
+    A dominance claim made over three metrics is a weaker statement than
+    one made over four, and a reader cannot tell which they are looking
+    at unless the output names them.
+    """
+    return [
+        k
+        for k, _, _, _f in METRICS
+        if all(not np.isnan(m[k]) for m in metrics.values())
+    ]
 
 
 def score_run(frame: pd.DataFrame, display: dict[str, str] | None = None) -> dict:
@@ -415,7 +450,8 @@ def score_run(frame: pd.DataFrame, display: dict[str, str] | None = None) -> dic
             "is_evidence": is_evidence,
             "line": _evidence_line(len(seeds), run_classes, is_evidence),
         },
-        "pareto_line": _pareto_line(arms, display),
+        "pareto_line": _pareto_line(arms, display, comparable_metrics(ranked)),
+        "comparable_metrics": comparable_metrics(ranked),
         "basis_line": (
             "Ranked on "
             + ", ".join(label for _k, label, _l, _f in METRICS)

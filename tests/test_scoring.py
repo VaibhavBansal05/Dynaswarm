@@ -440,3 +440,71 @@ def test_the_damaged_count_reaches_the_payload():
         for key in ("n_damaged", "n_unchanged", "n_improved", "n_censored"):
             assert key in arm, f"{key} is missing from the ranking payload"
     assert any(a["n_damaged"] > 0 for a in payload["arms"])
+
+
+# ---------------------------------------------------------------------------
+# Segment 25 / Entry 033 — an undefined metric is absent, not incomparable
+# ---------------------------------------------------------------------------
+
+
+def test_pareto_compares_over_the_metrics_that_exist():
+    """**7a: the null was being manufactured by a NaN.**
+
+    At `calm` there are no disruptions, so recovery is undefined for
+    every arm. `pareto_dominance` returned `False` from both of its
+    comparison helpers on a NaN, so `all_ge` could never hold and **no
+    arm could dominate any other** — the tab printed *"the arms are not
+    distinguishable"* in the scenario built as a negative control, while
+    one arm sat at 2.44% mean excess against another at 13.33%.
+
+    *"The arms are not distinguishable"* is the null. Reaching it
+    automatically from a code path that mishandled an empty column is how
+    a null gets manufactured instead of found.
+
+    An undefined metric is **absent**: dominance is judged over the
+    metrics both arms actually have.
+    """
+    import numpy as np
+
+    good = {"mean_excess": 0.02, "at_optimum": 0.0, "worst_excess": 0.10,
+            "mean_recovery": float("nan")}
+    bad = {"mean_excess": 0.13, "at_optimum": 0.0, "worst_excess": 1.64,
+            "mean_recovery": float("nan")}
+    dominance = pareto_dominance({"good": good, "bad": bad})
+
+    assert "bad" in dominance["good"], (
+        "an arm better on two defined metrics and tied on the third does "
+        "not dominate, because the undefined fourth blocked it"
+    )
+    assert "good" not in dominance["bad"]
+
+    from dynaswarm.analysis.scoring import comparable_metrics
+
+    named = comparable_metrics({"good": good, "bad": bad})
+    assert "mean_recovery" not in named, "an undefined metric is named as used"
+    assert set(named) == {"mean_excess", "at_optimum", "worst_excess"}
+    assert not np.isnan(good["mean_excess"])
+
+
+def test_the_pareto_line_says_how_many_metrics_it_used():
+    """A claim over three metrics is weaker than one over four.
+
+    A reader cannot tell which they are looking at unless the output
+    names them, so a partial comparison has to declare itself.
+    """
+    frame = _frame({"a": _always_recovers(), "b": _gives_up()})
+    full = score_run(frame)
+    assert full["comparable_metrics"], "no metric list in the payload"
+
+    horizon = 30
+    flat = _frame({
+        "a": ([0.02] * horizon, [0] * horizon),
+        "b": ([0.13] * horizon, [0] * horizon),
+    })
+    partial = score_run(flat)
+    assert "mean_recovery" not in partial["comparable_metrics"], (
+        "recovery is undefined with no disruptions and should not be listed"
+    )
+    assert "over the 3 metrics defined here" in partial["pareto_line"], (
+        f"the line does not say it used a subset: {partial['pareto_line']}"
+    )

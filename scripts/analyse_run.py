@@ -34,8 +34,11 @@ def tier_of(run_id: str) -> str:
     return str(run_id).split("-")[0]
 
 
-def damaged_counts(frame: pd.DataFrame) -> dict[tuple[str, str], int]:
-    """Damaged disruptions per (tier, scenario), summed over arms and seeds.
+def damaged_counts(frame: pd.DataFrame) -> dict[tuple[str, str], float]:
+    """Damaged disruptions per (tier, scenario), **per arm**.
+
+    Divided by the arm count deliberately: `MIN_DAMAGED_FOR_RECOVERY` is
+    a per-arm floor and this used to hand it a total over ten arms.
 
     This is what the primary-tier condition is decided on, and it is
     computed from the run rather than from the projection in the manifest.
@@ -53,7 +56,9 @@ def damaged_counts(frame: pd.DataFrame) -> dict[tuple[str, str], int]:
         key = (tier, scenario)
         out[key] = out.get(key, 0) + summary.n_damaged
         del run_id, trial
-    return out
+
+    arms = frame["arm"].nunique()
+    return {k: v / arms for k, v in out.items()}
 
 
 def main() -> None:

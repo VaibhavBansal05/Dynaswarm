@@ -411,3 +411,62 @@ def test_p5_is_live_in_the_calm_cell():
     # with nothing invalidating the trails, buying ACO is the principled
     # response, and it makes P2/P3b/S1 live here too.
     assert max(splits("hybrid_direct")) > 0.5
+
+
+def test_the_recovery_floor_excludes_calm_and_is_per_arm():
+    """**7d: two defects in one check, both found in segment 25.**
+
+    First, the floor was applied to `calm`, where zero damaged events is
+    the *designed* outcome — there are no disruptions to be damaged by.
+    It therefore fired on the negative control and demoted the primary
+    tier on the one scenario that could never have passed. Same error as
+    averaging non-events into the recovery mean (Entry 028), three
+    segments later.
+
+    Second, `MIN_DAMAGED_FOR_RECOVERY` is documented as a **per-arm**
+    floor and segment 24's caller passed **totals over ten arms**. So
+    `large1000/light` arrived as 117 against a floor of 30 and passed,
+    when its real per-arm count is 11.7 and it fails by a factor of
+    three. A units mismatch between a constant and its caller makes a
+    threshold ten times more lenient than it reads, and the output looks
+    entirely normal.
+
+    Both branches are driven, because a fallback that cannot fire is
+    decoration.
+    """
+    floor = m.MIN_DAMAGED_FOR_RECOVERY
+
+    # calm at zero must not demote the tier.
+    held = m.primary_tier_holds({
+        (m.PRIMARY_TIER, "calm"): 0.0,
+        (m.PRIMARY_TIER, "light"): floor + 1,
+        (m.PRIMARY_TIER, "moderate"): floor + 10,
+        (m.PRIMARY_TIER, "severe"): floor + 20,
+    })
+    assert held["condition_held"], (
+        f"the floor fired on calm, where zero is the designed outcome: "
+        f"{held['short_cells']}"
+    )
+    assert held["primary"] == m.PRIMARY_TIER
+
+    # A real scenario below the floor must demote it, and say which.
+    short = m.primary_tier_holds({
+        (m.PRIMARY_TIER, "calm"): 0.0,
+        (m.PRIMARY_TIER, "light"): floor - 1,
+        (m.PRIMARY_TIER, "moderate"): floor + 10,
+        (m.PRIMARY_TIER, "severe"): floor + 20,
+    })
+    assert not short["condition_held"]
+    assert short["primary"] == m.FALLBACK_TIER
+    assert f"{m.PRIMARY_TIER}/light" in short["short_cells"]
+
+    # And the run's own per-arm counts must behave as recorded: light
+    # fails at 11.7, moderate and severe pass.
+    real = m.primary_tier_holds({
+        (m.PRIMARY_TIER, "calm"): 0.0, (m.PRIMARY_TIER, "light"): 11.7,
+        (m.PRIMARY_TIER, "moderate"): 31.8, (m.PRIMARY_TIER, "severe"): 42.9,
+    })
+    assert set(real["short_cells"]) == {f"{m.PRIMARY_TIER}/light"}, (
+        f"the evidence run's per-arm counts no longer flag light alone: "
+        f"{real['short_cells']}"
+    )

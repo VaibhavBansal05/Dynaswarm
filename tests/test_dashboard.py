@@ -228,9 +228,25 @@ def test_run_classes_does_not_filter_to_manifest():
     server = pytest.importorskip("dashboard.server")
 
     classes = server.run_classes()
-    assert "manifest" not in classes, "no manifest runs exist; see D31"
+
+    # **This assertion used to read `"manifest" not in classes`**, on the
+    # grounds that since D31 no manifest runs existed. Segment 24's
+    # evidence run was commissioned to change exactly that, and it did:
+    # `run_classes()` now returns both. The old assertion encoded a fact
+    # about the world rather than the rule it was protecting, so the
+    # evidence run's existence broke it.
+    #
+    # The rule survives unchanged and is what is asserted now: this
+    # endpoint must report **every** class it finds. A filtered read is
+    # what produces a blank screen, and it is invisible until someone
+    # opens the page with no manifest data present.
+    assert set(classes) <= {"exploratory", "inversion", "manifest"}, (
+        f"unexpected run classes on disk: {set(classes)}"
+    )
     if classes:
-        assert set(classes) <= {"exploratory", "inversion"}
+        assert all(int(n) > 0 for n in classes.values()), (
+            "a run class was reported with no rows behind it"
+        )
 
 
 # ---------------------------------------------------------------------------

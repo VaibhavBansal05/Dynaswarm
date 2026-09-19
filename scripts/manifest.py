@@ -208,18 +208,38 @@ FALLBACK_TIER = "medium200"
 MIN_DAMAGED_FOR_RECOVERY = 30
 
 
-def primary_tier_holds(damaged_by_cell: dict[tuple[str, str], int]) -> dict:
+def primary_tier_holds(damaged_by_cell: dict[tuple[str, str], float]) -> dict:
     """Decide the primary tier from the run's own data, by the rule above.
 
+    **The counts must be PER ARM.** `MIN_DAMAGED_FOR_RECOVERY` is a
+    per-arm floor, and the caller in segment 24 passed totals summed over
+    ten arms — so `large1000/light` at 11.7 per arm arrived as 117 and
+    cleared a floor of 30 that it actually fails by a factor of three.
+    A units mismatch between a constant and its caller makes a threshold
+    ten times more lenient than it reads, and nothing about the output
+    looks wrong.
+
     Args:
-        damaged_by_cell: ``{(tier, scenario): total damaged disruptions}``.
+        damaged_by_cell: ``{(tier, scenario): damaged disruptions PER ARM}``.
 
     Returns:
         The tier that carries the claims, whether the condition held, and
         the reason — so a fallback is reported as a finding rather than
         appearing as an unexplained change of emphasis.
     """
-    cells = {k: v for k, v in damaged_by_cell.items() if k[0] == PRIMARY_TIER}
+    # **`calm` is excluded from the population, not failed by it.**
+    #
+    # The negative control has no disruptions by construction, so zero
+    # damaged events there is the designed outcome. As first written the
+    # floor was applied to every cell, so it fired on `calm` and sent the
+    # primary tier to the fallback on the one scenario that could never
+    # have passed — the same error as averaging non-events into the
+    # recovery mean (Entry 028), three segments later.
+    cells = {
+        k: v
+        for k, v in damaged_by_cell.items()
+        if k[0] == PRIMARY_TIER and k[1] != "calm"
+    }
     short = {k: v for k, v in cells.items() if v < MIN_DAMAGED_FOR_RECOVERY}
     held = bool(cells) and not short
     return {
