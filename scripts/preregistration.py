@@ -93,16 +93,26 @@ PLANNED: tuple[Planned, ...] = (
 METRIC = "mean_excess"
 
 
-def _paired(trials: pd.DataFrame, arm_a: str, arm_b: str, metric: str):
-    """Values for two arms, aligned by the trial they share.
+#: What identifies one world. **`(run_id, trial)`, not `trial` alone.**
+#:
+#: Segment 24 runs each scenario in chunks of 50 so progress is visible
+#: every 50 trials rather than only at the end. Each chunk is its own
+#: `run_experiment` call with its own `run_id`, so trial indices restart
+#: at 0 in every chunk — and pairing on `trial` alone would silently
+#: align trial 7 of chunk 1 against trial 7 of chunk 3, which are
+#: different worlds. Two equal-length arrays are not paired data.
+PAIR_KEY = ["run_id", "trial"]
 
-    Aligned on `trial` rather than concatenated in whatever order the
-    groupby produced. Every arm sees a byte-identical world within a trial
-    (§10.2 guarantee 1), so the trial index *is* the pairing — but only if
-    it is used. Two equal-length arrays are not paired data.
+
+def _paired(trials: pd.DataFrame, arm_a: str, arm_b: str, metric: str):
+    """Values for two arms, aligned by the world they share.
+
+    Every arm sees a byte-identical world within a trial (§10.2 guarantee
+    1), so the key below *is* the pairing — but only if it is used.
     """
-    a = trials[trials["arm"] == arm_a].set_index("trial")[metric]
-    b = trials[trials["arm"] == arm_b].set_index("trial")[metric]
+    keys = [k for k in PAIR_KEY if k in trials.columns] or ["trial"]
+    a = trials[trials["arm"] == arm_a].set_index(keys)[metric]
+    b = trials[trials["arm"] == arm_b].set_index(keys)[metric]
     shared = sorted(set(a.index) & set(b.index))
     return (
         np.asarray([a.loc[t] for t in shared], dtype=float),
