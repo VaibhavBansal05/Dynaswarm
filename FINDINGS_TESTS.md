@@ -121,7 +121,9 @@ scripts/segment25.py :: steps(), paired()
 
 **What this is.** How the comparisons were made. Each algorithm pair is compared seed by seed rather than on averages, because the worlds differ enormously in difficulty and pairing cancels that out.
 
-- **Seed-by-seed paired differences.** Pairing reduced the spread from 4.110 to 2.132.
+- **Seed-by-seed paired differences.** Worlds differ enormously in difficulty, so comparing averages would drown the effect in that variation. Pairing cancels it: on P1 in this run, the spread across arms drops from **1.2–1.6 to 0.5–0.6 percentage points** at `large1000` and from **6.9–8.5 to 2.5–5.0** at `medium200` — a factor of 1.7–2.8.
+
+  *(An earlier draft quoted "4.110 to 2.132" here. Those are the six-seed pilot's figures from Entry 028, not this run's, and they were sitting inside a section describing this run. Replaced with the measured values above.)*
 - **Paired Wilcoxon signed-rank**, a test that uses rank order rather than raw values, so one freak world cannot dominate.
 - **Holm correction applied once across all 34 tested cells**, not within each comparison. Running nine hypotheses in four scenarios and reporting the significant ones is multiplicity whatever the scenarios are called.
 - **Cliff's delta** for effect size, thresholds in the table above.
@@ -503,6 +505,14 @@ Verified in source:
 **Why this does not invalidate anything.** The experiment is internally sound, pre-registered and correctly analysed. None of the 34 cells change. What changes is the sentence the report may write about what was tested.
 
 **Why it is worth more than a correction.** It converts future work from a gesture into a costed proposal: the field exists on all 720,000 rows, a magnitude-carrying policy is a change to one expression, and the rerun is 216 known minutes on the same 150 seeds.
+
+**When the justification was written, and what that does and does not mean.**
+
+The exclusion came first and the reasoning came after. `IncrementalAllocation` was written in **`aa3c3c5`** ("build allocation segment 20 phase 3"). The field-table line excluding `events_this_step` arrived six days later in **`4e4b6ad`** (2026-09-13, labelled "segment 22" but containing segment 21 — see Entry 022), and it was produced by **segment 21's T5**, a task whose instruction was *"`IncrementalAllocation` uses three of eleven fields. State it."*
+
+So the sentence was written to **describe** an exclusion that already existed, not to decide one. Nobody weighed the magnitude and set it aside; the policy did not read it, and a later documentation pass wrote down a reason why that was acceptable. The reason was never checked against what `recency` actually encodes.
+
+**This changes nothing about the run's validity.** It bears on *what was tested*, not on whether the test was sound. The experiment remains internally consistent, pre-registered and correctly analysed, and all 34 cells stand exactly as computed. What the history settles is a question the earlier write-up left open — whether this was a considered design decision or an unexamined assumption — and the commits say the second.
 
 > **One precision note:** the phrase *"both read `obs.recency` and nothing else"* is exact for `DirectAllocation` and loose for `IncrementalAllocation`, which also reads `current_fraction` and `t`. The substantive claim — that neither reads the magnitude — holds for both.
 
