@@ -3124,3 +3124,110 @@ What makes this worth an entry rather than a bug report: **the sentence is not a
 Nothing is committed. Next segment is the outstanding analysis — **not the report.** The report waits on the professor.
 
 ---
+
+---
+
+## Entry 034 — Segment 25 closed. The verification found its own bug first, and Claim 2 is weaker than this log has been saying.
+
+**20 Sept 2026.** 543 Python (from 536), 53 JS, `src/` unchanged at 2318, ruff clean. No new run. `paper.tex` and `docs/presentation.md` untouched, correctly — those are Rudra's to delete.
+
+`FINDINGS_TESTS.md` is 527 lines, every section tagged `[raw]`, nothing left as `[analysis.txt]`. `findings/segment-25.md` archived; the FINDINGS block was in `currentWorkFlow.md` before the chat report, as Entry 033 required.
+
+### The re-derivation was wrong before `analysis.txt` was
+
+vClaude's cache stored excess via `to_numpy(dtype=float)`, which turns `None` into `NaN`. `recovery.disruptions()` guards with `v is None`, and **`NaN` is not `None`** — it slipped straight through. Damaged counts came out 1–8 low.
+
+What identified it as vClaude's own bug rather than the target's is the part worth recording: **the disagreement was patterned.** `large1000` matched exactly; only `medium200` differed. `large1000` has zero unroutable steps and `medium200/severe` has 169 — so the discrepancy tracked the one structural difference between the tiers, which is what a bug in the *handling of missing values* looks like and not what a bug in the recorded numbers looks like.
+
+**Standing rule, new:** *when a re-derivation disagrees with its target, the shape of the disagreement says which one is wrong. A difference that tracks a structural property of the data is a defect in the reader, not the data.* A flat disagreement across all cells would have implicated the target; this one did not.
+
+**Standing rule, second, and it is a re-statement of Entry 021's R1:** *a guard written for one representation of "absent" does not cover the others.* `is None` does not catch `NaN`, `NaN` does not equal itself, and a float column cannot hold `None`. Entry 021 caught `.get(key, 0.0)` manufacturing silent zeros; this is the same failure with a different spelling, and it happened inside the tool built to catch that class of failure.
+
+### The mutation: **543 tests, and none of them read the document**
+
+vClaude stripped the `EXPLORATORY` tag from §7 — the section explaining *why* the null happened — and the entire suite passed.
+
+The harm is specific. §7 was chosen after seeing the result. Presented without its tag it reads as though the null had been **predicted rather than discovered**, which is the exact inversion the pre-registration exists to prevent, achieved by deleting one word from a document nothing was watching.
+
+**Standing rule, new:** *a document that has become a deliverable is not covered by the test suite until something reads it.* `FINDINGS_TESTS.md` is now the single reference for the report and the deck — Entry 033 made it so — and until this mutation it had the test coverage of a README. Closed with four tests that read the file.
+
+This is the same family as segment 23's `provenance.dirty` mutation: **a green suite says nothing about the things it was never pointed at.** Third instance in this project.
+
+### T7d — a units mismatch made a threshold ten times too lenient, and it corrects this log
+
+`MIN_DAMAGED_FOR_RECOVERY = 30` is documented as **per arm**. The caller passed **totals summed over ten arms**.
+
+So `large1000/light` arrived as 117 against a floor of 30 and passed. Its real per-arm count is **11.7** and it fails by a factor of three.
+
+**Entries 032 and 033 state that `large1000/light` fails the floor at 11.7 per arm. That was correct about the number and wrong about the code** — the code was passing it. The log and the implementation disagreed and nobody noticed, because the implementation's answer was never printed next to the units it assumed. Both are now aligned, with one test driving both branches and the run's own per-arm counts.
+
+**Standing rule, new:** *a constant and its caller must agree on units, and nothing in the output reveals when they do not.* The number 117 is not visibly wrong next to a floor of 30. Fourth instance of this project's recurring defect: output that reads plausibly and is not.
+
+### ⚠️ Ruling — **Claim 2's null is much weaker than Claim 3's, and this log has been treating them as equal**
+
+T2's bounds are the most consequential thing in the segment and not for the reason I expected.
+
+```
+large1000  severe  P1  (sensing vs fixed)        bound: 0 — no advantage supported
+large1000  light   P1                            bound: 0.058 pp
+large1000  severe  P4  (adapting rho vs fixed)   bound: 1.068 pp
+moderate           P4                            bound: 0.945 pp
+```
+
+Mean excess at `large1000` is about 3%. **A 1.07-percentage-point benefit is roughly a third of the total excess** — and it is eighteen times the ceiling the same run places on sensing.
+
+So *"Claim 2 reproduced"* — which Entries 032, 033 and `FINDINGS_TESTS.md` §4 all state flatly — is not what this run established. What it established is: **no significant difference, and a benefit of up to 1.07 pp from adapting ρ cannot be excluded.** Those are different sentences and the second is much weaker.
+
+**Ruled: Claim 2 is never stated in this project without its bound attached.** It is a *non-detection*, not a demonstrated absence, and it must not be presented alongside Claim 3's null as though the two carry equal weight.
+
+This matters structurally, not cosmetically. **Claim 3 is interesting only because parameter adaptation had already been shown not to help.** If that premise is a weak null, the framing *"allocation is the better-posed question"* rests on less than the report would otherwise imply. The honest version says so.
+
+**And the reason the bound is wide is worth recording.** Both P4 arms are ACO variants — mean excess ~14%, worst cases past 160%. P1's arms are hybrids at ~3% with worst cases near 19%. Same 150 seeds, same pairing, five times the variance. **The precision of a null comes from the variance of the arms compared, not from the seed count alone.** 150 seeds bought a tight bound on sensing and a loose one on ρ, in the same run, by the same method.
+
+### T4 settles which paper this is
+
+`hybrid_fixed` travels **0.000** — so the ablation pair differs in exactly one thing, as designed. Every other arm moves on ~58 of 60 steps. `hybrid_direct` is clamped on **75%** of its steps, confirming segment Y's 78% measured at n = 1.
+
+**The mechanism worked. The benefit is not there.** That is the sentence the report is now entitled to, and it was not available before this segment. A null where the machinery demonstrably ran is a different and better result than a null where nobody checked.
+
+One detail worth keeping: `hybrid_adaptive` is never clamped, only ever moves *downward* from 0.5, and travels 0.343 total against `hybrid_direct`'s 2.567. **It barely moves.** So there are now two candidate reasons it could not respond proportionally — the missing count (§12) and the sigma's step size — and the report names both rather than picking one.
+
+### T5 — **Entry 032 corrected. My phrasing was overstated.**
+
+Saturation is real and monotone: **0.000 → 0.095 → 0.259 → 0.539** across calm, light, moderate, severe. The direction I predicted holds and is now measured rather than asserted.
+
+But Entry 032 says the sensing arms *"steer on a constant."* At `severe` the signal reads exactly 1.0 on **54%** of steps, leaving 46% still carrying information. **54% is degraded, not constant**, and the sentence is withdrawn. The mechanism stands; the magnitude was mine and it was wrong.
+
+### T3 — the null survives its most obvious challenge
+
+**0 of 19 Claim 3 cells significant on either half** of the bridge split — 87 low-bridge seeds, 63 high-bridge — at the threshold Entry 029 fixed before the run. `large1000`, with zero bridging edges on all 150 instances, agrees. Two independent answers, same result.
+
+One asymmetry recorded rather than smoothed: `hybrid` vs `aco` is significant on the low-bridge half at `light` and `severe` and on neither at the high-bridge half. Consistent with a dominant bridge making all arms look alike — which is the confound behaving exactly as predicted, in the one place it should show.
+
+### Two of my stated facts did not survive the data
+
+**§6c.** I wrote *"0.0% for every arm in three of four scenarios."* Re-derived per arm it is **one** scenario — `calm`. Elsewhere the maxima are 0.16%, 0.58%, 0.59%. Near-degenerate, not degenerate. The ruling survives; its stated reason did not.
+
+**§6a.** My Pareto illustration (2.44% vs 13.33%) is `large1000`-only and I quoted it without naming the tier. At `medium200` the pair reads 4.16% vs 4.92% and does **not** dominate. The defect is real at both tiers; the example holds at one.
+
+**That is four stated facts in three entries, all from reading a summary rather than the data.** Entry 033 recorded the first two and the rule; this is the rule catching the rest. The cross-check existed because of the first three, and it paid for itself on the fourth.
+
+### The cold read
+
+Read as a stranger would, the file failed in six places, all the same kind: **names used before they mean anything.** `hybrid_adaptive` first appeared in a table on line 170 with no description anywhere in the document.
+
+Closed by a new §0 mapping all ten arms, the four scenarios with their break rates, both tiers with node counts, the nine comparison codes, and the two terms of art. **A reference document that only its authors can follow has not been written yet**, and the test for that is reading it cold — which is a task, not a hope.
+
+### Where this leaves the project
+
+`FINDINGS_TESTS.md` is now the single source for the report and the deck. Every number in it was derived from the 720,000 rows in this segment, every number carries the call that produced it, and the exploratory half is tagged and guarded by tests that read the file.
+
+**The evidence is finished.** What remains is not analysis.
+
+1. **Rudra deletes `DPO_Minor_project-main/paper/paper.tex` and `docs/presentation.md`.** They hold fabricated numbers. This is a precondition of the report existing, not a task beside it.
+2. **Rudra speaks to his professor.** Scope, expectations, and whether a follow-up experiment carrying a magnitude signal is wanted. That is a supervision decision and not mine.
+3. Only then, the report.
+
+**No segment is written. The report waits on the professor and that is correct** — a report written before its scope is agreed is a report written twice.
+
+---
