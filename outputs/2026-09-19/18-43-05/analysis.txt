@@ -1,0 +1,282 @@
+
+##########################################################################################
+DYNASWARM — PRE-REGISTERED ANALYSIS (segment 24)
+##########################################################################################
+  commit b4d3d281266c   clean: True   Darwin 25.0.0 arm64
+  rows 720,000   tiers ['large1000', 'medium200']   scenarios ['calm', 'light', 'moderate', 'severe']
+  arms 10   run_class ['manifest']
+
+==========================================================================================
+PRIMARY TIER — the condition, decided from this run's own data
+==========================================================================================
+  floor: 30 damaged disruptions per (tier, scenario)
+    large1000  calm         0.0 damaged   <- below floor
+    large1000  light       11.7 damaged   <- below floor
+    large1000  moderate    31.8 damaged
+    large1000  severe      42.9 damaged
+    medium200  calm         0.0 damaged   <- below floor
+    medium200  light       82.8 damaged
+    medium200  moderate   238.2 damaged
+    medium200  severe     261.7 damaged
+
+  PRIMARY: medium200   condition held: False
+  large1000 could not support the recovery metric ([11.7] damaged events against a floor of 30); medium200 is primary and this is the reason
+
+  Ruling (Entry 031): large1000 carries the three step-derived metrics;
+  recovery is reported from medium200, and large1000's recovery is reported
+  with its own n and interval rather than suppressed.
+
+==========================================================================================
+TIER LARGE1000 — the pre-registered family
+==========================================================================================
+  metric: mean_excess   scenarios: ['calm', 'light', 'moderate', 'severe']
+  grid: 36 cells   tested: 34   (Holm across all tested cells, once)
+
+  scenario       comparison                             n     delta        p    p adj   effect  sig
+  ------------------------------------------------------------------------------------------------
+  calm      P2   hybrid_direct vs hybrid_fixed        150   -0.0014   0.0073   0.1462   -0.081  no
+  calm      P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0010   0.0414   0.6249   +0.047  no
+  calm      P3b  hybrid_direct vs hybrid_scheduled    150   -0.0004   0.0421   0.6249   -0.034  no
+  calm      P5   hybrid_scheduled vs hybrid_fixed     150   -0.0010   0.0414   0.6249   -0.047  no
+  calm      S1   hybrid_direct vs hybrid_adaptive     150   -0.0014   0.0073   0.1462   -0.081  no
+  calm      S2a  hybrid vs aco                        150   -0.1065   0.0000   0.0000   -0.989  YES
+  calm      S2b  hybrid vs pso                        150   -0.0077   0.0000   0.0000   -0.287  YES
+  light     P1   hybrid_adaptive vs hybrid_fixed      150   +0.0002   0.9083   1.0000   +0.010  no
+  light     P2   hybrid_direct vs hybrid_fixed        150   -0.0018   0.0002   0.0055   -0.097  YES
+  light     P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0009   0.0839   1.0000   +0.063  no
+  light     P3b  hybrid_direct vs hybrid_scheduled    150   -0.0011   0.0050   0.1049   -0.045  no
+  light     P4   aco_adaptive vs aco_fixed            150   -0.0002   0.6818   1.0000   -0.016  no
+  light     P5   hybrid_scheduled vs hybrid_fixed     150   -0.0008   0.1015   1.0000   -0.052  no
+  light     S1   hybrid_direct vs hybrid_adaptive     150   -0.0020   0.0005   0.0117   -0.105  YES
+  light     S2a  hybrid vs aco                        150   -0.1077   0.0000   0.0000   -0.990  YES
+  light     S2b  hybrid vs pso                        150   -0.0073   0.0000   0.0001   -0.263  YES
+  moderate  P1   hybrid_adaptive vs hybrid_fixed      150   +0.0009   0.1924   1.0000   +0.037  no
+  moderate  P2   hybrid_direct vs hybrid_fixed        150   -0.0007   0.1200   1.0000   -0.031  no
+  moderate  P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0019   0.0031   0.0673   +0.082  no
+  moderate  P3b  hybrid_direct vs hybrid_scheduled    150   +0.0004   0.4947   1.0000   +0.019  no
+  moderate  P4   aco_adaptive vs aco_fixed            150   -0.0039   0.2360   1.0000   -0.057  no
+  moderate  P5   hybrid_scheduled vs hybrid_fixed     150   -0.0010   0.0391   0.6249   -0.048  no
+  moderate  S1   hybrid_direct vs hybrid_adaptive     150   -0.0016   0.0116   0.1967   -0.063  no
+  moderate  S2a  hybrid vs aco                        150   -0.1108   0.0000   0.0000   -0.990  YES
+  moderate  S2b  hybrid vs pso                        150   -0.0090   0.0000   0.0000   -0.311  YES
+  severe    P1   hybrid_adaptive vs hybrid_fixed      150   +0.0012   0.1278   1.0000   +0.046  no
+  severe    P2   hybrid_direct vs hybrid_fixed        150   +0.0009   0.2551   1.0000   +0.025  no
+  severe    P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0027   0.0000   0.0004   +0.100  YES
+  severe    P3b  hybrid_direct vs hybrid_scheduled    150   +0.0024   0.0000   0.0005   +0.080  YES
+  severe    P4   aco_adaptive vs aco_fixed            150   -0.0024   0.7434   1.0000   -0.065  no
+  severe    P5   hybrid_scheduled vs hybrid_fixed     150   -0.0016   0.0100   0.1793   -0.058  no
+  severe    S1   hybrid_direct vs hybrid_adaptive     150   -0.0003   0.9034   1.0000   -0.021  no
+  severe    S2a  hybrid vs aco                        150   -0.1101   0.0000   0.0000   -0.993  YES
+  severe    S2b  hybrid vs pso                        150   -0.0092   0.0000   0.0001   -0.240  YES
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial (150 pairs)
+    calm/P4: arms identical on every trial (150 pairs)
+
+  DOSE-RESPONSE (effect size, uncorrected and descriptive)
+  comparison       light    moderate      severe   monotone?
+  ------------------------------------------------------
+  P1          +0.010      +0.037      +0.046   yes
+  P2          -0.097      -0.031      +0.025   yes
+  P3a         +0.063      +0.082      +0.100   yes
+  P3b         -0.045      +0.019      +0.080   yes
+  P4          -0.016      -0.057      -0.065   yes
+  P5          -0.052      -0.048      -0.058   no
+  S1          -0.105      -0.063      -0.021   yes
+  S2a         -0.990      -0.990      -0.993   no
+  S2b         -0.263      -0.311      -0.240   no
+
+  12 of 34 tested cells significant after Holm across the grid
+    calm      S2a  hybrid vs aco   delta -0.1065   p_adj 7.819e-25   large
+    calm      S2b  hybrid vs pso   delta -0.0077   p_adj 1.931e-05   small
+    light     P2   hybrid_direct vs hybrid_fixed   delta -0.0018   p_adj 0.005534   negligible
+    light     S1   hybrid_direct vs hybrid_adaptive   delta -0.0020   p_adj 0.01174   negligible
+    light     S2a  hybrid vs aco   delta -0.1077   p_adj 7.819e-25   large
+    light     S2b  hybrid vs pso   delta -0.0073   p_adj 8.869e-05   small
+    moderate  S2a  hybrid vs aco   delta -0.1108   p_adj 7.819e-25   large
+    moderate  S2b  hybrid vs pso   delta -0.0090   p_adj 3.86e-07   small
+    severe    P3a  hybrid_adaptive vs hybrid_scheduled   delta +0.0027   p_adj 0.0004483   negligible
+    severe    P3b  hybrid_direct vs hybrid_scheduled   delta +0.0024   p_adj 0.0004708   negligible
+    severe    S2a  hybrid vs aco   delta -0.1101   p_adj 7.819e-25   large
+    severe    S2b  hybrid vs pso   delta -0.0092   p_adj 0.0001469   small
+
+==========================================================================================
+TIER MEDIUM200 — the pre-registered family
+==========================================================================================
+  metric: mean_excess   scenarios: ['calm', 'light', 'moderate', 'severe']
+  grid: 36 cells   tested: 34   (Holm across all tested cells, once)
+
+  scenario       comparison                             n     delta        p    p adj   effect  sig
+  ------------------------------------------------------------------------------------------------
+  calm      P2   hybrid_direct vs hybrid_fixed        150   -0.0067   0.1937   1.0000   -0.019  no
+  calm      P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0045   0.2995   1.0000   +0.008  no
+  calm      P3b  hybrid_direct vs hybrid_scheduled    150   -0.0023   0.1796   1.0000   -0.011  no
+  calm      P5   hybrid_scheduled vs hybrid_fixed     150   -0.0045   0.2995   1.0000   -0.008  no
+  calm      S1   hybrid_direct vs hybrid_adaptive     150   -0.0067   0.1937   1.0000   -0.019  no
+  calm      S2a  hybrid vs aco                        150   +0.0036   0.3239   1.0000   -0.107  no
+  calm      S2b  hybrid vs pso                        150   -0.0273   0.0000   0.0000   -0.234  YES
+  light     P1   hybrid_adaptive vs hybrid_fixed      150   -0.0025   0.2323   1.0000   -0.002  no
+  light     P2   hybrid_direct vs hybrid_fixed        150   -0.0004   0.8572   1.0000   +0.022  no
+  light     P3a  hybrid_adaptive vs hybrid_scheduled  150   -0.0009   0.6146   1.0000   -0.036  no
+  light     P3b  hybrid_direct vs hybrid_scheduled    150   +0.0012   0.7653   1.0000   -0.009  no
+  light     P4   aco_adaptive vs aco_fixed            150   +0.0003   0.1822   1.0000   +0.016  no
+  light     P5   hybrid_scheduled vs hybrid_fixed     150   -0.0016   0.8813   1.0000   +0.030  no
+  light     S1   hybrid_direct vs hybrid_adaptive     150   +0.0022   0.3004   1.0000   +0.028  no
+  light     S2a  hybrid vs aco                        150   -0.0057   0.0037   0.1061   -0.115  no
+  light     S2b  hybrid vs pso                        150   -0.0382   0.0000   0.0000   -0.301  YES
+  moderate  P1   hybrid_adaptive vs hybrid_fixed      150   +0.0011   0.4229   1.0000   +0.009  no
+  moderate  P2   hybrid_direct vs hybrid_fixed        150   -0.0037   0.7004   1.0000   -0.001  no
+  moderate  P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0079   0.0378   1.0000   +0.039  no
+  moderate  P3b  hybrid_direct vs hybrid_scheduled    150   +0.0031   0.3878   1.0000   +0.024  no
+  moderate  P4   aco_adaptive vs aco_fixed            150   -0.0015   0.2361   1.0000   -0.018  no
+  moderate  P5   hybrid_scheduled vs hybrid_fixed     150   -0.0068   0.3404   1.0000   -0.028  no
+  moderate  S1   hybrid_direct vs hybrid_adaptive     150   -0.0049   0.1436   1.0000   -0.013  no
+  moderate  S2a  hybrid vs aco                        150   -0.0100   0.0149   0.4178   -0.114  no
+  moderate  S2b  hybrid vs pso                        150   -0.0585   0.0000   0.0000   -0.272  YES
+  severe    P1   hybrid_adaptive vs hybrid_fixed      150   +0.0025   0.8832   1.0000   -0.000  no
+  severe    P2   hybrid_direct vs hybrid_fixed        150   +0.0050   0.3975   1.0000   +0.032  no
+  severe    P3a  hybrid_adaptive vs hybrid_scheduled  150   +0.0055   0.5126   1.0000   +0.010  no
+  severe    P3b  hybrid_direct vs hybrid_scheduled    150   +0.0080   0.0662   1.0000   +0.032  no
+  severe    P4   aco_adaptive vs aco_fixed            150   +0.0032   0.8452   1.0000   +0.026  no
+  severe    P5   hybrid_scheduled vs hybrid_fixed     150   -0.0030   0.3429   1.0000   -0.005  no
+  severe    S1   hybrid_direct vs hybrid_adaptive     150   +0.0025   0.1894   1.0000   +0.024  no
+  severe    S2a  hybrid vs aco                        150   -0.0201   0.0000   0.0000   -0.266  YES
+  severe    S2b  hybrid vs pso                        150   -0.1163   0.0000   0.0000   -0.489  YES
+
+  IDENTICAL ARMS (no difference to rank — not an error):
+    calm/P1: arms identical on every trial (150 pairs)
+    calm/P4: arms identical on every trial (150 pairs)
+
+  DOSE-RESPONSE (effect size, uncorrected and descriptive)
+  comparison       light    moderate      severe   monotone?
+  ------------------------------------------------------
+  P1          -0.002      +0.009      -0.000   no
+  P2          +0.022      -0.001      +0.032   no
+  P3a         -0.036      +0.039      +0.010   no
+  P3b         -0.009      +0.024      +0.032   yes
+  P4          +0.016      -0.018      +0.026   no
+  P5          +0.030      -0.028      -0.005   no
+  S1          +0.028      -0.013      +0.024   no
+  S2a         -0.115      -0.114      -0.266   no
+  S2b         -0.301      -0.272      -0.489   no
+
+  5 of 34 tested cells significant after Holm across the grid
+    calm      S2b  hybrid vs pso   delta -0.0273   p_adj 1.393e-05   small
+    light     S2b  hybrid vs pso   delta -0.0382   p_adj 4.566e-09   small
+    moderate  S2b  hybrid vs pso   delta -0.0585   p_adj 8.674e-09   small
+    severe    S2a  hybrid vs aco   delta -0.0201   p_adj 5.362e-06   small
+    severe    S2b  hybrid vs pso   delta -0.1163   p_adj 1.606e-18   large
+
+==========================================================================================
+RANKING — mean rank with Pareto beside it
+==========================================================================================
+
+  large1000 / calm   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_direct                 2.44%           0.0%         11.56%              —   4.38
+    hybrid_scheduled              2.48%           0.0%         11.56%              —   4.62
+    hybrid_fixed                  2.58%           0.0%         11.56%              —   5.00
+    hybrid_adaptive               2.58%           0.0%         11.56%              —   5.00
+    pso                           3.45%           0.0%         14.04%              —   6.25
+    hybrid                        2.68%           0.0%         20.21%              —   6.25
+    aco_fixed                    12.77%           0.0%        163.36%              —   7.25
+    aco_adaptive                 12.77%           0.0%        163.36%              —   7.25
+    aco                          13.33%           0.0%        164.23%              —   8.00
+    Pareto (over the 3 metrics defined here: mean_excess, at_optimum, worst_excess): hybrid_direct beats aco, aco_adaptive, aco_fixed, hybrid, hybrid_adaptive, hybrid_fixed, hybrid_scheduled, pso; hybrid_scheduled beats aco, aco_adaptive, aco_fixed, hybrid, hybrid_adaptive, hybrid_fixed, pso; hybrid_fixed beats aco, aco_adaptive, aco_fixed, hybrid, pso; hybrid_adaptive beats aco, aco_adaptive, aco_fixed, hybrid, pso; pso beats aco, aco_adaptive, aco_fixed; hybrid beats aco, aco_adaptive, aco_fixed; aco_fixed beats aco; aco_adaptive beats aco. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  large1000 / light   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_direct                 2.51%           0.1%         11.56%           1.85   2.62
+    hybrid_fixed                  2.69%           0.0%         12.15%           1.67   4.25
+    hybrid_adaptive               2.71%           0.0%         14.49%           1.40   4.50
+    hybrid                        2.77%           0.1%         20.21%           1.74   4.75
+    hybrid_scheduled              2.61%           0.0%         11.56%           2.09   4.88
+    aco_fixed                    13.28%           0.2%        163.36%           1.58   4.88
+    pso                           3.50%           0.0%         14.04%           1.87   6.00
+    aco                          13.53%           0.0%        164.23%           1.39   6.50
+    aco_adaptive                 13.26%           0.0%        163.36%           1.96   6.62
+    Pareto: hybrid_direct beats aco_adaptive, hybrid_scheduled, pso; hybrid_fixed beats pso; hybrid beats aco_adaptive. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  large1000 / moderate   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_direct                 2.79%           0.0%         12.05%           1.59   2.38
+    hybrid                        2.85%           0.0%         20.21%           1.61   3.88
+    hybrid_scheduled              2.76%           0.0%         12.48%           1.82   3.88
+    hybrid_adaptive               2.95%           0.6%         21.67%           1.68   4.25
+    pso                           3.76%           0.0%         17.87%           1.66   4.62
+    hybrid_fixed                  2.86%           0.0%         18.68%           1.73   4.88
+    aco_adaptive                 13.15%           0.0%        163.36%           1.63   5.75
+    aco_fixed                    13.54%           0.0%        163.36%           1.85   7.25
+    aco                          13.94%           0.0%        164.23%           1.90   8.12
+    Pareto: hybrid_direct beats aco, aco_adaptive, aco_fixed, hybrid, hybrid_fixed, pso; hybrid beats aco, aco_adaptive, aco_fixed; hybrid_scheduled beats aco, aco_fixed; hybrid_adaptive beats aco, aco_fixed; pso beats aco, aco_fixed; hybrid_fixed beats aco, aco_fixed; aco_adaptive beats aco, aco_fixed; aco_fixed beats aco. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  large1000 / severe   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_scheduled              2.99%           0.0%         17.10%           1.55   2.50
+    hybrid_fixed                  3.15%           0.0%         18.79%           1.63   2.62
+    hybrid_direct                 3.24%           0.0%         19.76%           1.79   4.00
+    hybrid_adaptive               3.27%           0.0%         18.79%           1.74   4.62
+    pso                           4.19%           0.6%         26.65%           2.50   5.50
+    aco                          14.28%           0.1%        164.23%           1.67   5.75
+    hybrid                        3.27%           0.0%         20.21%           1.84   6.25
+    aco_fixed                    14.25%           0.0%        163.36%           1.72   6.62
+    aco_adaptive                 14.01%           0.0%        163.36%           1.81   7.12
+    Pareto: hybrid_scheduled beats aco_adaptive, aco_fixed, hybrid, hybrid_adaptive; hybrid_fixed beats aco_adaptive, aco_fixed, hybrid, hybrid_adaptive; hybrid_direct beats aco_adaptive, hybrid; hybrid_adaptive beats aco_adaptive, hybrid. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  medium200 / calm   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_scheduled              4.39%          32.3%        236.88%              —   3.88
+    hybrid_direct                 4.16%          28.6%        236.88%              —   4.62
+    hybrid_fixed                  4.84%          27.4%        236.88%              —   5.62
+    hybrid_adaptive               4.84%          27.4%        236.88%              —   5.62
+    aco                           4.92%          31.7%        276.96%              —   5.75
+    aco_fixed                     4.99%          29.6%        278.30%              —   6.88
+    aco_adaptive                  4.99%          29.6%        278.30%              —   6.88
+    pso                           8.02%          12.5%        206.65%              —   7.00
+    hybrid                        5.29%          26.5%        249.63%              —   7.75
+    Pareto (over the 3 metrics defined here: mean_excess, at_optimum, worst_excess): hybrid_scheduled beats aco, aco_adaptive, aco_fixed, hybrid, hybrid_adaptive, hybrid_fixed; hybrid_direct beats hybrid, hybrid_adaptive, hybrid_fixed; hybrid_fixed beats hybrid; hybrid_adaptive beats hybrid; aco beats aco_adaptive, aco_fixed. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  medium200 / light   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_scheduled              5.46%          28.0%        236.88%           1.29   3.88
+    hybrid_direct                 5.58%          27.0%        236.88%           1.23   4.38
+    aco                           6.10%          29.2%        276.96%           1.12   4.50
+    aco_fixed                     6.01%          28.3%        278.30%           1.15   4.88
+    aco_adaptive                  6.03%          28.1%        278.30%           1.12   4.88
+    hybrid_fixed                  5.62%          27.3%        236.88%           1.30   5.12
+    hybrid_adaptive               5.37%          25.4%        236.88%           1.33   5.12
+    hybrid                        5.53%          26.0%        249.63%           1.27   5.25
+    pso                           9.35%          12.7%        206.65%           1.38   7.00
+    Pareto: hybrid_scheduled beats hybrid_fixed. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  medium200 / moderate   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid_scheduled              6.89%          25.2%        236.88%           1.17   1.38
+    hybrid_direct                 7.20%          24.8%        236.88%           1.31   3.38
+    hybrid                        7.48%          23.3%        249.63%           1.27   4.00
+    hybrid_fixed                  7.57%          23.4%        236.88%           1.29   4.12
+    hybrid_adaptive               7.68%          22.6%        236.88%           1.28   4.38
+    aco                           8.48%          23.9%        276.96%           1.28   5.00
+    aco_fixed                     8.64%          24.6%        278.30%           1.30   6.12
+    aco_adaptive                  8.48%          22.2%        278.30%           1.36   7.62
+    pso                          13.26%          12.2%        426.32%           1.48   9.00
+    Pareto: hybrid_scheduled beats aco, aco_adaptive, aco_fixed, hybrid, hybrid_adaptive, hybrid_direct, hybrid_fixed, pso; hybrid_direct beats aco_adaptive, pso; hybrid beats aco_adaptive, pso; hybrid_fixed beats aco_adaptive, pso; hybrid_adaptive beats aco_adaptive, pso; aco beats aco_adaptive, pso; aco_fixed beats pso; aco_adaptive beats pso. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+  medium200 / severe   (150 seeds)
+    arm                     mean excess  % of steps at   worst excess  mean steps to   rank
+    hybrid                        8.46%          25.9%        249.63%           1.29   2.50
+    hybrid_scheduled              8.67%          25.5%        236.88%           1.36   3.00
+    hybrid_direct                 9.47%          23.9%        270.02%           1.22   3.25
+    hybrid_adaptive               9.21%          23.4%        241.70%           1.25   3.50
+    aco                          10.49%          22.0%        300.62%           1.25   5.25
+    hybrid_fixed                  8.97%          23.5%        309.43%           1.37   5.75
+    aco_adaptive                 11.21%          21.4%        278.30%           1.26   6.12
+    aco_fixed                    10.88%          20.4%        278.30%           1.30   6.62
+    pso                          20.11%          13.7%        892.20%           1.47   9.00
+    Pareto: hybrid beats aco_fixed, hybrid_fixed, pso; hybrid_scheduled beats hybrid_fixed, pso; hybrid_direct beats aco, aco_adaptive, aco_fixed, pso; hybrid_adaptive beats aco_adaptive, aco_fixed, pso; aco beats pso; hybrid_fixed beats pso; aco_adaptive beats pso; aco_fixed beats pso. Any ordering above not listed here is an artefact of averaging ranks across metrics that disagree.
+
+##########################################################################################
+DONE
+##########################################################################################
+  Every pre-registered comparison above is reported as computed.
+  Nothing was dropped for being unflattering (Entry 024).

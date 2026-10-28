@@ -1,0 +1,67 @@
+
+##############################################################################
+DYNASWARM — EVIDENCE RUN (segment 24)
+##############################################################################
+  commit      b4d3d281266c   clean: True
+  python      3.13.0   Darwin 25.0.0 arm64
+  jobs        8
+  arms        10
+  seeds       150  (1000..1149)
+  scenarios   ['calm', 'light', 'moderate', 'severe']
+  tiers       ['medium200', 'large1000']
+  writing to  /Users/rudrarajpurohit/Desktop/ML Minor/Dynaswarm/outputs/2026-09-19/18-43-05
+
+==============================================================================
+TIER MEDIUM200  STARTING
+  4 scenarios x 150 seeds = 600 trials   (10 arms, 8 jobs)
+  expected ~60 min serial-equivalent of work
+==============================================================================
+  [medium200]   50/600 trials   calm      seeds 1000..1049     94.6s ( 1.89s/trial)   elapsed   1.6 min   remaining ~ 17.3 min
+  [medium200]  100/600 trials   calm      seeds 1050..1099     99.8s ( 2.00s/trial)   elapsed   3.2 min   remaining ~ 16.2 min
+  [medium200]  150/600 trials   calm      seeds 1100..1149    126.8s ( 2.54s/trial)   elapsed   5.4 min   remaining ~ 16.1 min
+  [medium200]  200/600 trials   light     seeds 1000..1049    122.2s ( 2.44s/trial)   elapsed   7.4 min   remaining ~ 14.8 min
+  [medium200]  250/600 trials   light     seeds 1050..1099    123.8s ( 2.48s/trial)   elapsed   9.5 min   remaining ~ 13.2 min
+  [medium200]  300/600 trials   light     seeds 1100..1149    133.3s ( 2.67s/trial)   elapsed  11.7 min   remaining ~ 11.7 min
+  [medium200]  350/600 trials   moderate  seeds 1000..1049    127.7s ( 2.55s/trial)   elapsed  13.8 min   remaining ~  9.9 min
+  [medium200]  400/600 trials   moderate  seeds 1050..1099    128.2s ( 2.56s/trial)   elapsed  15.9 min   remaining ~  8.0 min
+  [medium200]  450/600 trials   moderate  seeds 1100..1149    121.7s ( 2.43s/trial)   elapsed  18.0 min   remaining ~  6.0 min
+  [medium200]  500/600 trials   severe    seeds 1000..1049    126.9s ( 2.54s/trial)   elapsed  20.1 min   remaining ~  4.0 min
+  [medium200]  550/600 trials   severe    seeds 1050..1099    122.9s ( 2.46s/trial)   elapsed  22.1 min   remaining ~  2.0 min
+  [medium200]  600/600 trials   severe    seeds 1100..1149    131.6s ( 2.63s/trial)   elapsed  24.3 min   remaining ~  0.0 min
+
+==============================================================================
+TIER MEDIUM200  FINISHED
+  600 trials in 24.3 min   (2.43s per trial wall-clock at 8 jobs)
+==============================================================================
+
+==============================================================================
+TIER LARGE1000  STARTING
+  4 scenarios x 150 seeds = 600 trials   (10 arms, 8 jobs)
+  expected ~393 min serial-equivalent of work
+==============================================================================
+  [large1000]   50/600 trials   calm      seeds 1000..1049    916.5s (18.33s/trial)   elapsed  15.3 min   remaining ~168.0 min
+  [large1000]  100/600 trials   calm      seeds 1050..1099    928.3s (18.57s/trial)   elapsed  30.7 min   remaining ~153.7 min
+  [large1000]  150/600 trials   calm      seeds 1100..1149    889.6s (17.79s/trial)   elapsed  45.6 min   remaining ~136.7 min
+  [large1000]  200/600 trials   light     seeds 1000..1049    895.5s (17.91s/trial)   elapsed  60.5 min   remaining ~121.0 min
+  [large1000]  250/600 trials   light     seeds 1050..1099    893.2s (17.86s/trial)   elapsed  75.4 min   remaining ~105.5 min
+  [large1000]  300/600 trials   light     seeds 1100..1149    866.4s (17.33s/trial)   elapsed  89.8 min   remaining ~ 89.8 min
+  [large1000]  350/600 trials   moderate  seeds 1000..1049    880.1s (17.60s/trial)   elapsed 104.5 min   remaining ~ 74.6 min
+  [large1000]  400/600 trials   moderate  seeds 1050..1099    916.9s (18.34s/trial)   elapsed 119.8 min   remaining ~ 59.9 min
+  [large1000]  450/600 trials   moderate  seeds 1100..1149    925.3s (18.51s/trial)   elapsed 135.2 min   remaining ~ 45.1 min
+  [large1000]  500/600 trials   severe    seeds 1000..1049   1016.4s (20.33s/trial)   elapsed 152.1 min   remaining ~ 30.4 min
+  [large1000]  550/600 trials   severe    seeds 1050..1099   1190.4s (23.81s/trial)   elapsed 172.0 min   remaining ~ 15.6 min
+  [large1000]  600/600 trials   severe    seeds 1100..1149   1189.7s (23.79s/trial)   elapsed 191.8 min   remaining ~  0.0 min
+
+==============================================================================
+TIER LARGE1000  FINISHED
+  600 trials in 191.8 min   (19.18s per trial wall-clock at 8 jobs)
+==============================================================================
+
+##############################################################################
+ALL TIERS FINISHED
+##############################################################################
+  medium200     600 trials    24.3 min  2.43s/trial
+  large1000     600 trials   191.8 min  19.18s/trial
+
+  results in /Users/rudrarajpurohit/Desktop/ML Minor/Dynaswarm/outputs/2026-09-19/18-43-05
+  analyse with: ./.venv/bin/python scripts/analyse_run.py /Users/rudrarajpurohit/Desktop/ML Minor/Dynaswarm/outputs/2026-09-19/18-43-05
