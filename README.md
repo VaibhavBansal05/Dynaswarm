@@ -1,37 +1,32 @@
 # dynaswarm
 
-**Recency-driven compute allocation in hybrid swarm metaheuristics for dynamic path optimisation.**
+**ACO + PSO for shortest paths in changing road networks.**
 
 Minor project · School of Computer Engineering, MIT Manipal (MAHE)
 Vaibhav Krishna Bansal · Rudra Rajpurohit · Kartikey Goyal · Pavit Agrawal
 Mentor: Mrs. Vidhya V
 
-> **Design of record: [ARCHITECTURE.md](ARCHITECTURE.md).** That document describes what the system is being built to be, and supersedes this README wherever the two disagree. Settled decisions and the defect log live in [decisionLedger.md](decisionLedger.md).
-
-> **⚠️ Every result figure in this README is provisional**
->
-> None of the numbers below can be verified from this repository — they come from runs that are not present here. All of them are superseded by the regeneration programme in [ARCHITECTURE.md](ARCHITECTURE.md) §13, which reports at ≥100 trials on tuned parameters. **Do not cite any figure from this document.** Each table below carries a short reminder.
+**Start with the results:** [FINDINGS_TESTS.md](FINDINGS_TESTS.md) is the reference for the completed evidence run. It records the run, verification checks, pre-registered comparisons, and figures re-derived from the raw trial rows. [ARCHITECTURE.md](ARCHITECTURE.md) describes the design; [decisionLedger.md](decisionLedger.md) records decisions and defects.
 
 ---
 
-## The question
+## What the 1,200-trial study found
 
-When you search for a shortest path through a network that keeps changing underneath you — roads closing, traffic spiking, links appearing — how should a swarm algorithm respond?
+The study paired **150 seeds × 4 road-disruption scenarios × 2 graph sizes** (200 and 1,000 nodes), with ten algorithm arms on the same changing worlds. It recorded **720,000 time-step rows**. Route quality is measured as excess cost above the true shortest path; **lower is better**. The [findings file](FINDINGS_TESTS.md) contains the run setup, verification checks, and pre-registered comparisons.
 
-The usual answer is to retune the algorithm's parameters (evaporation rate, inertia) as the environment shifts. That has been studied extensively, and the founders of Ant Colony Optimization concluded there is *"[no] clear benefit in varying the parameter settings at run-time"* (Stützle et al.).
+- **Combining ACO and PSO worked.** The plain 50/50 hybrid beat PSO in all four scenarios at both sizes. It beat ACO in all four scenarios at 1,000 nodes, and only under severe disruption at 200 nodes.
+- **Adapting the ACO/PSO split did not deliver the hoped-for gain.** The recency-driven incremental split never significantly beat its fixed 50/50 twin. The direct-response split had one statistically significant win at 1,000 nodes under light disruption, but its effect size was negligible; there was no consistent, practically meaningful advantage from sensing. Under severe disruption, both sensing splits lost to a split that followed a timetable without sensing the roads, by statistically detectable but negligible effects.
+- **Adapting ACO's evaporation rate showed no significant improvement** over its fixed counterpart in any of the eight size/scenario cells. The confidence interval in the hardest large-graph case is still wide enough to allow a benefit, so this is not proof that parameter adaptation can never help.
 
-This project asks a different question.
+For a concrete comparison, on **1,000 nodes under severe disruption**, mean excess was 2.99% for the scheduled hybrid, 3.15% fixed, 3.24% direct, 3.27% incremental, 4.19% PSO, and 14.28% ACO. These are descriptive means for that setting; the paired tests above support the comparison claims. [Full results and limitations →](FINDINGS_TESTS.md)
 
-## Thesis
+## The question and the tested idea
 
-> In a hybrid metaheuristic, the **allocation of compute between its exploring and refining components**
-> should shift with **how recently the environment was disrupted**.
+When roads close, reopen, or change cost, should a hybrid give more of its fixed search budget to PSO immediately after a disruption, then return it to ACO as the colony's pheromone memory recovers?
 
-Not *what parameters to use*, but *how much of a fixed budget goes to the explorer versus the refiner*, and when to move that split. ACO explores and accumulates memory on edges; PSO refines and holds none. A disruption makes the colony's memory stale at exactly the moment it is most trusted — so buy the memoryless component while the trail recovers, and buy the colony back during calm.
+That was the allocation hypothesis. The experiment tested a fixed 50/50 split, a split nudged by disruption recency, a split moved directly by recency, and a scheduled split that ignores disruptions. The negative result above is about **recency-driven allocation**: these policies detect *how recently* a road event happened, but do not use *how many* roads changed. A magnitude-aware policy remains a separate, untested question. See §12 of [FINDINGS_TESTS.md](FINDINGS_TESTS.md) for the source-level scope check.
 
-**This is not the thesis the project started with.** It began by asking whether allocation should follow measured environmental *volatility*. That was tested and cannot work: tuning separately for each volatility level and then evaluating every vector on every scenario showed that **the optimal parameters do not depend on the disruption rate at all**, so a volatility-driven controller has nothing to steer by. Recency describes a *transient* — a disruption just landed, so the trail is maximally untrustworthy right now — which is a different quantity, and one that sweep said nothing about. See [ARCHITECTURE.md](ARCHITECTURE.md) §1.3.
-
-**Supporting question, since settled:** what should the system actually *sense* to make that decision? **External** signals (how much did the world change?) were compared against **internal** ones (has my colony stagnated?) — a choice the literature makes largely arbitrarily. That comparison is reported below, and its outcome is what moved the thesis from rate to recency.
+Earlier exploratory work led from volatility-based tuning to the recency hypothesis. Those smaller runs are retained below as project history, with their original limitations; use [FINDINGS_TESTS.md](FINDINGS_TESTS.md) for result claims.
 
 ## Design commitments
 
@@ -50,11 +45,15 @@ Comparative studies of stochastic algorithms fail quietly. The result still look
 - Stützle et al. find that a single well-chosen fixed parameter setting usually beats run-time variation, and that adaptation schemes are typically chosen without first studying what the parameters do. This project therefore treats a **best-fixed-parameter arm** as the opponent to beat, and compares sensing signals rather than assuming one.
 - Mavrovouniotis & Yang adapt ACO's evaporation rate in dynamic routing using the **λ-branching factor** — an internal measure of colony stagnation — moved in small ±σ increments. Both choices are adopted here: no regime-preset tables, and internal sensing as a first-class alternative to environmental sensing.
 
+## Earlier exploratory results
+
+> **Historical, provisional measurements below.** These small runs predate the completed 1,200-trial study; their original output is not available here for verification. They document how the project developed, but should not be cited as current performance results. Use [FINDINGS_TESTS.md](FINDINGS_TESTS.md) for the verified comparison.
+
 ## The hybrid beats both of its components
 
 The project's original goal, and the first positive result. Geometric n=200, paired over 10 trials, equal evaluation budget:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | scenario | ACO | PSO | **Hybrid** | hybrid − ACO | Wilcoxon |
 |---|---|---|---|---|---|
@@ -63,13 +62,13 @@ The project's original goal, and the first positive result. Geometric n=200, pai
 
 The advantage grows with disruption and is significant in the busier scenario, which is what the design predicts: the colony's pheromone is worth a great deal in the steady state but goes stale immediately after a closure, and the swarm — whose priorities rank nodes rather than edges — is unaffected by that staleness. The hybrid is a bet that one covers the other's failure window, not simply that two methods are better than one.
 
-Treat this as promising rather than settled: ten trials, one graph tier, an untuned 50/50 split. The allocation experiment (M7) is what would establish whether shifting the split by *time since disruption* improves on a fixed one.
+At the time, this ten-trial result motivated the allocation experiment (M7). The later 1,200-trial study found no meaningful improvement from shifting the split by *time since disruption*; see the current findings above.
 
 ## Why volatility-driven adaptation does not help
 
 The result the harness was built to produce. On geometric n=200 — the tier where disabling pheromone costs +23 points, so the adapted mechanism is genuinely load-bearing — against a tuned baseline, paired over 16 trials:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | signal | scenario | tuned fixed | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
@@ -84,7 +83,7 @@ Smallest p is 0.317 against a Holm threshold of 0.0083 for six tests.
 
 **And here is why.** Tuning separately for each volatility level, then evaluating every vector on every scenario (evaluation seeds, never seen by any tuning run):
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | tuned for ↓ / run on → | static | moderate | high |
 |---|---|---|---|
@@ -100,7 +99,7 @@ Two caveats stated plainly. Twelve trials cannot rule out small effects — the 
 
 `volatility` asks "did anything change this step?", so it saturates once events per step exceed a couple. Because events are driven at a fraction of |E|, that threshold arrives sooner on larger graphs:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | | n=30 (\|E\|≈150) | n=200 (\|E\|≈1200) |
 |---|---|---|
@@ -114,7 +113,7 @@ Pinned at 1.000, the signal has no gradient and the controller cannot move — m
 
 A null result means nothing if the mechanism under test does no work on the instances used. Disabling pheromone entirely (α = 0):
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | graph | with pheromone | without | delta | Wilcoxon |
 |---|---|---|---|---|
@@ -129,7 +128,7 @@ The small tier is therefore a demo and a debugging aid, **not a testbed for any 
 
 A best-fixed vector found by Optuna on sixteen tuning seeds, evaluated on sixteen seeds it never saw:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | | moderate | high |
 |---|---|---|
@@ -146,7 +145,7 @@ The tuned vector is itself informative: α=0.59, β=0.95, ρ=0.75, goal_weight=2
 
 Adapting evaporation alone, driven by each of the three signals, against its own frozen twin — paired by trial, n=16:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | signal | scenario | frozen | adaptive | delta | Wilcoxon |
 |---|---|---|---|---|---|
@@ -163,7 +162,7 @@ No signal beats freezing. The parameter did move — `rho` drifts from 0.100 to 
 
 **The signals behave very differently.** Measured across scenarios:
 
-*(provisional — see the banner at the top)*
+*(provisional historical result — see “Earlier exploratory results” above)*
 
 | signal | static | low | moderate | high | separation |
 |---|---|---|---|---|---|
@@ -186,13 +185,13 @@ Under a 300-evaluation budget with per-timestep disruption the colony never stag
 | M4 · signals + controllers | ✅ |
 | M5 · best-fixed baseline (Optuna) | ✅ |
 | M6 · PSO + Hybrid | ✅ |
-| M7 · **allocation experiment** | ⚠️ run once, result void — must be re-run |
+| M7 · **allocation experiment** | ✅ completed in the 1,200-trial evidence run; recency-driven allocation showed no meaningful gain over fixed |
 | M8 · statistics + figures | ✅ |
-| M9 · scale study | 🔬 ready to run |
+| M9 · scale study | ✅ completed at 200 and 1,000 nodes |
 | M10 · Pygame replay | ✅ — to be retired once the dashboard replaces it (`decisionLedger.md` D17) |
 | M11 · full technical documentation | ✅ — but see the provisional and legacy markers in [DOCUMENTATION.md](DOCUMENTATION.md) |
 
-**M7.** It was run once — two scenarios, 30 trials, untuned parameters — on a signal misaligned by defect F1, which made `RecencySignal` fire one timestep early. That result is a void rather than a negative finding, and the experiment is re-run after F1 is fixed. See `decisionLedger.md` §4 and `ARCHITECTURE.md` §13 (E4).
+**M7 history.** An earlier two-scenario, 30-trial run was void because defect F1 made `RecencySignal` fire one timestep early. The later evidence run and its negative allocation result are documented in [FINDINGS_TESTS.md](FINDINGS_TESTS.md); see `decisionLedger.md` §4 for the earlier defect.
 
 ## Documentation
 
